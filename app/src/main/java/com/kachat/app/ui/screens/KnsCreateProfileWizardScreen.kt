@@ -155,7 +155,7 @@ fun KnsCreateProfileWizardScreen(viewModel: WalletViewModel, onFinished: () -> U
                 KnsWizardStep.TRANSFER_EXISTING_DOMAIN -> {
                     KnsTransferExistingDomainStep(
                         chattingAddress = chattingAddress,
-                        onDone = onFinished
+                        onNext = { step = KnsWizardStep.BANNER }
                     )
                 }
                 KnsWizardStep.DOMAIN_CONFIRMED -> {
@@ -292,11 +292,13 @@ private fun KnsFundingGateStep(
 }
 
 /** Reached from the domain step's "I already have a domain somewhere else" button - for a domain
- *  already registered on another wallet/service, there's nothing this wizard itself can do (no
- *  inscribe, no polling for a transfer that happens entirely off-app), so this is a dead-end
- *  instructional screen: show the address to transfer to, then let the user leave. */
+ *  already registered on another wallet/service, there's nothing this wizard itself can do here
+ *  (no inscribe, no polling for a transfer that happens entirely off-app), so this just shows the
+ *  address to transfer to, then continues the wizard on to the banner/avatar/details steps rather
+ *  than ending it - the domain being handled off-app doesn't mean the rest of the profile isn't
+ *  still worth setting up. */
 @Composable
-private fun KnsTransferExistingDomainStep(chattingAddress: String?, onDone: () -> Unit) {
+private fun KnsTransferExistingDomainStep(chattingAddress: String?, onNext: () -> Unit) {
     var showQr by remember { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -346,11 +348,11 @@ private fun KnsTransferExistingDomainStep(chattingAddress: String?, onDone: () -
         }
         Spacer(Modifier.height(32.dp))
         Button(
-            onClick = onDone,
+            onClick = onNext,
             colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(stringResource(R.string.done), color = Color.Black, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.next), color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }
 

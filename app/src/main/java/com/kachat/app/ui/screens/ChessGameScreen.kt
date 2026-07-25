@@ -1,8 +1,10 @@
 package com.kachat.app.ui.screens
 
 import com.kachat.app.R
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -50,8 +56,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -285,7 +294,11 @@ fun ChessGameScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
-                ChessChatHistory(messages = chatMessages, modifier = Modifier.weight(1f).fillMaxWidth())
+                ChessChatHistory(
+                    messages = chatMessages,
+                    onRetry = { chatViewModel.retrySendMessage(it) },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     androidx.compose.material3.CircularProgressIndicator(color = KaspaTeal)
@@ -452,7 +465,7 @@ private fun CapturedGroup(pieces: List<ChessPieceType>, pieceColor: ChessColor, 
 /** Scrollable, auto-scroll-to-latest chat history under the board - lets you keep chatting
  *  without leaving the full-screen game. */
 @Composable
-private fun ChessChatHistory(messages: List<MessageEntity>, modifier: Modifier = Modifier) {
+private fun ChessChatHistory(messages: List<MessageEntity>, onRetry: (MessageEntity) -> Unit, modifier: Modifier = Modifier) {
     val listState: LazyListState = rememberLazyListState()
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -466,26 +479,77 @@ private fun ChessChatHistory(messages: List<MessageEntity>, modifier: Modifier =
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         items(messages, key = { it.id }) { message ->
-            ChessChatRow(message)
+            ChessChatRow(message, onRetry = { onRetry(message) })
         }
     }
 }
 
+/** Same green-check/pending/red-error delivery status as the main chat's [MessageBubble], plus
+ *  the same long-press "Retry Send" for a failed message - this mini history is otherwise a much
+ *  lighter rendering, but a failed send shouldn't be any less recoverable here than in the full
+ *  chat it mirrors. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChessChatRow(message: MessageEntity) {
+private fun ChessChatRow(message: MessageEntity, onRetry: () -> Unit) {
     val isSent = message.direction == "sent"
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start) {
-        Surface(
-            color = if (isSent) KaspaTeal else LocalAppColors.current.surface,
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.widthIn(max = 260.dp)
-        ) {
-            Text(
-                chessChatPreviewText(message),
-                color = if (isSent) Color.Black else LocalAppColors.current.textPrimary,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-            )
+    var showMenu by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf(Offset.Zero) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords -> menuAnchor = coords.positionInWindow() + Offset(0f, coords.size.height.toFloat()) },
+        horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start) {
+            Surface(
+                color = if (isSent) KaspaTeal else LocalAppColors.current.surface,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .widthIn(max = 260.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { if (ChatViewModel.shouldShowRetryOption(message)) showMenu = true }
+                    )
+            ) {
+                Text(
+                    chessChatPreviewText(message),
+                    color = if (isSent) Color.Black else LocalAppColors.current.textPrimary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+        if (isSent) {
+            Row(modifier = Modifier.padding(top = 2.dp)) {
+                when (message.deliveryStatus) {
+                    "failed" -> Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = stringResource(R.string.failed_to_send),
+                        tint = Color(0xFFFF3B30),
+                        modifier = Modifier.size(11.dp)
+                    )
+                    "pending" -> Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = stringResource(R.string.sending),
+                        tint = LocalAppColors.current.textSecondary,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    else -> Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF4CD964),
+                        modifier = Modifier.size(11.dp)
+                    )
+                }
+            }
+        }
+    }
+    if (showMenu) {
+        CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
+            PopupMenuRow(Icons.Default.Refresh, stringResource(R.string.retry_send)) {
+                onRetry()
+                showMenu = false
+            }
         }
     }
 }

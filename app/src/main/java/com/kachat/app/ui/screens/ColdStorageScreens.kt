@@ -1021,12 +1021,16 @@ private fun ColdSendFlow(
     fromAddress: String,
     availableBalanceSompi: Long,
     viewModel: ColdStorageViewModel,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()
 ) {
     val sendState by viewModel.sendState.collectAsState()
     val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
+    val fiatPriceInCurrency by portfolioViewModel.currentPriceUsd.collectAsState()
+    val fiatCurrencyCode by portfolioViewModel.currency.collectAsState()
     var toAddress by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
+    val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(onKasTextChange = { amountText = it })
     var showSignedScanner by remember { mutableStateOf(false) }
     var showRecipientScanner by remember { mutableStateOf(false) }
     var feeRateOverrideSompi by remember { mutableStateOf<Long?>(null) }
@@ -1128,21 +1132,33 @@ private fun ColdSendFlow(
                         }
                     }
                     OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it },
-                        label = { Text(stringResource(R.string.amount_kas)) },
+                        value = fiatAmountState.displayText,
+                        onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
+                        label = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
                         ),
                         trailingIcon = {
-                            TextButton(
-                                onClick = {
-                                    val maxSompi = (availableBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                                    amountText = "%.8f".format(java.util.Locale.US, maxSompi / 100_000_000.0)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
+                                    Text(
+                                        label,
+                                        color = LocalAppColors.current.textSecondary,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier
+                                            .clickable { fiatAmountState.toggleMode(fiatPriceInCurrency) }
+                                            .padding(end = 8.dp)
+                                    )
                                 }
-                            ) {
-                                Text(stringResource(R.string.max), color = KaspaTeal)
+                                TextButton(
+                                    onClick = {
+                                        val maxSompi = (availableBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
+                                        fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.max), color = KaspaTeal)
+                                }
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(

@@ -154,6 +154,7 @@ fun ChatThreadScreen(
     connectionViewModel: ConnectionViewModel = hiltViewModel(),
     walletViewModel: WalletViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
+    portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel(),
     startInPaymentMode: Boolean = false
 ) {
     val showFeeEstimate by settingsViewModel.showFeeEstimate.collectAsState()
@@ -168,6 +169,8 @@ fun ChatThreadScreen(
     val myKnsProfile by walletViewModel.knsProfile.collectAsState()
     val myAddress by walletViewModel.address.collectAsState()
     val paymentAmount by chatViewModel.paymentAmount.collectAsState()
+    val fiatPriceInCurrency by portfolioViewModel.currentPriceUsd.collectAsState()
+    val fiatCurrencyCode by portfolioViewModel.currency.collectAsState()
     val estimatedFee by chatViewModel.estimatedFeeSompi.collectAsState()
     val messageText by chatViewModel.messageText.collectAsState()
     val voiceRecordingState by chatViewModel.voiceRecordingState.collectAsState()
@@ -354,10 +357,18 @@ fun ChatThreadScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(
+                                onKasTextChange = { chatViewModel.setPaymentAmount(it) }
+                            )
                             TextField(
-                                value = paymentAmount,
-                                onValueChange = { chatViewModel.setPaymentAmount(it) },
-                                placeholder = { Text(stringResource(R.string.amount_kas), color = Color.DarkGray) },
+                                value = fiatAmountState.displayText,
+                                onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
+                                placeholder = {
+                                    Text(
+                                        if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas),
+                                        color = Color.DarkGray
+                                    )
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(50.dp)
@@ -374,25 +385,37 @@ fun ChatThreadScreen(
                                 trailingIcon = {
                                     val currentUtxos by chatViewModel.currentUtxos.collectAsState()
                                     val networkFeeRate by chatViewModel.networkFeeRate.collectAsState()
-                                    TextButton(onClick = {
-                                        // Mirror KaspaWalletEngine's own fee calculation exactly
-                                        // (real Kaspa mass model, assuming a recipient + change
-                                        // output) so the amount filled in here is always actually
-                                        // sendable — the previous naive formula (300 + count*100)
-                                        // didn't match the real fee, so "Max" sends kept failing
-                                        // with "insufficient funds".
-                                        val mass = com.kachat.app.util.KaspaMass.calculateMass(
-                                            numInputs = currentUtxos.size.coerceAtLeast(1),
-                                            outputScriptLens = listOf(34, 34),
-                                            payloadSize = 0
-                                        )
-                                        val fee = com.kachat.app.util.KaspaMass.calculateFee(mass, networkFeeRate.toLong())
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
+                                            Text(
+                                                label,
+                                                color = LocalAppColors.current.textSecondary,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier
+                                                    .clickable { fiatAmountState.toggleMode(fiatPriceInCurrency) }
+                                                    .padding(end = 8.dp)
+                                            )
+                                        }
+                                        TextButton(onClick = {
+                                            // Mirror KaspaWalletEngine's own fee calculation exactly
+                                            // (real Kaspa mass model, assuming a recipient + change
+                                            // output) so the amount filled in here is always actually
+                                            // sendable — the previous naive formula (300 + count*100)
+                                            // didn't match the real fee, so "Max" sends kept failing
+                                            // with "insufficient funds".
+                                            val mass = com.kachat.app.util.KaspaMass.calculateMass(
+                                                numInputs = currentUtxos.size.coerceAtLeast(1),
+                                                outputScriptLens = listOf(34, 34),
+                                                payloadSize = 0
+                                            )
+                                            val fee = com.kachat.app.util.KaspaMass.calculateFee(mass, networkFeeRate.toLong())
 
-                                        val maxSendableSompi = (spendingBalanceSompi - fee).coerceAtLeast(0L)
-                                        val maxSendableKas = maxSendableSompi.toDouble() / 100_000_000.0
-                                        chatViewModel.setPaymentAmount("%.8f".format(java.util.Locale.US, maxSendableKas))
-                                    }) {
-                                        Text(stringResource(R.string.max), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                                            val maxSendableSompi = (spendingBalanceSompi - fee).coerceAtLeast(0L)
+                                            val maxSendableKas = maxSendableSompi.toDouble() / 100_000_000.0
+                                            fiatAmountState.setMaxKas(maxSendableKas, fiatPriceInCurrency)
+                                        }) {
+                                            Text(stringResource(R.string.max), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1960,7 +1983,8 @@ fun ProfileScreen(
     viewModel: WalletViewModel,
     navController: NavController,
     connectionViewModel: ConnectionViewModel = hiltViewModel(),
-    chatViewModel: ChatViewModel = hiltViewModel()
+    chatViewModel: ChatViewModel = hiltViewModel(),
+    portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()
 ) {
     val address by viewModel.address.collectAsState()
     val accountName by viewModel.accountName.collectAsState()
@@ -2000,6 +2024,15 @@ fun ProfileScreen(
         viewModel.loadManageAddresses()
     }
 
+    val pullRefreshState = rememberPullToRefreshState()
+    LaunchedEffect(pullRefreshState.isRefreshing) {
+        if (pullRefreshState.isRefreshing) {
+            viewModel.refreshBalanceAndAwait()
+            viewModel.refreshSpendingBalanceAndAwait()
+            pullRefreshState.endRefresh()
+        }
+    }
+
     // Re-tapping the Profile tab while already on it (e.g. to back out of a full-screen QR
     // overlay) doesn't re-navigate/recompose this screen — see WalletViewModel.notifyTabReselected.
     val tabReselectSignal by viewModel.tabReselectSignal.collectAsState()
@@ -2033,7 +2066,12 @@ fun ProfileScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2236,8 +2274,24 @@ fun ProfileScreen(
                 }
             }
 
+            val chattingAddressClipboardManager = LocalClipboardManager.current
             CollapsibleAddressSection(title = "Chatting Address", balance = balance) {
                 Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                address?.let { chattingAddressClipboardManager.setText(AnnotatedString(it)) }
+                                Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.copy_address), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    }
+                    HorizontalDivider(color = LocalAppColors.current.divider)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2370,6 +2424,11 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(80.dp))
         }
 
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+
         if (showFundIdentityQr) {
             QrCodeOverlay(
                 value = address ?: "",
@@ -2428,6 +2487,9 @@ fun ProfileScreen(
         val isSending by viewModel.isSending.collectAsState()
         val sendResult by viewModel.sendResult.collectAsState()
         val identityBalanceSompi by viewModel.balanceSompi.collectAsState()
+        val fiatPriceInCurrency by portfolioViewModel.currentPriceUsd.collectAsState()
+        val fiatCurrencyCode by portfolioViewModel.currency.collectAsState()
+        val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(onKasTextChange = { amountInput = it })
         val context = LocalContext.current
         val clipboardManager = LocalClipboardManager.current
 
@@ -2504,23 +2566,35 @@ fun ProfileScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
-                        value = amountInput,
-                        onValueChange = { amountInput = it },
-                        label = { Text(stringResource(R.string.amount_kas)) },
+                        value = fiatAmountState.displayText,
+                        onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
+                        label = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
                         singleLine = true,
                         enabled = !isSending,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
                         ),
                         trailingIcon = {
-                            TextButton(
-                                onClick = {
-                                    val maxSompi = (identityBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                                    amountInput = "%.8f".format(java.util.Locale.US, maxSompi / 100_000_000.0)
-                                },
-                                enabled = !isSending
-                            ) {
-                                Text(stringResource(R.string.max), color = KaspaTeal)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
+                                    Text(
+                                        label,
+                                        color = LocalAppColors.current.textSecondary,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier
+                                            .clickable(enabled = !isSending) { fiatAmountState.toggleMode(fiatPriceInCurrency) }
+                                            .padding(end = 8.dp)
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        val maxSompi = (identityBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
+                                        fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                    },
+                                    enabled = !isSending
+                                ) {
+                                    Text(stringResource(R.string.max), color = KaspaTeal)
+                                }
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -3554,14 +3628,18 @@ private fun ActivateAddressDialog(viewModel: WalletViewModel, index: Int, onDism
 private fun WithdrawFromAddressDialog(
     viewModel: WalletViewModel,
     entry: com.kachat.app.services.WalletService.SpendingAddressEntry,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
     val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
+    val fiatPriceInCurrency by portfolioViewModel.currentPriceUsd.collectAsState()
+    val fiatCurrencyCode by portfolioViewModel.currency.collectAsState()
     var recipientInput by remember(entry) { mutableStateOf("") }
     var amountInput by remember(entry) { mutableStateOf("") }
+    val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(resetKey = entry, onKasTextChange = { amountInput = it })
     var showScanner by remember { mutableStateOf(false) }
     var feeRateOverrideSompi by remember { mutableStateOf<Long?>(null) }
     var showFeeEditor by remember { mutableStateOf(false) }
@@ -3681,23 +3759,35 @@ private fun WithdrawFromAddressDialog(
                 }
                 Spacer(Modifier.height(4.dp))
                 OutlinedTextField(
-                    value = amountInput,
-                    onValueChange = { amountInput = it },
-                    label = { Text(stringResource(R.string.amount_kas)) },
+                    value = fiatAmountState.displayText,
+                    onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
+                    label = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
                     singleLine = true,
                     enabled = !isSending,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
                     ),
                     trailingIcon = {
-                        TextButton(
-                            onClick = {
-                                val maxSompi = (entry.balanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                                amountInput = "%.8f".format(java.util.Locale.US, maxSompi / 100_000_000.0)
-                            },
-                            enabled = !isSending
-                        ) {
-                            Text(stringResource(R.string.max), color = KaspaTeal)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
+                                Text(
+                                    label,
+                                    color = LocalAppColors.current.textSecondary,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .clickable(enabled = !isSending) { fiatAmountState.toggleMode(fiatPriceInCurrency) }
+                                        .padding(end = 8.dp)
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    val maxSompi = (entry.balanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
+                                    fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                },
+                                enabled = !isSending
+                            ) {
+                                Text(stringResource(R.string.max), color = KaspaTeal)
+                            }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(

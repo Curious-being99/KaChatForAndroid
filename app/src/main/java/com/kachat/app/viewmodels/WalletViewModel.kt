@@ -125,6 +125,13 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch { walletService.refreshSpendingBalance() }
     }
 
+    /** Suspend variant of [refreshSpendingAddress]'s balance refresh - awaits the actual fetch
+     *  instead of firing it into [viewModelScope], for callers (the Profile screen's pull-to-
+     *  refresh) that need to know when it's actually done before dismissing a refresh spinner. */
+    suspend fun refreshSpendingBalanceAndAwait() {
+        walletService.refreshSpendingBalance()
+    }
+
     // -------------------------------------------------------------------------
     // Manage Addresses screen — every spending-chain address derived so far, so the user can
     // find/copy an old one that might still hold a stray balance.

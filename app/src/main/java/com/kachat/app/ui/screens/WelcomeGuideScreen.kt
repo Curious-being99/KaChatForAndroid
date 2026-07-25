@@ -269,8 +269,17 @@ private fun WelcomeGuideLanguageStep(walletViewModel: WalletViewModel, onNext: (
                         .clip(RoundedCornerShape(10.dp))
                         .background(LocalAppColors.current.surfaceVariant)
                         .clickable {
-                            walletViewModel.markJustCreatedNewWallet()
-                            applyAppLanguage(language)
+                            // No-op re-tap of the already-active language (most commonly "System",
+                            // the pre-checked top row) must not re-arm the restart flag below:
+                            // setApplicationLocales() only recreates the Activity on an actual
+                            // locale change, so with no change this composable never gets torn
+                            // down to consume the flag itself - it would loop this same still-alive
+                            // MainShell back to a fresh "welcome_guide" destination on every tap,
+                            // resetting the wizard to WELCOME with no way to progress past here.
+                            if (language != current) {
+                                walletViewModel.markJustCreatedNewWallet()
+                                applyAppLanguage(language)
+                            }
                         }
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically

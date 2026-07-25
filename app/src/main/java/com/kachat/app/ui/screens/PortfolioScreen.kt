@@ -100,6 +100,9 @@ import com.kachat.app.R
 import com.kachat.app.models.PortfolioTransactionEntity
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
+import com.kachat.app.util.currencySymbolFor
+import com.kachat.app.util.formatFiatAmount
+import com.kachat.app.util.formatKasAmount
 import com.kachat.app.viewmodels.PortfolioSummary
 import com.kachat.app.viewmodels.PortfolioViewModel
 import java.text.SimpleDateFormat
@@ -108,27 +111,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
-
-/** Resolves a lowercase ISO 4217 code (e.g. "usd", "eur" - see AppSettingsRepository.currency)
- *  to its display symbol (e.g. "$", "€"), falling back to the uppercased code itself if the
- *  platform doesn't recognize it. */
-private fun currencySymbolFor(currencyCode: String): String {
-    // Not ISO 4217 - Currency.getInstance() below throws for it (caught, falling back to "BTC"),
-    // but the Unicode Bitcoin sign reads better as a prefix than the bare code.
-    if (currencyCode.equals("btc", ignoreCase = true)) return "₿"
-    return try {
-        java.text.NumberFormat.getCurrencyInstance(Locale.US).apply {
-            currency = java.util.Currency.getInstance(currencyCode.uppercase())
-        }.currency?.symbol ?: currencyCode.uppercase()
-    } catch (e: Exception) {
-        currencyCode.uppercase()
-    }
-}
-
-private fun formatUsd(value: Double, currencyCode: String): String {
-    val sign = if (value < 0) "-" else ""
-    return "$sign${currencySymbolFor(currencyCode)}${String.format(Locale.US, "%,.2f", kotlin.math.abs(value))}"
-}
 
 /**
  * For a single coin's price rather than a fiat total — KAS trades under 1 unit of most tracked
@@ -140,10 +122,6 @@ private fun formatUsdPrice(value: Double, currencyCode: String): String {
     val sign = if (value < 0) "-" else ""
     val decimals = if (kotlin.math.abs(value) < 1.0) 5 else 2
     return "$sign${currencySymbolFor(currencyCode)}${String.format(Locale.US, "%,.${decimals}f", kotlin.math.abs(value))}"
-}
-
-private fun formatKasAmount(kas: Double): String {
-    return String.format(Locale.US, "%.8f", kas).trimEnd('0').trimEnd('.')
 }
 
 /** "1d"/"7d"/"30d" — matches the PortfolioViewModel.priceRangeDays values in the range switcher. */
@@ -467,7 +445,7 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(stringResource(R.string.current_value), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-                Text(formatUsd(summary.currentValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(formatFiatAmount(summary.currentValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -476,7 +454,7 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(stringResource(R.string.total_invested), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-                Text(formatUsd(summary.totalInvested, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(formatFiatAmount(summary.totalInvested, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(stringResource(R.string.total_p_l), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
@@ -489,7 +467,7 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "${formatUsd(summary.totalPL, currencyCode)} (${String.format(Locale.US, "%.1f", summary.totalPLPercent)}%)",
+                        "${formatFiatAmount(summary.totalPL, currencyCode)} (${String.format(Locale.US, "%.1f", summary.totalPLPercent)}%)",
                         color = plColor,
                         fontWeight = FontWeight.Bold
                     )
@@ -612,7 +590,7 @@ private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>, curr
             Triple("Value Over Time", valueHistory.last().first, valueHistory.last().second)
         }
         Text(headerLabel, color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-        Text(formatUsd(headerValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text(formatFiatAmount(headerValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
         val textSecondaryColor = LocalAppColors.current.textSecondary
         Canvas(
@@ -688,7 +666,7 @@ private fun TransactionRow(tx: PortfolioTransactionEntity, onClick: () -> Unit, 
         }
         Column(horizontalAlignment = Alignment.End) {
             Text("${formatKasAmount(amountKas)} KAS", color = LocalAppColors.current.textPrimary)
-            Text(formatUsd(tx.fiatValue, currencyCode), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+            Text(formatFiatAmount(tx.fiatValue, currencyCode), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
         }
         Spacer(Modifier.width(8.dp))
         IconButton(onClick = onDelete, modifier = Modifier.size(20.dp)) {
@@ -870,7 +848,7 @@ private fun TransactionDialog(
                 ) {
                     Text(if (isBuy) "Total Spent" else "Total Received", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                     Text(
-                        text = if (total != null) formatUsd(total, currencyCode) else "${currencySymbolFor(currencyCode)}0",
+                        text = if (total != null) formatFiatAmount(total, currencyCode) else "${currencySymbolFor(currencyCode)}0",
                         color = LocalAppColors.current.textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp
