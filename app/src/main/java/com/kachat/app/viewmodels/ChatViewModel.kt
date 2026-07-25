@@ -452,6 +452,10 @@ class ChatViewModel @Inject constructor(
         refreshKnsNamesForAllContacts()
         for (address in addresses) {
             refreshKnsProfile(address)
+            viewModelScope.launch {
+                val explicitPrimary = knsService.getExplicitPrimaryDomain(address)
+                _groupMemberPrimaryKnsByAddress.update { it + (address to explicitPrimary) }
+            }
         }
     }
 
@@ -1082,6 +1086,15 @@ class ChatViewModel @Inject constructor(
 
     private val _knsProfiles = MutableStateFlow<Map<String, KnsProfileUiState>>(emptyMap())
     val knsProfiles: StateFlow<Map<String, KnsProfileUiState>> = _knsProfiles.asStateFlow()
+
+    /**
+     * Address -> their *explicitly-set* primary KNS domain, or null if they've never set one -
+     * unlike [knsProfiles]/[KnsService.reverseResolve], this does NOT fall back to "first owned
+     * domain". Drives group chat's @mention autocomplete (only members with an explicit primary
+     * are mentionable), populated by [refreshKnsProfilesForGroupMembers].
+     */
+    private val _groupMemberPrimaryKnsByAddress = MutableStateFlow<Map<String, String?>>(emptyMap())
+    val groupMemberPrimaryKnsByAddress: StateFlow<Map<String, String?>> = _groupMemberPrimaryKnsByAddress.asStateFlow()
 
     /**
      * Fetches this address's owned KNS domains + the active one's profile (avatar/bio/socials).

@@ -496,7 +496,12 @@ class GroupRepository @Inject constructor(
                 val mentionsMe = plaintext.contains("@$walletAddress")
                 val isReplyToMe = replyContent?.replyToSender == walletAddress
                 if (!isMuted && (!mentionsOnly || mentionsMe || isReplyToMe)) {
-                    val senderLabel = membersOf(group).firstOrNull { it.address == senderAddress }?.displayName
+                    // Prefer a live 1:1 contact alias (most likely to be current/deliberate -
+                    // may have been set/changed after this person was added to the group) over
+                    // the group roster's displayName snapshot (set once, from whoever added
+                    // them, at add-time), over a shortened address as a last resort.
+                    val senderLabel = database.contactDao().getContact(senderAddress, walletAddress)?.alias
+                        ?: membersOf(group).firstOrNull { it.address == senderAddress }?.displayName
                         ?: senderAddress.takeLast(8)
                     val notificationText = when {
                         replyContent != null -> "$senderLabel replied to \"${replyContent.replyToPreview}\""

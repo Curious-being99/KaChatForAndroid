@@ -204,13 +204,28 @@ class WalletManager @Inject constructor(
      * Re-importing a mnemonic that's already saved overwrites that entry's name and moves it to
      * the top rather than creating a duplicate, matching iOS's `updateSavedAccounts` behavior
      * (`WalletManager.swift:501-509`: remove any existing entry with the same address, then
-     * re-insert at index 0).
+     * re-insert at index 0). Carries over the existing entry's `spendingAddressIndex`/
+     * `maxSpendingAddressIndex` rather than resetting them to their 0 defaults - this used to
+     * silently reset the "Manage Addresses" state (which spending address is primary, how many
+     * had been generated) to just address #0 any time the same account's seed phrase was
+     * re-imported, matching a bug found and fixed on iOS (`WalletManager.importWallet` there had
+     * the same "reconstruct a bare wallet, overwrite the real record" shape).
      */
     fun importWallet(mnemonic: List<String>, name: String) {
         MnemonicCode.INSTANCE.check(mnemonic)
         val address = deriveAddress(mnemonic)
+        val existing = getAccounts().firstOrNull { it.address == address }
         val accounts = getAccounts().filter { it.address != address }.toMutableList()
-        accounts.add(0, Account(name, address, mnemonic.joinToString(" ")))
+        accounts.add(
+            0,
+            Account(
+                name = name,
+                address = address,
+                mnemonic = mnemonic.joinToString(" "),
+                spendingAddressIndex = existing?.spendingAddressIndex ?: 0,
+                maxSpendingAddressIndex = existing?.maxSpendingAddressIndex ?: 0
+            )
+        )
         saveAccounts(accounts)
         setActiveAccount(address)
     }

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kachat.app.models.PortfolioTransactionEntity
+import com.kachat.app.repository.AppSettingsRepository
 import com.kachat.app.repository.PortfolioRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -13,6 +14,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,7 +37,8 @@ data class PortfolioSummary(
 
 @HiltViewModel
 class PortfolioViewModel @Inject constructor(
-    private val repository: PortfolioRepository
+    private val repository: PortfolioRepository,
+    private val settings: AppSettingsRepository
 ) : ViewModel() {
 
     val transactions = repository.getTransactions()
@@ -78,13 +82,29 @@ class PortfolioViewModel @Inject constructor(
     // constructed (i.e. on every visit to the Portfolio tab) — confirmed via device crash logcat.
     private val priceHistoryCache = mutableMapOf<Int, List<Pair<Long, Double>>>()
 
+    /** Lowercase ISO 4217 code - see [AppSettingsRepository.currency]. Declared before the init
+     *  block below for the same reason [priceHistoryCache] is (see its doc comment): Kotlin runs
+     *  property initializers in textual order, and [refreshPrice] reads [currency].value. */
+    val currency: StateFlow<String> = settings.currency
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "usd")
+
     init {
         refreshPrice()
+        // Currency changed elsewhere (Settings, or the Welcome Guide's currency step) while
+        // Portfolio is already alive - re-fetch in the new currency rather than leaving stale
+        // numbers on screen mislabeled with a new currency's symbol. drop(1) skips the initial
+        // emission refreshPrice() above already covers.
+        viewModelScope.launch {
+            settings.currency.drop(1).distinctUntilChanged().collect {
+                refreshPrice()
+            }
+        }
     }
 
     fun refreshPrice() {
+        val currencyCode = currency.value
         val priceJob = viewModelScope.launch {
-            val price = repository.getCurrentPriceUsd()
+            val price = repository.getCurrentPriceUsd(currencyCode)
             if (price != null) {
                 _currentPriceUsd.value = price
             }
@@ -127,8 +147,9 @@ class PortfolioViewModel @Inject constructor(
             return
         }
         priceHistoryJob?.cancel()
+        val currencyCode = currency.value
         priceHistoryJob = viewModelScope.launch {
-            val result = repository.getPriceHistory(days)
+            val result = repository.getPriceHistory(days, currencyCode)
             if (result.isNotEmpty()) {
                 priceHistoryCache[days] = result
                 _priceHistory.value = result

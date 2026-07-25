@@ -40,21 +40,26 @@ enum class ChessPieceType {
 
 data class ChessPiece(val type: ChessPieceType, val color: ChessColor) {
     /** Unicode chess glyph - used by both the in-chat board thumbnail and the full-screen board,
-     *  so neither needs bundled piece image assets. */
+     *  so neither needs bundled piece image assets. Deliberately always uses the solid/filled
+     *  "black chess piece" code points (U+265A-265F) regardless of `color` - the "white chess
+     *  piece" code points (U+2654-2659) are outline-only glyphs with almost no solid area, so
+     *  filling them white (see ChessPieceGlyph's fillColor in Screens.kt) against a light board
+     *  square looked nearly invisible. Color is conveyed entirely by that fill/outline trick, not
+     *  by which glyph is used.
+     *
+     *  The trailing U+FE0E (text presentation selector) on the pawn matters on iOS, where Apple's
+     *  system font has a special colored glyph for the bare pawn character that ignores the
+     *  applied text color entirely (unlike the other five chess symbols) - ported here too for
+     *  parity in case Android's emoji font ever does the same for this code point; it's a no-op
+     *  otherwise. */
     val glyph: String
-        get() = when (color to type) {
-            ChessColor.WHITE to ChessPieceType.KING -> "♔"
-            ChessColor.WHITE to ChessPieceType.QUEEN -> "♕"
-            ChessColor.WHITE to ChessPieceType.ROOK -> "♖"
-            ChessColor.WHITE to ChessPieceType.BISHOP -> "♗"
-            ChessColor.WHITE to ChessPieceType.KNIGHT -> "♘"
-            ChessColor.WHITE to ChessPieceType.PAWN -> "♙"
-            ChessColor.BLACK to ChessPieceType.KING -> "♚"
-            ChessColor.BLACK to ChessPieceType.QUEEN -> "♛"
-            ChessColor.BLACK to ChessPieceType.ROOK -> "♜"
-            ChessColor.BLACK to ChessPieceType.BISHOP -> "♝"
-            ChessColor.BLACK to ChessPieceType.KNIGHT -> "♞"
-            else -> "♟"
+        get() = when (type) {
+            ChessPieceType.KING -> "♚"
+            ChessPieceType.QUEEN -> "♛"
+            ChessPieceType.ROOK -> "♜"
+            ChessPieceType.BISHOP -> "♝"
+            ChessPieceType.KNIGHT -> "♞"
+            ChessPieceType.PAWN -> "♟︎"
         }
 }
 

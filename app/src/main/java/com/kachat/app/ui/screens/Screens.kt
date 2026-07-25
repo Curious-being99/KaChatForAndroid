@@ -25,6 +25,7 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -121,6 +122,7 @@ import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.ChatTimeFormat
 import com.kachat.app.util.KaspaAddress
+import com.kachat.app.util.rememberCameraCaptureLauncher
 import com.kachat.app.util.authenticateWithDeviceCredential
 import com.kachat.app.util.ImageMessage
 import com.kachat.app.util.ImagePrep
@@ -196,6 +198,7 @@ fun ChatThreadScreen(
     val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) chatViewModel.setPendingPhoto(uri)
     }
+    val startCameraCapture = rememberCameraCaptureLauncher { uri -> chatViewModel.setPendingPhoto(uri) }
     val startVoiceRecordingIfPermitted = {
         if (chatViewModel.voiceRecordingSupported) {
             if (ContextCompat.checkSelfPermission(micContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -215,7 +218,7 @@ fun ChatThreadScreen(
         pendingPhotoSave = null
         if (granted && pending != null) {
             val saved = ImagePrep.saveToGallery(micContext, pending.first, pending.second)
-            Toast.makeText(micContext, if (saved) "Photo saved" else "Could not save photo", Toast.LENGTH_SHORT).show()
+            Toast.makeText(micContext, if (saved) micContext.getString(R.string.photo_saved) else micContext.getString(R.string.could_not_save_photo), Toast.LENGTH_SHORT).show()
         }
     }
     val savePhotoIfPermitted = { bytes: ByteArray, fileName: String ->
@@ -223,7 +226,7 @@ fun ChatThreadScreen(
             ContextCompat.checkSelfPermission(micContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         ) {
             val saved = ImagePrep.saveToGallery(micContext, bytes, fileName)
-            Toast.makeText(micContext, if (saved) "Photo saved" else "Could not save photo", Toast.LENGTH_SHORT).show()
+            Toast.makeText(micContext, if (saved) micContext.getString(R.string.photo_saved) else micContext.getString(R.string.could_not_save_photo), Toast.LENGTH_SHORT).show()
         } else {
             pendingPhotoSave = bytes to fileName
             writeStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -256,7 +259,7 @@ fun ChatThreadScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.clickable {
                             clipboardManager.setText(AnnotatedString(contactId))
-                            Toast.makeText(micContext, "Address copied", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(micContext, micContext.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
                         }
                     ) {
                         ContactAvatar(
@@ -354,7 +357,7 @@ fun ChatThreadScreen(
                             TextField(
                                 value = paymentAmount,
                                 onValueChange = { chatViewModel.setPaymentAmount(it) },
-                                placeholder = { Text("Amount (KAS)", color = Color.DarkGray) },
+                                placeholder = { Text(stringResource(R.string.amount_kas), color = Color.DarkGray) },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(50.dp)
@@ -389,7 +392,7 @@ fun ChatThreadScreen(
                                         val maxSendableKas = maxSendableSompi.toDouble() / 100_000_000.0
                                         chatViewModel.setPaymentAmount("%.8f".format(java.util.Locale.US, maxSendableKas))
                                     }) {
-                                        Text("Max", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.max), color = KaspaTeal, fontWeight = FontWeight.Bold)
                                     }
                                 },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -415,7 +418,7 @@ fun ChatThreadScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Send Payment", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.send_payment), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 } else if (pendingPhotoUri != null) {
@@ -450,7 +453,7 @@ fun ChatThreadScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             IconButton(onClick = { chatViewModel.cancelPendingPhoto() }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Cancel photo", tint = Color(0xFFFF3B30))
+                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cancel_photo), tint = Color(0xFFFF3B30))
                             }
                             val thumbnailContext = LocalContext.current
                             // Fixed downsample for a quick composition-time thumbnail decode — the real
@@ -475,7 +478,7 @@ fun ChatThreadScreen(
                                     contentScale = ContentScale.Crop
                                 )
                             }
-                            Text("Photo", color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
+                            Text(stringResource(R.string.photo), color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
                             IconButton(
                                 onClick = { chatViewModel.sendPendingPhoto(contactId) },
                                 modifier = Modifier
@@ -484,7 +487,7 @@ fun ChatThreadScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send photo",
+                                    contentDescription = stringResource(R.string.send_photo),
                                     tint = Color.Black,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -523,7 +526,7 @@ fun ChatThreadScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             IconButton(onClick = { chatViewModel.cancelVoiceRecording() }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Cancel recording", tint = Color(0xFFFF3B30))
+                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cancel_recording), tint = Color(0xFFFF3B30))
                             }
                             Icon(Icons.Default.Mic, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
                             Text(
@@ -539,7 +542,7 @@ fun ChatThreadScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
+                                    contentDescription = stringResource(R.string.send),
                                     tint = Color.Black,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -578,7 +581,7 @@ fun ChatThreadScreen(
                                     )
                                 }
                                 IconButton(onClick = { chatViewModel.cancelReply() }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = LocalAppColors.current.textSecondary)
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel_reply), tint = LocalAppColors.current.textSecondary)
                                 }
                             }
                         }
@@ -610,7 +613,7 @@ fun ChatThreadScreen(
                             TextField(
                                 value = messageText,
                                 onValueChange = { chatViewModel.setMessageText(it) },
-                                placeholder = { Text("Message", color = LocalAppColors.current.textSecondary) },
+                                placeholder = { Text(stringResource(R.string.message), color = LocalAppColors.current.textSecondary) },
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 40.dp)
@@ -640,28 +643,33 @@ fun ChatThreadScreen(
                                 }
                                 if (showComposerMenu) {
                                     CenteredOptionsMenu(onDismissRequest = { showComposerMenu = false }, anchor = composerMenuAnchor) {
-                                        PopupMenuRow(painterResource(R.drawable.ic_kaspa_logo), "Pay in Kaspa", iconTint = Color.Unspecified) {
+                                        PopupMenuRow(Icons.Default.CameraAlt, stringResource(R.string.camera)) {
                                             showComposerMenu = false
-                                            paymentMode = true
+                                            startCameraCapture()
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.Image, "Photo") {
+                                        PopupMenuRow(Icons.Default.Image, stringResource(R.string.send_photo_2)) {
                                             showComposerMenu = false
                                             photoPickerLauncher.launch("image/*")
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.Mic, "Audio Message") {
+                                        PopupMenuRow(Icons.Default.Mic, stringResource(R.string.send_audio_message)) {
                                             showComposerMenu = false
                                             startVoiceRecordingIfPermitted()
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.Apps, "Play Chess") {
+                                        PopupMenuRow(painterResource(R.drawable.ic_kaspa_logo), stringResource(R.string.send_kaspa), iconTint = Color.Unspecified) {
+                                            showComposerMenu = false
+                                            paymentMode = true
+                                        }
+                                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                                        PopupMenuRow(Icons.Default.Apps, stringResource(R.string.play_chess)) {
                                             showComposerMenu = false
                                             chatViewModel.startChessGame(contactId)
                                         }
                                         if (conversation?.contact?.handshakeComplete != true) {
                                             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                            PopupMenuRow(Icons.Default.BackHand, "Send Handshake") {
+                                            PopupMenuRow(Icons.Default.BackHand, stringResource(R.string.send_handshake)) {
                                                 showComposerMenu = false
                                                 chatViewModel.sendHandshake(contactId)
                                             }
@@ -680,7 +688,7 @@ fun ChatThreadScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = "Send",
+                                        contentDescription = stringResource(R.string.send),
                                         tint = Color.Black,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -705,7 +713,7 @@ fun ChatThreadScreen(
                     if (highlightedMessageId == targetId) highlightedMessageId = null
                 }
             } else {
-                Toast.makeText(micContext, "Original message not available", Toast.LENGTH_SHORT).show()
+                Toast.makeText(micContext, micContext.getString(R.string.original_message_not_available), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -789,7 +797,7 @@ fun ChatThreadScreen(
                     item {
                         Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                "No messages yet",
+                                stringResource(R.string.no_messages_yet),
                                 color = LocalAppColors.current.textSecondary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
@@ -889,7 +897,7 @@ fun ChatThreadScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Scroll to latest",
+                        contentDescription = stringResource(R.string.scroll_to_latest),
                         tint = LocalAppColors.current.textPrimary
                     )
                 }
@@ -901,11 +909,11 @@ fun ChatThreadScreen(
         AlertDialog(
             onDismissRequest = { showFeeEditor = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "If the network is busy, a higher fee can help your transaction confirm faster.",
+                        stringResource(R.string.if_the_network_is_busy_a),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -913,7 +921,7 @@ fun ChatThreadScreen(
                     OutlinedTextField(
                         value = feeEditorInput,
                         onValueChange = { feeEditorInput = it },
-                        label = { Text("Fee (KAS)") },
+                        label = { Text(stringResource(R.string.fee_kas)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -941,16 +949,16 @@ fun ChatThreadScreen(
                     }
                     showFeeEditor = false
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { chatViewModel.setFeeRateOverride(null); showFeeEditor = false }) {
-                        Text("Use Default", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -978,7 +986,7 @@ private fun UnnotifiedMessageBanner() {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "When you message someone new on KaChat, they won't get a notification and your message stays hidden until they message you back or add as well. This protects against spam and increases your privacy. If you want them to be notified, click the hand icon to send a request to communicate which will cost 0.2 KAS. (Note: all non KaChat messaging apps will require a request to communicate)",
+            text = stringResource(R.string.when_you_message_someone_new_on),
             color = LocalAppColors.current.textSecondary,
             style = MaterialTheme.typography.bodySmall
         )
@@ -1040,7 +1048,7 @@ fun MessageBubble(
                 modifier = Modifier.padding(bottom = 6.dp)
             ) {
                 Text(
-                    text = "👋 Request to communicate",
+                    text = stringResource(R.string.request_to_communicate),
                     color = LocalAppColors.current.textSecondary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1054,10 +1062,10 @@ fun MessageBubble(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("👋", fontSize = 20.sp)
+                        Text(stringResource(R.string.str_3), fontSize = 20.sp)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "Contact has requested permission to communicate",
+                            stringResource(R.string.contact_has_requested_permission_to_communicate),
                             color = LocalAppColors.current.textPrimary,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodyLarge
@@ -1070,14 +1078,14 @@ fun MessageBubble(
                             colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Accept", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.accept), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                         Button(
                             onClick = onDecline,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Decline", color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.decline), color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1152,7 +1160,7 @@ fun MessageBubble(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                     Icon(painterResource(R.drawable.ic_kaspa_logo), null, tint = Color.Unspecified, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Payment", color = Color(0xFFF39C12), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.payment), color = Color(0xFFF39C12), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Surface(
@@ -1212,6 +1220,7 @@ fun MessageBubble(
                     summary = chessSummary,
                     isLatest = isLatestChessMessage,
                     isSent = isSent,
+                    messageId = message.id,
                     onRespond = onRespondToChessInvite,
                     onOpen = { onOpenChessGame(chessEnvelope.gameId) },
                     onLongPress = { showMenu = true }
@@ -1263,7 +1272,7 @@ fun MessageBubble(
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "Show More",
+                                text = stringResource(R.string.show_more),
                                 color = if (isSent) LocalAppColors.current.divider else KaspaTeal,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
@@ -1319,23 +1328,26 @@ fun MessageBubble(
                             color = if (isSent) Color.Black else LocalAppColors.current.textPrimary
                         )
                     }
+                    TextLinkify.findUrls(bodyText).firstOrNull()?.let { match ->
+                        LinkPreviewCard(url = match.uri, txId = message.id, kaspaExplorer = kaspaExplorer)
+                    }
                 }
             }
 
             if (showMenu) {
                 CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
-                    PopupMenuRow(Icons.Default.ContentCopy, "Copy Message") {
+                    PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_message)) {
                         clipboardManager.setText(AnnotatedString(displayBody ?: ""))
                         showMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.Tag, "Go to Explorer") {
+                    PopupMenuRow(Icons.Default.Tag, stringResource(R.string.go_to_explorer)) {
                         uriHandler.openUri(kaspaExplorer.txUrl(message.id))
                         showMenu = false
                     }
                     if (imageContent != null) {
                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                        PopupMenuRow(Icons.Default.Download, "Save Photo") {
+                        PopupMenuRow(Icons.Default.Download, stringResource(R.string.save_photo)) {
                             try {
                                 val bytes = android.util.Base64.decode(ImageMessage.base64Payload(imageContent), android.util.Base64.DEFAULT)
                                 onSavePhoto(bytes, "kachat_${message.id}.jpg")
@@ -1347,7 +1359,7 @@ fun MessageBubble(
                     }
                     if (ChatViewModel.shouldShowRetryOption(message)) {
                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                        PopupMenuRow(Icons.Default.Refresh, "Retry Send") {
+                        PopupMenuRow(Icons.Default.Refresh, stringResource(R.string.retry_send)) {
                             onRetry()
                             showMenu = false
                         }
@@ -1361,13 +1373,13 @@ fun MessageBubble(
                 when (message.deliveryStatus) {
                     "failed" -> Icon(
                         imageVector = Icons.Default.Error,
-                        contentDescription = "Failed to send",
+                        contentDescription = stringResource(R.string.failed_to_send),
                         tint = Color(0xFFFF3B30),
                         modifier = Modifier.size(12.dp)
                     )
                     "pending" -> Icon(
                         imageVector = Icons.Default.Schedule,
-                        contentDescription = "Sending",
+                        contentDescription = stringResource(R.string.sending),
                         tint = LocalAppColors.current.textSecondary,
                         modifier = Modifier.size(12.dp)
                     )
@@ -1407,11 +1419,11 @@ fun FullMessageTextDialog(text: String, onDismiss: () -> Unit, onCopy: () -> Uni
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
-                Text("Message", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.message), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
                 IconButton(onClick = onCopy) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = KaspaTeal)
+                    Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy), tint = KaspaTeal)
                 }
             }
             HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.5f))
@@ -1449,6 +1461,7 @@ fun ChessBubble(
     summary: com.kachat.app.util.ChessGameSummary?,
     isLatest: Boolean,
     isSent: Boolean,
+    messageId: String,
     onRespond: (Boolean) -> Unit,
     onOpen: () -> Unit,
     onLongPress: () -> Unit = {}
@@ -1459,7 +1472,7 @@ fun ChessBubble(
             if (isLatest && summary != null) {
                 ChessLiveCard(summary, onOpen, onLongPress)
             } else {
-                ChessLogEntry(envelope, onOpen, onLongPress)
+                ChessLogEntry(envelope, summary, messageId, onOpen, onLongPress)
             }
         }
     }
@@ -1490,7 +1503,7 @@ private fun ChessInviteBubble(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("♟️", fontSize = 18.sp)
+                Text(stringResource(R.string.str_2), fontSize = 18.sp)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     if (isSent) "Chess game invite sent" else "Invited you to a game of chess",
@@ -1506,14 +1519,14 @@ private fun ChessInviteBubble(
                         colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Accept", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.accept), color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                     Button(
                         onClick = { onRespond(false) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C)),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Decline", color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.decline), color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
                     }
                 }
             } else if (summary != null) {
@@ -1547,27 +1560,49 @@ private fun ChessLiveCard(summary: com.kachat.app.util.ChessGameSummary, onOpen:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChessLogEntry(envelope: com.kachat.app.util.ChessEnvelope, onOpen: () -> Unit, onLongPress: () -> Unit = {}) {
+private fun ChessLogEntry(
+    envelope: com.kachat.app.util.ChessEnvelope,
+    summary: com.kachat.app.util.ChessGameSummary?,
+    messageId: String,
+    onOpen: () -> Unit,
+    onLongPress: () -> Unit = {}
+) {
+    // A plain Unicode glyph character embedded in text renders in the ambient text color (see
+    // the see-through-white-pieces fix on ChessPiece.glyph), so it can't convey white vs black on
+    // its own - a move's piece is rendered via a real ChessPieceGlyph composable (fill/outline
+    // colored by piece.color) placed next to the text instead.
+    val record = if (envelope is com.kachat.app.util.ChessEnvelope.Move) {
+        summary?.moveHistory?.firstOrNull { it.messageId == messageId }
+    } else {
+        null
+    }
     val text = when (envelope) {
         is com.kachat.app.util.ChessEnvelope.Move -> {
             val promo = envelope.content.promotion?.let { " (${it.uppercase()})" } ?: ""
-            "♟️ ${envelope.content.from} → ${envelope.content.to}$promo"
+            "${envelope.content.from} → ${envelope.content.to}$promo"
         }
-        is com.kachat.app.util.ChessEnvelope.Resign -> "♟️ Resigned"
-        is com.kachat.app.util.ChessEnvelope.Response -> if (envelope.content.accepted) "♟️ Accepted the game" else "♟️ Declined the game"
-        is com.kachat.app.util.ChessEnvelope.Invite -> "♟️ Chess invite"
+        is com.kachat.app.util.ChessEnvelope.Resign -> "Resigned"
+        is com.kachat.app.util.ChessEnvelope.Response -> if (envelope.content.accepted) "Accepted the game" else "Declined the game"
+        is com.kachat.app.util.ChessEnvelope.Invite -> "Chess invite"
     }
     Surface(
         color = LocalAppColors.current.surfaceVariant,
         shape = RoundedCornerShape(50),
         modifier = Modifier.combinedClickable(onClick = onOpen, onLongClick = onLongPress)
     ) {
-        Text(
-            text,
-            color = LocalAppColors.current.textSecondary,
-            fontSize = 12.sp,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        )
+        ) {
+            if (record != null) {
+                ChessPieceGlyph(
+                    com.kachat.app.util.ChessPiece(record.pieceType, record.color),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
+            Text(text, color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+        }
     }
 }
 
@@ -1782,7 +1817,7 @@ fun ImageBubble(
                     colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Text("Show Photo", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.show_photo), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1845,7 +1880,7 @@ fun ImageBubble(
             modifier = Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress, onDoubleClick = onDoubleClick)
         ) {
             Text(
-                text = "📷 Photo unavailable",
+                text = stringResource(R.string.photo_unavailable),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 color = if (isSent) Color.Black else LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold
@@ -1863,7 +1898,7 @@ fun ImageBubble(
     ) {
         Image(
             bitmap = resolvedBitmap.asImageBitmap(),
-            contentDescription = "Photo message",
+            contentDescription = stringResource(R.string.photo_message),
             modifier = Modifier.clip(RoundedCornerShape(16.dp)),
             contentScale = ContentScale.FillWidth
         )
@@ -1880,7 +1915,7 @@ fun ImageBubble(
             ) {
                 Image(
                     bitmap = resolvedBitmap.asImageBitmap(),
-                    contentDescription = "Photo message, full screen",
+                    contentDescription = stringResource(R.string.photo_message_full_screen),
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.Fit
                 )
@@ -1908,13 +1943,13 @@ fun formatRecordingElapsed(elapsedMs: Long): String = VoiceMessage.formatDuratio
 @Composable
 fun ContactsScreen(navController: NavController) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Contacts") }) }
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.contacts)) }) }
     ) { padding ->
         Box(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentAlignment = Alignment.Center
         ) {
-            Text("Contact list (Phase 5)", color = KaspaSubtext)
+            Text(stringResource(R.string.contact_list_phase_5), color = KaspaSubtext)
         }
     }
 }
@@ -1930,17 +1965,21 @@ fun ProfileScreen(
     val address by viewModel.address.collectAsState()
     val accountName by viewModel.accountName.collectAsState()
     val balance by viewModel.fullBalance.collectAsState()
+    val showSetupGuides by viewModel.showSetupGuides.collectAsState()
     val dotColorHex by connectionViewModel.dotColorHex.collectAsState()
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
     val spendingAddress by viewModel.spendingAddress.collectAsState()
     val spendingBalance by viewModel.spendingBalance.collectAsState()
+    val manageAddresses by viewModel.manageAddresses.collectAsState()
+    val primarySpendingEntry = manageAddresses.firstOrNull { it.isCurrent }
     var showFundIdentityQr by remember { mutableStateOf(false) }
     // Its own state (not shared with any other QR overlay) so its bigger green border can't
     // accidentally affect an unrelated overlay reusing the same flag.
     var showAcceptPaymentQr by remember { mutableStateOf(false) }
     var showWithdrawDialog by remember { mutableStateOf(false) }
+    var showSpendingWithdrawDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     val knsInscribeState by viewModel.knsInscribeState.collectAsState()
@@ -1958,6 +1997,7 @@ fun ProfileScreen(
         viewModel.refreshBalance()
         viewModel.refreshOwnedDomains()
         viewModel.refreshSpendingAddress()
+        viewModel.loadManageAddresses()
     }
 
     // Re-tapping the Profile tab while already on it (e.g. to back out of a full-screen QR
@@ -2005,10 +2045,10 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             if (pendingKnsCommit != null) {
-                SettingsSection(title = "Unfinished Inscription") {
+                SettingsSection(title = stringResource(R.string.unfinished_inscription)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "A KNS inscription's commit transaction went through, but the reveal never finished. Retry now to complete it; the funds are safely tied up until you do.",
+                            stringResource(R.string.a_kns_inscription_s_commit_transaction),
                             color = LocalAppColors.current.textSecondary,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -2018,14 +2058,14 @@ fun ProfileScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                             enabled = knsInscribeState.status != WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL
                         ) {
-                            Text("Retry Inscription Reveal", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.retry_inscription_reveal), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
             if (!accountName.isNullOrBlank()) {
-                SettingsSection(title = "Account") {
+                SettingsSection(title = stringResource(R.string.account)) {
                     Text(
                         accountName!!,
                         color = LocalAppColors.current.textPrimary,
@@ -2036,15 +2076,24 @@ fun ProfileScreen(
                 }
             }
 
-            SettingsSection(title = "KNS Profile") {
+            SettingsSection(title = stringResource(R.string.kns_profile)) {
                 if (profileAssetId == null || activeProfileDomainName == null) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
+                    // No domain yet - nothing to show an avatar/chevron-row for (there's no
+                    // profile data at all), so this collapses to a single centered call-to-action
+                    // that opens the guided creation wizard instead of the editor built for
+                    // *existing* profiles.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { navController.navigate("create_kns_profile") }
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            "Register a domain first. A profile attaches to a domain.",
-                            color = LocalAppColors.current.textSecondary,
-                            style = MaterialTheme.typography.bodySmall
+                            stringResource(R.string.create_kns_profile),
+                            color = KaspaTeal,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
                         )
                     }
                 } else {
@@ -2110,7 +2159,7 @@ fun ProfileScreen(
                                     .padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("More Info", color = KaspaTeal, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Text(stringResource(R.string.more_info), color = KaspaTeal, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 Icon(
                                     if (moreInfoExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                     contentDescription = if (moreInfoExpanded) "Collapse" else "Expand",
@@ -2157,18 +2206,24 @@ fun ProfileScreen(
                 }
             }
 
+            if (showSetupGuides) {
+                SettingsSection(title = stringResource(R.string.welcome_guide)) {
+                    SettingsNavigationItem(stringResource(R.string.welcome_guide), Icons.Default.WavingHand, onClick = {
+                        navController.navigate("welcome_guide")
+                    })
+                }
+            }
+
             run {
-                val clipboardManager = LocalClipboardManager.current
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
                 ) {
                     ProfileCircleAction(
                         icon = Icons.Default.QrCode,
-                        label = "Accept Kaspa",
+                        label = stringResource(R.string.receive_kaspa),
                         modifier = Modifier.weight(1f)
                     ) {
-                        spendingAddress?.let { clipboardManager.setText(AnnotatedString(it)) }
                         showAcceptPaymentQr = true
                     }
                     ProfileCircleAction(
@@ -2176,7 +2231,6 @@ fun ProfileScreen(
                         label = "Chatting Address",
                         modifier = Modifier.weight(1f)
                     ) {
-                        address?.let { clipboardManager.setText(AnnotatedString(it)) }
                         showFundIdentityQr = true
                     }
                 }
@@ -2193,7 +2247,7 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Withdraw Kaspa", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.withdraw_kaspa), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                     if (address != null) {
                         HorizontalDivider(color = LocalAppColors.current.divider)
@@ -2206,7 +2260,7 @@ fun ProfileScreen(
                         ) {
                             Icon(Icons.Default.Receipt, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Transaction History", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.transaction_history), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -2216,39 +2270,60 @@ fun ProfileScreen(
             // Kaspa" sends always come out of this address, never the identity one above. It
             // rotates to a freshly derived address after every send (see WalletManager's
             // spending-address doc comment), so this always shows whichever one is current.
-            // Unlike Chatting Address above, this is a direct one-tap navigation into Manage
-            // Addresses (matches iOS's spendingAddressRow()) rather than an expand/collapse
-            // section - there's nothing else to show here besides "go manage your addresses".
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(LocalAppColors.current.surface)
-                    .clickable { navController.navigate("manage_addresses") }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Spending Address",
-                    color = LocalAppColors.current.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(spendingBalance, color = KaspaTeal, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 8.dp))
-                Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
+            val spendingAddressClipboardManager = LocalClipboardManager.current
+            CollapsibleAddressSection(title = "Spending Address", balance = spendingBalance) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                spendingAddress?.let { spendingAddressClipboardManager.setText(AnnotatedString(it)) }
+                                Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.copy_address), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    }
+                    HorizontalDivider(color = LocalAppColors.current.divider)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showSpendingWithdrawDialog = true }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.send_kaspa), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    }
+                    HorizontalDivider(color = LocalAppColors.current.divider)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { navController.navigate("manage_addresses") }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.List, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.manage_addresses), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             // Bottom-most section on Profile - merges what used to be a separate "Info" section
             // (just "Created") with Settings' old "About" section (Version/Website/Support
             // Email/Donate), now reached without needing to open Settings at all.
-            SettingsSection(title = "About") {
-                SettingsInfoItem("Created", "Apr 22, 2026 at 8:33 AM")
+            SettingsSection(title = stringResource(R.string.about)) {
+                SettingsInfoItem(stringResource(R.string.created), "Apr 22, 2026 at 8:33 AM")
                 SettingsDivider()
-                SettingsInfoItem("Version", com.kachat.app.BuildConfig.VERSION_NAME)
+                SettingsInfoItem(stringResource(R.string.version), com.kachat.app.BuildConfig.VERSION_NAME)
                 SettingsDivider()
                 SettingsInfoItem(
-                    "Website",
+                    stringResource(R.string.website),
                     "https://linktr.ee/Kachat_",
                     KaspaTeal,
                     onClick = {
@@ -2259,7 +2334,7 @@ fun ProfileScreen(
                 )
                 SettingsDivider()
                 SettingsInfoItem(
-                    "Support Email",
+                    stringResource(R.string.support_email),
                     "kaspasilver@gmail.com",
                     KaspaTeal,
                     onClick = {
@@ -2270,7 +2345,7 @@ fun ProfileScreen(
                 )
                 SettingsDivider()
                 SettingsInfoItem(
-                    "Donate",
+                    stringResource(R.string.donate),
                     ChatViewModel.DONATION_KNS_DOMAIN,
                     KaspaTeal,
                     onClick = {
@@ -2286,8 +2361,8 @@ fun ProfileScreen(
 
             // Moved here from Settings > Actions - Profile is where the rest of the
             // account-level actions (address management, About) already live.
-            SettingsSection(title = "Actions") {
-                SettingsActionItem("Log Out", Icons.AutoMirrored.Filled.Logout, Color.Red) {
+            SettingsSection(title = stringResource(R.string.actions)) {
+                SettingsActionItem(stringResource(R.string.log_out), Icons.AutoMirrored.Filled.Logout, Color.Red) {
                     showLogoutConfirmation = true
                 }
             }
@@ -2320,10 +2395,10 @@ fun ProfileScreen(
         AlertDialog(
             onDismissRequest = { showLogoutConfirmation = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Log Out", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.log_out), color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "This signs out of your account, but keeps local wallet and message data on this device.",
+                    stringResource(R.string.this_signs_out_of_your_account),
                     color = LocalAppColors.current.textSecondary
                 )
             },
@@ -2332,12 +2407,12 @@ fun ProfileScreen(
                     showLogoutConfirmation = false
                     viewModel.logout()
                 }) {
-                    Text("Log Out", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.log_out), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutConfirmation = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -2365,10 +2440,10 @@ fun ProfileScreen(
         LaunchedEffect(sendResult) {
             val result = sendResult ?: return@LaunchedEffect
             if (result.isSuccess) {
-                Toast.makeText(context, "Withdrawal sent", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.withdrawal_sent), Toast.LENGTH_SHORT).show()
                 showWithdrawDialog = false
             } else {
-                Toast.makeText(context, result.exceptionOrNull()?.message ?: "Withdrawal failed", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, result.exceptionOrNull()?.message ?: context.getString(R.string.withdrawal_failed), Toast.LENGTH_SHORT).show()
             }
             viewModel.clearSendResult()
         }
@@ -2388,11 +2463,11 @@ fun ProfileScreen(
         AlertDialog(
             onDismissRequest = { if (!isSending) showWithdrawDialog = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Withdraw Kaspa", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.withdraw_kaspa), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "Sends KAS out of your identity address, the one you fund for chatting.",
+                        stringResource(R.string.sends_kas_out_of_your_identity),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -2400,7 +2475,7 @@ fun ProfileScreen(
                     OutlinedTextField(
                         value = recipientInput,
                         onValueChange = { recipientInput = it },
-                        label = { Text("Recipient address") },
+                        label = { Text(stringResource(R.string.recipient_address)) },
                         singleLine = true,
                         enabled = !isSending,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2418,20 +2493,20 @@ fun ProfileScreen(
                             onClick = { clipboardManager.getText()?.text?.let { recipientInput = it.trim() } },
                             enabled = !isSending
                         ) {
-                            Text("Paste from Clipboard", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                         }
                         TextButton(
                             onClick = { showScanner = true },
                             enabled = !isSending
                         ) {
-                            Text("Scan QR Code", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = amountInput,
                         onValueChange = { amountInput = it },
-                        label = { Text("Amount (KAS)") },
+                        label = { Text(stringResource(R.string.amount_kas)) },
                         singleLine = true,
                         enabled = !isSending,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -2445,7 +2520,7 @@ fun ProfileScreen(
                                 },
                                 enabled = !isSending
                             ) {
-                                Text("Max", color = KaspaTeal)
+                                Text(stringResource(R.string.max), color = KaspaTeal)
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2476,7 +2551,7 @@ fun ProfileScreen(
                     }
                     if (isSending) {
                         Spacer(Modifier.height(12.dp))
-                        InscribeProgressRow("Sending...")
+                        InscribeProgressRow(stringResource(R.string.sending_2))
                     }
                 }
             },
@@ -2486,13 +2561,13 @@ fun ProfileScreen(
                     onClick = { amountSompi?.let { viewModel.onSendClicked(recipientInput.trim(), it, feeRateOverrideSompi) } },
                     enabled = canSend
                 ) {
-                    Text("Withdraw", color = if (canSend) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.withdraw), color = if (canSend) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 if (!isSending) {
                     TextButton(onClick = { showWithdrawDialog = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -2502,11 +2577,11 @@ fun ProfileScreen(
             AlertDialog(
                 onDismissRequest = { showFeeEditor = false },
                 containerColor = LocalAppColors.current.surface,
-                title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+                title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
                 text = {
                     Column {
                         Text(
-                            "If the network is busy, a higher fee can help your transaction confirm faster.",
+                            stringResource(R.string.if_the_network_is_busy_a),
                             color = LocalAppColors.current.textSecondary,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -2514,7 +2589,7 @@ fun ProfileScreen(
                         OutlinedTextField(
                             value = feeEditorInput,
                             onValueChange = { feeEditorInput = it },
-                            label = { Text("Fee (KAS)") },
+                            label = { Text(stringResource(R.string.fee_kas)) },
                             singleLine = true,
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -2548,19 +2623,29 @@ fun ProfileScreen(
                         }
                         showFeeEditor = false
                     }) {
-                        Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     Row {
                         TextButton(onClick = { feeRateOverrideSompi = null; showFeeEditor = false }) {
-                            Text("Use Default", color = LocalAppColors.current.textSecondary)
+                            Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                         }
                         TextButton(onClick = { showFeeEditor = false }) {
-                            Text("Cancel", color = LocalAppColors.current.textSecondary)
+                            Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                         }
                     }
                 }
+            )
+        }
+    }
+
+    if (showSpendingWithdrawDialog) {
+        primarySpendingEntry?.let { entry ->
+            WithdrawFromAddressDialog(
+                viewModel = viewModel,
+                entry = entry,
+                onDismiss = { showSpendingWithdrawDialog = false }
             )
         }
     }
@@ -2592,7 +2677,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("KNS Domains", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.kns_domains), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -2618,7 +2703,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                     .widthIn(min = 120.dp)
             ) {
                 Text(
-                    "Inscribe New Domain",
+                    stringResource(R.string.inscribe_new_domain),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -2636,7 +2721,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(16.dp))
             if (ownedDomainAssets.isEmpty()) {
-                Text(text = "No domains yet.", color = LocalAppColors.current.textSecondary, modifier = Modifier.padding(16.dp))
+                Text(text = stringResource(R.string.no_domains_yet), color = LocalAppColors.current.textSecondary, modifier = Modifier.padding(16.dp))
             } else {
                 Column(
                     modifier = Modifier
@@ -2671,7 +2756,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             if (assetId != null) {
                                 Icon(
                                     Icons.Default.SwapHoriz,
-                                    contentDescription = "Transfer domain",
+                                    contentDescription = stringResource(R.string.transfer_domain),
                                     tint = LocalAppColors.current.textSecondary,
                                     modifier = Modifier
                                         .size(20.dp)
@@ -2723,8 +2808,8 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                                     domainLabelInput = it
                                     viewModel.checkDomainLabel(it)
                                 },
-                                label = { Text("Domain name") },
-                                suffix = { Text(".kas") },
+                                label = { Text(stringResource(R.string.domain_name)) },
+                                suffix = { Text(stringResource(R.string.kas)) },
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = LocalAppColors.current.textPrimary,
@@ -2739,12 +2824,12 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             Spacer(Modifier.height(12.dp))
                             domainPreview?.let { preview ->
                                 when {
-                                    preview.checking -> Text("Checking availability...", color = LocalAppColors.current.textSecondary)
+                                    preview.checking -> Text(stringResource(R.string.checking_availability), color = LocalAppColors.current.textSecondary)
                                     preview.errorMessage != null -> Text(preview.errorMessage, color = Color(0xFFFF3B30))
                                     preview.available == false -> Text("${preview.label}.kas is not available", color = Color(0xFFFF3B30))
                                     preview.available == true && preview.isReserved -> {
                                         Text("${preview.label}.kas is available", color = Color(0xFF4CD964), fontWeight = FontWeight.Bold)
-                                        Text("Reserved domain: no registration fee, only network fees apply.", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                                        Text(stringResource(R.string.reserved_domain_no_registration_fee_only), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                                     }
                                     preview.available == true -> {
                                         Text("${preview.label}.kas is available", color = Color(0xFF4CD964), fontWeight = FontWeight.Bold)
@@ -2765,11 +2850,11 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                                 }
                             }
                         }
-                        WalletViewModel.KnsInscribeUiStatus.CHECKING_AVAILABILITY -> InscribeProgressRow("Checking availability...")
-                        WalletViewModel.KnsInscribeUiStatus.FETCHING_FEE -> InscribeProgressRow("Calculating fee...")
-                        WalletViewModel.KnsInscribeUiStatus.SUBMITTING_COMMIT -> InscribeProgressRow("Submitting commit transaction...")
-                        WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL -> InscribeProgressRow("Submitting reveal transaction...")
-                        WalletViewModel.KnsInscribeUiStatus.VERIFYING -> InscribeProgressRow("Verifying on-chain (this can take a minute)...")
+                        WalletViewModel.KnsInscribeUiStatus.CHECKING_AVAILABILITY -> InscribeProgressRow(stringResource(R.string.checking_availability))
+                        WalletViewModel.KnsInscribeUiStatus.FETCHING_FEE -> InscribeProgressRow(stringResource(R.string.calculating_fee))
+                        WalletViewModel.KnsInscribeUiStatus.SUBMITTING_COMMIT -> InscribeProgressRow(stringResource(R.string.submitting_commit_transaction))
+                        WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL -> InscribeProgressRow(stringResource(R.string.submitting_reveal_transaction))
+                        WalletViewModel.KnsInscribeUiStatus.VERIFYING -> InscribeProgressRow(stringResource(R.string.verifying_on_chain_this_can_take))
                         WalletViewModel.KnsInscribeUiStatus.SUCCESS -> {
                             val result = knsInscribeState.result
                             Text("${result?.domain} is now yours.", color = Color(0xFF4CD964), fontWeight = FontWeight.Bold)
@@ -2778,7 +2863,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             Text("Reveal tx: ${result?.revealTxId}", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                             if (result?.verified == false) {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Still indexing. It'll show up above shortly.", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.still_indexing_it_ll_show_up), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                         WalletViewModel.KnsInscribeUiStatus.FAILED -> {
@@ -2801,7 +2886,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                     }
                     WalletViewModel.KnsInscribeUiStatus.SUCCESS, WalletViewModel.KnsInscribeUiStatus.FAILED -> {
                         TextButton(onClick = { showInscribeDialog = false }) {
-                            Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                     }
                     else -> {}
@@ -2810,7 +2895,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
             dismissButton = {
                 if (!inFlight && knsInscribeState.status == WalletViewModel.KnsInscribeUiStatus.IDLE) {
                     TextButton(onClick = { showInscribeDialog = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -2847,9 +2932,9 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
             text = {
                 Column {
                     when {
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUBMITTING_COMMIT -> InscribeProgressRow("Submitting commit transaction...")
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL -> InscribeProgressRow("Submitting reveal transaction...")
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.VERIFYING -> InscribeProgressRow("Verifying new ownership on-chain (this can take a minute)...")
+                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUBMITTING_COMMIT -> InscribeProgressRow(stringResource(R.string.submitting_commit_transaction))
+                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL -> InscribeProgressRow(stringResource(R.string.submitting_reveal_transaction))
+                        transferState.status == WalletViewModel.KnsInscribeUiStatus.VERIFYING -> InscribeProgressRow(stringResource(R.string.verifying_new_ownership_on_chain_this))
                         transferState.status == WalletViewModel.KnsInscribeUiStatus.SUCCESS -> {
                             val result = transferState.result
                             Text("$domainName now belongs to ${result?.toAddress}.", color = Color(0xFF4CD964), fontWeight = FontWeight.Bold)
@@ -2858,7 +2943,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             Text("Reveal tx: ${result?.revealTxId}", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                             if (result?.verified == false) {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Still indexing. Ownership will update shortly.", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.still_indexing_ownership_will_update_shortly), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                         transferState.status == WalletViewModel.KnsInscribeUiStatus.FAILED -> {
@@ -2875,7 +2960,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                "This action cannot be undone. Double-check the address above before confirming.",
+                                stringResource(R.string.this_action_cannot_be_undone_double),
                                 color = Color(0xFFFF3B30),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold
@@ -2890,7 +2975,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                                     recipientInput = it
                                     viewModel.checkTransferRecipient(it)
                                 },
-                                label = { Text("Recipient address or .kas name") },
+                                label = { Text(stringResource(R.string.recipient_address_or_kas_name)) },
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = LocalAppColors.current.textPrimary,
@@ -2905,7 +2990,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             Spacer(Modifier.height(8.dp))
                             recipientPreview?.let { preview ->
                                 when {
-                                    preview.checking -> Text("Resolving...", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                                    preview.checking -> Text(stringResource(R.string.resolving), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                                     preview.errorMessage != null -> Text(preview.errorMessage, color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
                                     preview.resolvedAddress != null -> Text("Resolves to: ${preview.resolvedAddress}", color = Color(0xFF4CD964), style = MaterialTheme.typography.bodySmall)
                                 }
@@ -2918,12 +3003,12 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                 when {
                     transferState.status == WalletViewModel.KnsInscribeUiStatus.SUCCESS || transferState.status == WalletViewModel.KnsInscribeUiStatus.FAILED -> {
                         TextButton(onClick = { transferDialogDomain = null }) {
-                            Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                     }
                     confirmStep -> {
                         TextButton(onClick = { viewModel.transferDomain(domainName, assetId) }) {
-                            Text("Confirm Transfer", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.confirm_transfer), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                         }
                     }
                     transferState.status == WalletViewModel.KnsInscribeUiStatus.IDLE -> {
@@ -2931,7 +3016,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                             onClick = { confirmStep = true },
                             enabled = recipientPreview?.resolvedAddress != null
                         ) {
-                            Text("Next", color = if (recipientPreview?.resolvedAddress != null) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.next), color = if (recipientPreview?.resolvedAddress != null) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
                         }
                     }
                     else -> {}
@@ -2941,12 +3026,12 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                 when {
                     confirmStep && !inFlight -> {
                         TextButton(onClick = { confirmStep = false }) {
-                            Text("Back", color = LocalAppColors.current.textSecondary)
+                            Text(stringResource(R.string.back), color = LocalAppColors.current.textSecondary)
                         }
                     }
                     !inFlight && transferState.status == WalletViewModel.KnsInscribeUiStatus.IDLE -> {
                         TextButton(onClick = { transferDialogDomain = null }) {
-                            Text("Cancel", color = LocalAppColors.current.textSecondary)
+                            Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                         }
                     }
                 }
@@ -3005,13 +3090,13 @@ fun ManageAddressesScreen(
                 val count = consolidateState.sweptCount
                 Toast.makeText(
                     context,
-                    if (count > 0) "Consolidated $count address${if (count == 1) "" else "es"}" else "Nothing to consolidate",
+                    if (count > 0) "Consolidated $count address${if (count == 1) "" else "es"}" else context.getString(R.string.nothing_to_consolidate),
                     Toast.LENGTH_SHORT
                 ).show()
                 viewModel.resetConsolidateState()
             }
             WalletViewModel.ConsolidateStatus.FAILED -> {
-                Toast.makeText(context, consolidateState.errorMessage ?: "Consolidation failed", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, consolidateState.errorMessage ?: context.getString(R.string.consolidation_failed), Toast.LENGTH_SHORT).show()
                 viewModel.resetConsolidateState()
             }
             else -> {}
@@ -3034,7 +3119,7 @@ fun ManageAddressesScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Manage Addresses", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.manage_addresses), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -3057,14 +3142,15 @@ fun ManageAddressesScreen(
                     .height(56.dp)
                     .onGloballyPositioned { coords -> actionsMenuAnchor = coords.positionInWindow() }
             ) {
+                val addressActionsContentDescription = stringResource(R.string.address_actions_2)
                 Text(
-                    "Address Actions",
+                    stringResource(R.string.address_actions),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     modifier = Modifier
                         .padding(horizontal = 24.dp)
-                        .semantics { contentDescription = "Address actions" }
+                        .semantics { contentDescription = addressActionsContentDescription }
                 )
             }
             }
@@ -3081,12 +3167,12 @@ fun ManageAddressesScreen(
                     anchor = actionsMenuAnchor,
                     centerHorizontally = true
                 ) {
-                    PopupMenuRow(Icons.Default.AddCircleOutline, "Generate New Spending Address") {
+                    PopupMenuRow(Icons.Default.AddCircleOutline, stringResource(R.string.generate_new_spending_address)) {
                         showActionsMenu = false
                         viewModel.generateNewSpendingAddress()
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.Search, "Discover Addresses") {
+                    PopupMenuRow(Icons.Default.Search, stringResource(R.string.discover_addresses)) {
                         showActionsMenu = false
                         viewModel.discoverSpendingAddresses { count ->
                             Toast.makeText(
@@ -3097,7 +3183,7 @@ fun ManageAddressesScreen(
                         }
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.AutoMirrored.Filled.CallMerge, "Send All Kaspa To Primary Spend Address") {
+                    PopupMenuRow(Icons.AutoMirrored.Filled.CallMerge, stringResource(R.string.send_all_kaspa_to_primary_spend)) {
                         showActionsMenu = false
                         showConsolidateConfirm = true
                     }
@@ -3114,7 +3200,7 @@ fun ManageAddressesScreen(
             if (onAddressPicked != null) {
                 item {
                     Text(
-                        "Tap an address below to swap from it",
+                        stringResource(R.string.tap_an_address_below_to_swap),
                         color = KaspaTeal,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodySmall,
@@ -3133,7 +3219,7 @@ fun ManageAddressesScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Chatting Address", color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.chatting_address), color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
                         Text(
                             text = identityAddress ?: "Loading...",
                             color = LocalAppColors.current.textSecondary,
@@ -3208,16 +3294,16 @@ fun ManageAddressesScreen(
         AlertDialog(
             onDismissRequest = { showIdentityWarning = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Chatting Address", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.chatting_address), color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "Never send Kaspa you intend to spend to this address.",
+                    stringResource(R.string.never_send_kaspa_you_intend_to),
                     color = LocalAppColors.current.textSecondary
                 )
             },
             confirmButton = {
                 TextButton(onClick = { showIdentityWarning = false }) {
-                    Text("OK", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ok), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -3232,10 +3318,10 @@ fun ManageAddressesScreen(
         AlertDialog(
             onDismissRequest = { if (!consolidating) showConsolidateConfirm = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Send All Kaspa To Primary Spend Address", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.send_all_kaspa_to_primary_spend), color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "Sends every other spending address's balance to your currently starred one. Each address with a balance is its own real transaction, so this may take a few moments.",
+                    stringResource(R.string.sends_every_other_spending_address_s),
                     color = LocalAppColors.current.textSecondary
                 )
             },
@@ -3247,12 +3333,12 @@ fun ManageAddressesScreen(
                         showConsolidateConfirm = false
                     }
                 ) {
-                    Text("Confirm", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.confirm), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(enabled = !consolidating, onClick = { showConsolidateConfirm = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -3288,7 +3374,7 @@ private fun RenameAddressDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = LocalAppColors.current.surface,
-        title = { Text("Rename Address", color = LocalAppColors.current.textPrimary) },
+        title = { Text(stringResource(R.string.rename_address), color = LocalAppColors.current.textPrimary) },
         text = {
             Column {
                 Text("Address #$index", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
@@ -3296,7 +3382,7 @@ private fun RenameAddressDialog(
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = onNameChange,
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.name)) },
                     placeholder = { Text("Address #$index") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -3313,12 +3399,12 @@ private fun RenameAddressDialog(
         },
         confirmButton = {
             TextButton(onClick = onSave) {
-                Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
             }
         }
     )
@@ -3354,7 +3440,7 @@ fun ManageAddressesHiddenScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Hidden Addresses", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.hidden_addresses), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -3372,7 +3458,7 @@ fun ManageAddressesHiddenScreen(
             ) {
                 Icon(Icons.Default.VisibilityOff, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
-                Text("No hidden addresses.", color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.no_hidden_addresses), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
             }
         } else {
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -3384,7 +3470,7 @@ fun ManageAddressesHiddenScreen(
                     if (onAddressPicked != null) {
                         item {
                             Text(
-                                "Tap an address below to use it",
+                                stringResource(R.string.tap_an_address_below_to_use),
                                 color = KaspaTeal,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodySmall,
@@ -3440,10 +3526,10 @@ private fun ActivateAddressDialog(viewModel: WalletViewModel, index: Int, onDism
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = LocalAppColors.current.surface,
-        title = { Text("Make Active Address", color = LocalAppColors.current.textPrimary) },
+        title = { Text(stringResource(R.string.make_active_address), color = LocalAppColors.current.textPrimary) },
         text = {
             Text(
-                "Spending Kaspa on KaChat will come out of this address only now. Any Kaspa still sitting on your current spending address will be sent to this new one automatically.",
+                stringResource(R.string.spending_kaspa_on_kachat_will_come),
                 color = LocalAppColors.current.textSecondary
             )
         },
@@ -3452,12 +3538,12 @@ private fun ActivateAddressDialog(viewModel: WalletViewModel, index: Int, onDism
                 viewModel.setActiveSpendingAddress(index)
                 onDismiss()
             }) {
-                Text("Confirm", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.confirm), color = KaspaTeal, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
             }
         }
     )
@@ -3498,7 +3584,7 @@ private fun WithdrawFromAddressDialog(
         if (result.isSuccess) {
             sentTxId = result.getOrNull()
         } else {
-            Toast.makeText(context, result.exceptionOrNull()?.message ?: "Withdrawal failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, result.exceptionOrNull()?.message ?: context.getString(R.string.withdrawal_failed), Toast.LENGTH_SHORT).show()
         }
         viewModel.clearSendResult()
     }
@@ -3529,9 +3615,9 @@ private fun WithdrawFromAddressDialog(
                         Icon(Icons.Default.Check, null, tint = Color(0xFF4CD964), modifier = Modifier.size(32.dp))
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("Sent", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(stringResource(R.string.sent), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                     Spacer(Modifier.height(16.dp))
-                    Text("Transaction ID", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                    Text(stringResource(R.string.transaction_id), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                     Text(
                         txId,
                         color = KaspaTeal,
@@ -3545,7 +3631,7 @@ private fun WithdrawFromAddressDialog(
             },
             confirmButton = {
                 TextButton(onClick = onDismiss) {
-                    Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -3558,7 +3644,7 @@ private fun WithdrawFromAddressDialog(
     AlertDialog(
         onDismissRequest = { if (!isSending) onDismiss() },
         containerColor = LocalAppColors.current.surface,
-        title = { Text("Withdraw From This Address", color = LocalAppColors.current.textPrimary) },
+        title = { Text(stringResource(R.string.withdraw_from_this_address), color = LocalAppColors.current.textPrimary) },
         text = {
             Column {
                 Text(entry.address, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
@@ -3566,7 +3652,7 @@ private fun WithdrawFromAddressDialog(
                 OutlinedTextField(
                     value = recipientInput,
                     onValueChange = { recipientInput = it },
-                    label = { Text("Recipient address") },
+                    label = { Text(stringResource(R.string.recipient_address)) },
                     singleLine = true,
                     enabled = !isSending,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -3584,20 +3670,20 @@ private fun WithdrawFromAddressDialog(
                         onClick = { clipboardManager.getText()?.text?.let { recipientInput = it.trim() } },
                         enabled = !isSending
                     ) {
-                        Text("Paste from Clipboard", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                     }
                     TextButton(
                         onClick = { showScanner = true },
                         enabled = !isSending
                     ) {
-                        Text("Scan QR Code", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = { amountInput = it },
-                    label = { Text("Amount (KAS)") },
+                    label = { Text(stringResource(R.string.amount_kas)) },
                     singleLine = true,
                     enabled = !isSending,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -3611,7 +3697,7 @@ private fun WithdrawFromAddressDialog(
                             },
                             enabled = !isSending
                         ) {
-                            Text("Max", color = KaspaTeal)
+                            Text(stringResource(R.string.max), color = KaspaTeal)
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
@@ -3646,7 +3732,7 @@ private fun WithdrawFromAddressDialog(
                 }
                 if (isSending) {
                     Spacer(Modifier.height(12.dp))
-                    InscribeProgressRow("Sending...")
+                    InscribeProgressRow(stringResource(R.string.sending_2))
                 }
             }
         },
@@ -3660,13 +3746,13 @@ private fun WithdrawFromAddressDialog(
                 },
                 enabled = canSend
             ) {
-                Text("Withdraw", color = if (canSend) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.withdraw), color = if (canSend) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             if (!isSending) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         }
@@ -3676,11 +3762,11 @@ private fun WithdrawFromAddressDialog(
         AlertDialog(
             onDismissRequest = { showFeeEditor = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "If the network is busy, a higher fee can help your transaction confirm faster.",
+                        stringResource(R.string.if_the_network_is_busy_a),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -3688,7 +3774,7 @@ private fun WithdrawFromAddressDialog(
                     OutlinedTextField(
                         value = feeEditorInput,
                         onValueChange = { feeEditorInput = it },
-                        label = { Text("Fee (KAS)") },
+                        label = { Text(stringResource(R.string.fee_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -3722,16 +3808,16 @@ private fun WithdrawFromAddressDialog(
                     }
                     showFeeEditor = false
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { feeRateOverrideSompi = null; showFeeEditor = false }) {
-                        Text("Use Default", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -3834,31 +3920,31 @@ private fun ManageAddressRow(
 
     if (showMenu) {
         CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
-            PopupMenuRow(Icons.Default.ContentCopy, "Copy Address") {
+            PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_address)) {
                 showMenu = false
                 onCopyClick()
             }
             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.QrCode, "Show QR Code") {
+            PopupMenuRow(Icons.Default.QrCode, stringResource(R.string.show_qr_code)) {
                 showMenu = false
                 onQrClick()
             }
             if (!entry.isCurrent) {
                 HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                PopupMenuRow(Icons.Default.Star, "Set as Primary Address") {
+                PopupMenuRow(Icons.Default.Star, stringResource(R.string.set_as_primary_address)) {
                     showMenu = false
                     onActivateClick()
                 }
             }
             if (entry.balanceSompi > 0) {
                 HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                PopupMenuRow(Icons.AutoMirrored.Filled.Send, "Withdraw") {
+                PopupMenuRow(Icons.AutoMirrored.Filled.Send, stringResource(R.string.withdraw)) {
                     showMenu = false
                     onWithdrawClick()
                 }
             }
             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.Edit, "Rename Address") {
+            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename_address)) {
                 showMenu = false
                 onRenameClick()
             }
@@ -4031,13 +4117,19 @@ private fun InscribeProgressRow(text: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavigateToDomains: () -> Unit = {}) {
+fun EditKnsProfileScreen(
+    viewModel: WalletViewModel,
+    onBack: () -> Unit,
+    onNavigateToDomains: () -> Unit = {},
+    onNavigateToSetupGuide: () -> Unit = {}
+) {
     val knsProfile by viewModel.knsProfile.collectAsState()
     val activeProfileDomainName by viewModel.activeProfileDomainName.collectAsState()
     val profileAssetId by viewModel.profileDomainAssetId.collectAsState()
     val pendingAvatarUri by viewModel.pendingAvatarUri.collectAsState()
     val pendingBannerUri by viewModel.pendingBannerUri.collectAsState()
     val editState by viewModel.editProfileState.collectAsState()
+    val showSetupGuides by viewModel.showSetupGuides.collectAsState()
 
     var bio by remember { mutableStateOf("") }
     var x by remember { mutableStateOf("") }
@@ -4100,10 +4192,10 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Edit KNS Profile", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.edit_kns_profile), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     TextButton(onClick = onBack, enabled = !inFlight) {
-                        Text("Cancel", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.cancel), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -4111,7 +4203,7 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
                         onClick = { if (pendingChanges.isNotEmpty()) showSaveDialog = true },
                         enabled = !inFlight && pendingChanges.isNotEmpty()
                     ) {
-                        Text("Save", color = if (!inFlight && pendingChanges.isNotEmpty()) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.save), color = if (!inFlight && pendingChanges.isNotEmpty()) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -4128,24 +4220,34 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
         ) {
             Spacer(Modifier.height(8.dp))
 
-            SettingsSection(title = "Domains") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToDomains() }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(activeProfileDomainName ?: "—", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(profileAssetId ?: "", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+            // Re-enters the same guided wizard used to create a profile from scratch - it
+            // already knows (via the domain/profile it fetches) to offer skipping domain
+            // registration and pre-fill the banner/avatar/detail steps with whatever's already
+            // inscribed, so this is a safe re-entry point regardless of how much of a profile
+            // already exists. Lives here (rather than next to "KNS Profile" on the Profile tab)
+            // since that spot sits directly beside the banner image, which made it unclickable
+            // whenever a banner was set.
+            if (showSetupGuides) {
+                SettingsSection(title = stringResource(R.string.setup_guide)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToSetupGuide() }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            stringResource(R.string.walk_through_setting_up_your_domain),
+                            color = LocalAppColors.current.textSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
                     }
-                    Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
                 }
             }
 
-            SettingsSection(title = "Avatar") {
+            SettingsSection(title = stringResource(R.string.avatar)) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     ContactAvatar(
                         imageUrl = pendingAvatarUri?.toString() ?: knsProfile?.avatarUrl,
@@ -4155,18 +4257,18 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         TextButton(onClick = { avatarPicker.launch("image/*") }, enabled = !inFlight) {
-                            Text("Choose Avatar", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.choose_avatar), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                         if (pendingAvatarUri != null) {
                             TextButton(onClick = { viewModel.setPendingAvatar(null) }, enabled = !inFlight) {
-                                Text("Remove", color = Color(0xFFFF3B30))
+                                Text(stringResource(R.string.remove), color = Color(0xFFFF3B30))
                             }
                         }
                     }
                 }
             }
 
-            SettingsSection(title = "Banner") {
+            SettingsSection(title = stringResource(R.string.banner)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     val previewUrl = pendingBannerUri?.toString() ?: knsProfile?.bannerUrl
                     if (previewUrl != null) {
@@ -4184,27 +4286,44 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         TextButton(onClick = { bannerPicker.launch("image/*") }, enabled = !inFlight) {
-                            Text("Choose Banner", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.choose_banner), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                         if (pendingBannerUri != null) {
                             TextButton(onClick = { viewModel.setPendingBanner(null) }, enabled = !inFlight) {
-                                Text("Remove", color = Color(0xFFFF3B30))
+                                Text(stringResource(R.string.remove), color = Color(0xFFFF3B30))
                             }
                         }
                     }
                 }
             }
 
-            SettingsSection(title = "Profile") {
+            SettingsSection(title = stringResource(R.string.profile)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    EditProfileTextField("Bio", bio, { bio = it }, enabled = !inFlight, singleLine = false)
-                    EditProfileTextField("X", x, { x = it }, enabled = !inFlight)
-                    EditProfileTextField("Website", website, { website = it }, enabled = !inFlight)
-                    EditProfileTextField("Telegram", telegram, { telegram = it }, enabled = !inFlight)
-                    EditProfileTextField("Discord", discord, { discord = it }, enabled = !inFlight)
-                    EditProfileTextField("Email", email, { email = it }, enabled = !inFlight)
-                    EditProfileTextField("GitHub", github, { github = it }, enabled = !inFlight)
-                    EditProfileTextField("Redirect", redirect, { redirect = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.bio), bio, { bio = it }, enabled = !inFlight, singleLine = false)
+                    EditProfileTextField(stringResource(R.string.x), x, { x = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.website), website, { website = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.telegram), telegram, { telegram = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.discord), discord, { discord = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.email), email, { email = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.github), github, { github = it }, enabled = !inFlight)
+                    EditProfileTextField(stringResource(R.string.redirect), redirect, { redirect = it }, enabled = !inFlight)
+                }
+            }
+
+            SettingsSection(title = stringResource(R.string.domains)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToDomains() }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(activeProfileDomainName ?: "—", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(profileAssetId ?: "", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
                 }
             }
 
@@ -4254,7 +4373,7 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
                         pendingChanges.forEach { Text("• $it", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall) }
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "Each transaction temporarily uses ~2 KAS; ~1 KAS returns immediately as change, so only the small network fee is a real cost.",
+                            stringResource(R.string.each_transaction_temporarily_uses_2_kas),
                             color = LocalAppColors.current.textSecondary,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -4280,7 +4399,7 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
                         fontWeight = FontWeight.Bold
                     )
                     WalletViewModel.EditProfileStep.PARTIAL_FAILURE -> Column {
-                        Text("Some changes failed to save:", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.some_changes_failed_to_save), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                         editState.fieldResults.filter { !it.success }.forEach {
                             Text("${it.fieldKey}: ${it.errorMessage ?: "failed"}", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                         }
@@ -4309,12 +4428,12 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
                             )
                         }
                     ) {
-                        Text("Confirm", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.confirm), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                     WalletViewModel.EditProfileStep.SUCCESS,
                     WalletViewModel.EditProfileStep.PARTIAL_FAILURE,
                     WalletViewModel.EditProfileStep.FAILED -> TextButton(onClick = { closeDialog() }) {
-                        Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                     else -> {}
                 }
@@ -4322,7 +4441,7 @@ fun EditKnsProfileScreen(viewModel: WalletViewModel, onBack: () -> Unit, onNavig
             dismissButton = {
                 if (editState.step == WalletViewModel.EditProfileStep.IDLE) {
                     TextButton(onClick = { showSaveDialog = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -4360,6 +4479,19 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
     val words = remember { mnemonic.split(" ") }
     val clipboardManager = LocalClipboardManager.current
 
+    // Blocks screenshots and screen recording of the seed phrase / private key for as long as
+    // this screen is on-screen (window-level flag, the standard Android mechanism - unlike iOS,
+    // which has no API to block a screenshot outright, only to detect active screen recording
+    // after the fact via UIScreen.isCaptured). Cleared on leaving so it doesn't leak onto other
+    // screens.
+    val window = (LocalContext.current as? Activity)?.window
+    DisposableEffect(window) {
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
     // Auto-hides the words again after a short window instead of leaving them on screen
     // indefinitely once revealed — someone glancing at the phone later shouldn't still see them.
     LaunchedEffect(revealed) {
@@ -4373,10 +4505,10 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Seed Phrase", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.seed_phrase), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 actions = {
                     TextButton(onClick = onBack) {
-                        Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -4406,14 +4538,14 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
-                        text = "Security Warning",
+                        text = stringResource(R.string.security_warning),
                         color = Color(0xFFF39C12),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Anyone with your seed phrase can access your account. Never share it with anyone. Make sure you only write this down. Never take a screenshot or store it on your device.",
+                        text = stringResource(R.string.anyone_with_your_seed_phrase_can),
                         color = Color(0xFF948B8B),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -4437,7 +4569,7 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Tap to reveal seed phrase",
+                        text = stringResource(R.string.tap_to_reveal_seed_phrase),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodyLarge
                     )
@@ -4484,7 +4616,7 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Copy Seed Phrase", color = KaspaTeal)
+                            Text(stringResource(R.string.copy_seed_phrase), color = KaspaTeal)
                         }
                     }
                     TextButton(onClick = { 
@@ -4493,7 +4625,7 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Tag, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Copy Private Key Hex", color = KaspaTeal)
+                            Text(stringResource(R.string.copy_private_key_hex), color = KaspaTeal)
                         }
                     }
                 }
@@ -4523,6 +4655,8 @@ fun SettingsScreen(
     val balance by walletViewModel.fullBalance.collectAsState()
     val dotColorHex by connectionViewModel.dotColorHex.collectAsState()
     val darkModeEnabled by walletViewModel.darkModeEnabled.collectAsState()
+    val showSetupGuides by walletViewModel.showSetupGuides.collectAsState()
+    val currencyCode by walletViewModel.currency.collectAsState()
     val biometricSeedPhraseEnabled by walletViewModel.biometricSeedPhraseEnabled.collectAsState()
     val biometricAccountLoginEnabled by walletViewModel.biometricAccountLoginEnabled.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
@@ -4580,63 +4714,75 @@ fun SettingsScreen(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            SettingsSection(title = "Customization") {
-                SettingsSwitchItem("Dark Mode", darkModeEnabled) { enabled ->
+            SettingsSection(title = stringResource(R.string.customization)) {
+                SettingsSwitchItem(stringResource(R.string.dark_mode), darkModeEnabled) { enabled ->
                     walletViewModel.setDarkModeEnabled(enabled)
                 }
                 SettingsDivider()
-                SettingsNavigationItem("Menu", Icons.Default.Apps, onClick = {
+                SettingsNavigationItem(stringResource(R.string.menu), Icons.Default.Apps, onClick = {
                     navController.navigate("settings_menu")
                 })
+                SettingsDivider()
+                SettingsNavigationItem(stringResource(R.string.language), Icons.Default.Translate, onClick = {
+                    navController.navigate("language_settings")
+                })
+                SettingsDivider()
+                SettingsNavigationItem(stringResource(R.string.currency), Icons.Default.AttachMoney, currencyCode.uppercase(), onClick = {
+                    navController.navigate("currency_settings")
+                })
+                SettingsDivider()
+                SettingsSwitchItem(stringResource(R.string.show_setup_guides), showSetupGuides) { enabled ->
+                    walletViewModel.setShowSetupGuides(enabled)
+                }
             }
 
-            SettingsSection(title = "Security") {
-                SettingsSwitchItem("Biometrics for Seed Phrase", biometricSeedPhraseEnabled) { enabled ->
+            SettingsSection(title = stringResource(R.string.security)) {
+                SettingsSwitchItem(stringResource(R.string.biometrics_for_seed_phrase), biometricSeedPhraseEnabled) { enabled ->
                     walletViewModel.setBiometricSeedPhraseEnabled(enabled)
                 }
                 SettingsDivider()
-                SettingsSwitchItem("Biometrics for Account Login", biometricAccountLoginEnabled) { enabled ->
+                SettingsSwitchItem(stringResource(R.string.biometrics_for_account_login), biometricAccountLoginEnabled) { enabled ->
                     walletViewModel.setBiometricAccountLoginEnabled(enabled)
                 }
             }
 
-            SettingsSection(title = "Connection") {
-                SettingsNavigationItem("Connection Settings", Icons.Default.Language, "Mainnet", onClick = {
+            SettingsSection(title = stringResource(R.string.connection)) {
+                SettingsNavigationItem(stringResource(R.string.connection_settings), Icons.Default.Language, "Mainnet", onClick = {
                     navController.navigate("connection_settings")
                 })
                 SettingsDivider()
-                SettingsNavigationItem("Kaspa Explorer", Icons.Default.Explore, kaspaExplorer.displayName, onClick = {
+                SettingsNavigationItem(stringResource(R.string.kaspa_explorer), Icons.Default.Explore, kaspaExplorer.displayName, onClick = {
                     navController.navigate("kaspa_explorer_settings")
                 })
             }
 
-            SettingsSection(title = "Chats") {
-                SettingsSwitchItem("Show Fee Estimate", showFeeEstimate) { enabled ->
+            SettingsSection(title = stringResource(R.string.chats)) {
+                SettingsSwitchItem(stringResource(R.string.show_fee_estimate), showFeeEstimate) { enabled ->
                     settingsViewModel.setShowFeeEstimate(enabled)
                 }
                 SettingsDivider()
                 SettingsNavigationItem(
-                    "Photo Quality",
+                    stringResource(R.string.photo_quality),
                     Icons.Default.Photo,
                     chatPhotoQualityPreset.displayName,
                     onClick = { navController.navigate("photo_quality_settings") }
                 )
                 SettingsDivider()
                 SettingsNavigationItem(
-                    "Notifications",
+                    stringResource(R.string.notifications),
                     Icons.Default.NotificationsNone,
                     if (notificationsEnabled) "On" else "Off",
                     onClick = { navController.navigate("notification_settings") }
                 )
             }
 
-            SettingsSection(title = "Contacts") {
-                SettingsSwitchItem("Sync system contacts", syncSystemContactsEnabled) { enabled ->
+            SettingsSection(title = stringResource(R.string.contacts)) {
+                SettingsSwitchItem(stringResource(R.string.sync_system_contacts), syncSystemContactsEnabled) { enabled ->
                     chatViewModel.setSyncSystemContactsEnabled(enabled)
                     if (enabled) syncContactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                 }
                 SettingsDivider()
-                SettingsSwitchItem("Autocreate system contacts", autoCreateSystemContactsEnabled) { enabled ->
+                SettingsSwitchItem(stringResource(R.string.autocreate_system_contacts), autoCreateSystemContactsEnabled) { enabled ->
                     chatViewModel.setAutoCreateSystemContactsEnabled(enabled)
                     if (enabled) {
                         autoCreatePermissionLauncher.launch(
@@ -4644,10 +4790,10 @@ fun SettingsScreen(
                         )
                     }
                 }
-                SettingsFooter("Uses your device contacts to match and enrich Kaspa contacts.")
+                SettingsFooter(stringResource(R.string.uses_your_device_contacts_to_match))
             }
 
-            SettingsSection(title = "Storage") {
+            SettingsSection(title = stringResource(R.string.storage)) {
                 val googleBackupEnabled by chatViewModel.googleBackupEnabled.collectAsState()
                 val googleBackupOpState by chatViewModel.googleBackupOpState.collectAsState()
                 val restoreState by chatViewModel.restoreState.collectAsState()
@@ -4671,7 +4817,7 @@ fun SettingsScreen(
                 val restoreInFlight = restoreState.status == ChatViewModel.ChatHistoryOpStatus.IN_PROGRESS
 
                 SettingsSwitchItem(
-                    "Back Up to Google Drive",
+                    stringResource(R.string.back_up_to_google_drive),
                     checked = googleBackupEnabled,
                     onCheckedChange = { checked ->
                         if (checked) {
@@ -4711,7 +4857,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("Google Drive backup used", color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.google_drive_backup_used), color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge)
                         Text(
                             text = when (driveBackupSizeState.status) {
                                 ChatViewModel.DriveSizeStatus.IDLE -> "Not checked"
@@ -4729,7 +4875,7 @@ fun SettingsScreen(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), color = KaspaTeal, strokeWidth = 2.dp)
                     } else {
                         IconButton(onClick = { chatViewModel.refreshDriveBackupSize() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Check Drive backup size", tint = KaspaTeal)
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.check_drive_backup_size), tint = KaspaTeal)
                         }
                     }
                 }
@@ -4762,7 +4908,7 @@ fun SettingsScreen(
 
                     val backupRetention by chatViewModel.backupRetention.collectAsState()
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Retention", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.retention), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             val options = listOf(
@@ -4800,7 +4946,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSection(title = "Chat History") {
+            SettingsSection(title = stringResource(R.string.chat_history)) {
                 val exportInFlight = exportChatHistoryState.status == ChatViewModel.ChatHistoryOpStatus.IN_PROGRESS
                 val importInFlight = importChatHistoryState.status == ChatViewModel.ChatHistoryOpStatus.IN_PROGRESS
 
@@ -4856,10 +5002,10 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
-                SettingsFooter("Exports a plaintext JSON file of your decrypted chat history for this account. It is not encrypted, so only share it somewhere you trust. Importing merges into your existing history without overwriting anything.")
+                SettingsFooter(stringResource(R.string.exports_a_plaintext_json_file_of))
             }
 
-            SettingsSection(title = "Diagnostics") {
+            SettingsSection(title = stringResource(R.string.diagnostics)) {
                 val diagnosticsExportInFlight = diagnosticsExportState.status == ChatViewModel.ChatHistoryOpStatus.IN_PROGRESS
 
                 SettingsActionItem(
@@ -4886,11 +5032,11 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
-                SettingsFooter("Exports app/device info, connection settings, local message counts, and recent app logs as a zip for troubleshooting with support. No private keys, seed phrases, or decrypted message content are included.")
+                SettingsFooter(stringResource(R.string.exports_app_device_info_connection_settings))
             }
 
-            SettingsSection(title = "Actions") {
-                SettingsActionItem("View Seed Phrase", Icons.Default.Key, KaspaTeal) {
+            SettingsSection(title = stringResource(R.string.actions)) {
+                SettingsActionItem(stringResource(R.string.view_seed_phrase), Icons.Default.Key, KaspaTeal) {
                     if (biometricSeedPhraseEnabled) {
                         context.authenticateWithDeviceCredential(
                             title = "Unlock to View Seed Phrase",
@@ -4902,7 +5048,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSection(title = "Danger Zone") {
+            SettingsSection(title = stringResource(R.string.danger_zone)) {
                 val activeAddress by walletViewModel.address.collectAsState()
                 val wipeIncomingState by chatViewModel.wipeIncomingState.collectAsState()
                 val wipeAccountState by chatViewModel.wipeAccountState.collectAsState()
@@ -4947,10 +5093,10 @@ fun SettingsScreen(
                     AlertDialog(
                         onDismissRequest = { showWipeIncomingConfirm = false },
                         containerColor = LocalAppColors.current.surface,
-                        title = { Text("Wipe and re-sync incoming messages", color = LocalAppColors.current.textPrimary) },
+                        title = { Text(stringResource(R.string.wipe_and_re_sync_incoming_messages), color = LocalAppColors.current.textPrimary) },
                         text = {
                             Text(
-                                "This removes all incoming messages locally, then re-syncs them from the blockchain. Your account info and sent messages are preserved.",
+                                stringResource(R.string.this_removes_all_incoming_messages_locally),
                                 color = LocalAppColors.current.textSecondary
                             )
                         },
@@ -4959,12 +5105,12 @@ fun SettingsScreen(
                                 showWipeIncomingConfirm = false
                                 chatViewModel.wipeIncomingMessages()
                             }) {
-                                Text("Wipe Incoming Messages", color = Color.Red, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.wipe_incoming_messages), color = Color.Red, fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showWipeIncomingConfirm = false }) {
-                                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                             }
                         }
                     )
@@ -4975,10 +5121,10 @@ fun SettingsScreen(
                     AlertDialog(
                         onDismissRequest = { showWipeAccountConfirm = false },
                         containerColor = LocalAppColors.current.surface,
-                        title = { Text("Wipe account & messages", color = LocalAppColors.current.textPrimary) },
+                        title = { Text(stringResource(R.string.wipe_account_messages), color = LocalAppColors.current.textPrimary) },
                         text = {
                             Text(
-                                "This permanently deletes this account's wallet keys and all its local messages and contacts from this device. This cannot be undone unless you have saved your seed phrase; without it, any remaining balance is unrecoverable.",
+                                stringResource(R.string.this_permanently_deletes_this_account_s),
                                 color = LocalAppColors.current.textSecondary
                             )
                         },
@@ -4991,12 +5137,12 @@ fun SettingsScreen(
                                     }
                                 }
                             }) {
-                                Text("Wipe Account", color = Color.Red, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.wipe_account), color = Color.Red, fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showWipeAccountConfirm = false }) {
-                                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                             }
                         }
                     )
@@ -5007,10 +5153,10 @@ fun SettingsScreen(
                     AlertDialog(
                         onDismissRequest = { showWipeAccountCloudConfirm = false },
                         containerColor = LocalAppColors.current.surface,
-                        title = { Text("Wipe account & messages & Cloud", color = LocalAppColors.current.textPrimary) },
+                        title = { Text(stringResource(R.string.wipe_account_messages_cloud), color = LocalAppColors.current.textPrimary) },
                         text = {
                             Text(
-                                "This permanently deletes this account's wallet keys, all its local messages and contacts, and its Google Drive backup. This cannot be undone unless you have saved your seed phrase; without it, any remaining balance is unrecoverable.",
+                                stringResource(R.string.this_permanently_deletes_this_account_s_2),
                                 color = LocalAppColors.current.textSecondary
                             )
                         },
@@ -5023,12 +5169,12 @@ fun SettingsScreen(
                                     }
                                 }
                             }) {
-                                Text("Wipe Everything", color = Color.Red, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.wipe_everything), color = Color.Red, fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showWipeAccountCloudConfirm = false }) {
-                                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                             }
                         }
                     )
@@ -5041,14 +5187,17 @@ fun SettingsScreen(
 }
 
 @Composable
-fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+fun SettingsSection(title: String, headerAction: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = LocalAppColors.current.textSecondary,
-            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = LocalAppColors.current.textSecondary,
+                modifier = Modifier.weight(1f).padding(start = 8.dp, bottom = 8.dp)
+            )
+            headerAction?.invoke()
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5382,7 +5531,7 @@ fun TopStatusBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PersonAddAlt1,
-                            contentDescription = "Add Contact",
+                            contentDescription = stringResource(R.string.add_contact),
                             tint = KaspaTeal,
                             modifier = Modifier.size(20.dp)
                         )
@@ -5396,7 +5545,7 @@ fun TopStatusBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
+                            contentDescription = stringResource(R.string.settings),
                             tint = KaspaTeal,
                             modifier = Modifier.size(20.dp)
                         )
@@ -5457,10 +5606,10 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Connection Status", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.connection_status), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 actions = {
                     TextButton(onClick = onBack) {
-                        Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -5475,11 +5624,11 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            SettingsSection(title = "Connection Status") {
-                ConnectionInfoRow("Status", statusText, statusColor)
+            SettingsSection(title = stringResource(R.string.connection_status)) {
+                ConnectionInfoRow(stringResource(R.string.status), statusText, statusColor)
                 SettingsDivider()
                 ConnectionInfoRow(
-                    "Protocol",
+                    stringResource(R.string.protocol),
                     if (activeNodes.firstOrNull()?.ip?.let { com.kachat.app.services.grpc.parseNodeAddress(it)?.secure } == true) {
                         "gRPC (secure)"
                     } else {
@@ -5487,45 +5636,45 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
                     }
                 )
                 SettingsDivider()
-                ConnectionInfoRow("Connected Node", activeNodes.firstOrNull()?.ip ?: "None")
+                ConnectionInfoRow(stringResource(R.string.connected_node), activeNodes.firstOrNull()?.ip ?: "None")
                 SettingsDivider()
-                ConnectionInfoRow("Latency", activeNodes.firstOrNull()?.latency ?: "—", statusColor)
+                ConnectionInfoRow(stringResource(R.string.latency), activeNodes.firstOrNull()?.latency ?: "—", statusColor)
                 SettingsDivider()
-                ConnectionInfoRow("Indexer", indexerUrl.substringAfter("://").substringBefore("/"))
+                ConnectionInfoRow(stringResource(R.string.indexer), indexerUrl.substringAfter("://").substringBefore("/"))
                 SettingsDivider()
-                ConnectionInfoRow("Push Register", pushIndexerUrl.substringAfter("://").substringBefore("/"))
+                ConnectionInfoRow(stringResource(R.string.push_register), pushIndexerUrl.substringAfter("://").substringBefore("/"))
                 SettingsDivider()
-                ConnectionInfoRow("Last Sync", lastSyncAt)
+                ConnectionInfoRow(stringResource(R.string.last_sync), lastSyncAt)
             }
 
-            SettingsSection(title = "Pool Status") {
+            SettingsSection(title = stringResource(R.string.pool_status)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    PoolStatItem("Active", activeNodes.size.toString(), Color(0xFF4CD964))
-                    PoolStatItem("Verified", verifiedCount.toString(), Color(0xFF2196F3))
-                    PoolStatItem("Total", allNodes.size.toString(), Color.Gray)
+                    PoolStatItem(stringResource(R.string.active), activeNodes.size.toString(), Color(0xFF4CD964))
+                    PoolStatItem(stringResource(R.string.verified), verifiedCount.toString(), Color(0xFF2196F3))
+                    PoolStatItem(stringResource(R.string.total), allNodes.size.toString(), Color.Gray)
                 }
                 SettingsDivider()
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Pool Health", color = LocalAppColors.current.textPrimary)
+                    Text(stringResource(R.string.pool_health), color = LocalAppColors.current.textPrimary)
                     Text(poolHealthText, color = statusColor)
                 }
             }
 
-            SettingsSection(title = "Actions") {
-                SettingsActionItem("Refresh Pool", Icons.Default.Refresh, KaspaTeal, onClick = {
+            SettingsSection(title = stringResource(R.string.actions)) {
+                SettingsActionItem(stringResource(R.string.refresh_pool), Icons.Default.Refresh, KaspaTeal, onClick = {
                     viewModel.refreshPool()
                     coroutineScope.launch { snackbarHostState.showSnackbar("Refreshing pool…") }
                 })
                 SettingsDivider()
-                SettingsActionItem("Clear Connection Pool", Icons.Default.DeleteSweep, Color.Red, onClick = {
+                SettingsActionItem(stringResource(R.string.clear_connection_pool), Icons.Default.DeleteSweep, Color.Red, onClick = {
                     viewModel.clearPool()
                     coroutineScope.launch { snackbarHostState.showSnackbar("Pool cleared, reconnecting to seed nodes") }
                 })
                 SettingsDivider()
-                SettingsActionItem("Reconnect", Icons.Default.Replay, KaspaTeal, onClick = {
+                SettingsActionItem(stringResource(R.string.reconnect), Icons.Default.Replay, KaspaTeal, onClick = {
                     viewModel.reconnect()
                     coroutineScope.launch { snackbarHostState.showSnackbar("Reconnecting…") }
                 })
@@ -5546,7 +5695,7 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(8.dp).background(Color(0xFF4CD964), CircleShape))
                     Spacer(Modifier.width(8.dp))
-                    Text(text = "Active Nodes", style = MaterialTheme.typography.titleMedium, color = LocalAppColors.current.textPrimary)
+                    Text(text = stringResource(R.string.active_nodes), style = MaterialTheme.typography.titleMedium, color = LocalAppColors.current.textPrimary)
                 }
                 Text(text = activeNodes.size.toString(), color = LocalAppColors.current.textSecondary)
             }
@@ -5567,7 +5716,7 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(8.dp).background(Color.Gray, CircleShape))
                     Spacer(Modifier.width(8.dp))
-                    Text(text = "Other Nodes", style = MaterialTheme.typography.titleMedium, color = LocalAppColors.current.textPrimary)
+                    Text(text = stringResource(R.string.other_nodes), style = MaterialTheme.typography.titleMedium, color = LocalAppColors.current.textPrimary)
                 }
                 Text(text = otherNodes.size.toString(), color = LocalAppColors.current.textSecondary)
             }
@@ -5581,7 +5730,7 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
             }
 
             Text(
-                text = "All discovered nodes sorted by state and latency. Nodes are deduplicated by host:port.",
+                text = stringResource(R.string.all_discovered_nodes_sorted_by_state),
                 style = MaterialTheme.typography.bodySmall,
                 color = LocalAppColors.current.textSecondary,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -5614,7 +5763,7 @@ fun NotificationSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel 
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Notifications", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.notifications), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -5641,10 +5790,10 @@ fun NotificationSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel 
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Notifications are off in system settings", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.notifications_are_off_in_system_settings), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "KaChat can't show notifications until you allow them for this app.",
+                            stringResource(R.string.kachat_can_t_show_notifications_until),
                             color = LocalAppColors.current.textSecondary,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -5659,14 +5808,14 @@ fun NotificationSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel 
                                 )
                             }
                         }) {
-                            Text("Open Settings", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.open_settings), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            SettingsSection(title = "Push Notifications") {
-                SettingsSwitchItem("Notifications", notificationsEnabled && permissionGranted) {
+            SettingsSection(title = stringResource(R.string.push_notifications)) {
+                SettingsSwitchItem(stringResource(R.string.notifications), notificationsEnabled && permissionGranted) {
                     viewModel.setNotificationsEnabled(it)
                 }
                 SettingsFooter(
@@ -5678,12 +5827,12 @@ fun NotificationSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel 
             }
 
             if (notificationsEnabled && permissionGranted) {
-                SettingsSection(title = "Sound & Vibration") {
-                    SettingsSwitchItem("Play sound", soundEnabled) {
+                SettingsSection(title = stringResource(R.string.sound_vibration)) {
+                    SettingsSwitchItem(stringResource(R.string.play_sound), soundEnabled) {
                         viewModel.setNotificationSoundEnabled(it)
                     }
                     SettingsDivider()
-                    SettingsSwitchItem("Vibration", vibrationEnabled) {
+                    SettingsSwitchItem(stringResource(R.string.vibration), vibrationEnabled) {
                         viewModel.setNotificationVibrationEnabled(it)
                     }
                 }
@@ -5711,7 +5860,7 @@ fun PhotoQualitySettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel 
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Photo Quality", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.photo_quality), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -5732,18 +5881,18 @@ fun PhotoQualitySettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel 
             Spacer(Modifier.height(8.dp))
 
             Text(
-                "Controls how much photos are compressed before sending. Higher quality looks clearer but costs a larger fee and takes longer to send; lower quality sends faster and cheaper but looks more compressed. This only affects photos you send, not ones you receive.",
+                stringResource(R.string.controls_how_much_photos_are_compressed),
                 color = LocalAppColors.current.textSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
 
-            SettingsSection(title = "Chats") {
+            SettingsSection(title = stringResource(R.string.chats)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Photo quality", color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.photo_quality_2), color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge)
                         Text(preset.summaryText, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodyMedium)
                     }
                     Slider(
@@ -5778,7 +5927,7 @@ fun KaspaExplorerSettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Kaspa Explorer", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.kaspa_explorer), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -5799,12 +5948,12 @@ fun KaspaExplorerSettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel
             Spacer(Modifier.height(8.dp))
 
             Text(
-                "Transaction links in message menus and transaction history pages open in this explorer.",
+                stringResource(R.string.transaction_links_in_message_menus_and),
                 color = LocalAppColors.current.textSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
 
-            SettingsSection(title = "Explorer") {
+            SettingsSection(title = stringResource(R.string.explorer)) {
                 com.kachat.app.models.KaspaExplorer.entries.forEachIndexed { index, explorer ->
                     Row(
                         modifier = Modifier
@@ -5843,7 +5992,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Connection Settings", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.connection_settings), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -5857,7 +6006,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                         modifier = Modifier.height(36.dp).padding(end = 8.dp)
                     ) {
-                        Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -5872,42 +6021,42 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            SettingsSection(title = "Network") {
+            SettingsSection(title = stringResource(R.string.network)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Network", color = LocalAppColors.current.textPrimary)
+                    Text(stringResource(R.string.network), color = LocalAppColors.current.textPrimary)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(network, color = KaspaTeal)
                         Icon(Icons.Default.UnfoldMore, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(16.dp))
                     }
                 }
-                SettingsFooter("Select mainnet for real transactions or testnet for testing")
+                SettingsFooter(stringResource(R.string.select_mainnet_for_real_transactions_or))
             }
 
-            SettingsSection(title = "KaChat Indexer") {
+            SettingsSection(title = stringResource(R.string.kachat_indexer)) {
                 ConnectionUrlField(label = "Indexer URL", value = indexerUrl)
-                SettingsFooter("Message indexer service for chat functionality")
+                SettingsFooter(stringResource(R.string.message_indexer_service_for_chat_functionality))
             }
 
-            SettingsSection(title = "Push Registration") {
+            SettingsSection(title = stringResource(R.string.push_registration)) {
                 ConnectionUrlField(label = "Push Indexer URL", value = pushIndexerUrl)
-                SettingsFooter("Used only for push registration and updates")
+                SettingsFooter(stringResource(R.string.used_only_for_push_registration_and))
             }
 
-            SettingsSection(title = "Kaspa Name Service") {
+            SettingsSection(title = stringResource(R.string.kaspa_name_service)) {
                 ConnectionUrlField(label = "KNS API URL", value = knsApiUrl)
-                SettingsFooter("KNS domain resolution service")
+                SettingsFooter(stringResource(R.string.kns_domain_resolution_service))
             }
 
-            SettingsSection(title = "Kaspa Explorer API") {
+            SettingsSection(title = stringResource(R.string.kaspa_explorer_api)) {
                 ConnectionUrlField(label = "Kaspa REST API URL", value = kaspaRestApiUrl)
-                SettingsFooter("REST API for transaction history and balance lookups")
+                SettingsFooter(stringResource(R.string.rest_api_for_transaction_history_and))
             }
 
-            SettingsSection(title = "Kaspa Node") {
+            SettingsSection(title = stringResource(R.string.kaspa_node)) {
                 var endpoint by remember(trustedNodeAddress) { mutableStateOf(trustedNodeAddress) }
                 var validationError by remember { mutableStateOf<String?>(null) }
                 val keyboardController = LocalSoftwareKeyboardController.current
@@ -5929,7 +6078,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 TextField(
                     value = endpoint,
                     onValueChange = { endpoint = it; validationError = null },
-                    placeholder = { Text("host:port or grpcs://host", color = Color.DarkGray) },
+                    placeholder = { Text(stringResource(R.string.host_port_or_grpcs_host), color = Color.DarkGray) },
                     modifier = Modifier.fillMaxWidth().padding(16.dp).height(50.dp).clip(RoundedCornerShape(12.dp)),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { save() }),
@@ -5963,13 +6112,13 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Connected only to this node", color = KaspaTeal, fontSize = 13.sp)
+                        Text(stringResource(R.string.connected_only_to_this_node), color = KaspaTeal, fontSize = 13.sp)
                         TextButton(onClick = {
                             endpoint = ""
                             validationError = null
                             viewModel.setTrustedNodeAddress("")
                         }) {
-                            Text("Clear", color = Color(0xFFFF3B30))
+                            Text(stringResource(R.string.clear), color = Color(0xFFFF3B30))
                         }
                     }
                 }
@@ -5982,7 +6131,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 )
             }
 
-            SettingsSection(title = "IP Address Book") {
+            SettingsSection(title = stringResource(R.string.ip_address_book)) {
                 var newLabel by remember { mutableStateOf("") }
                 var newAddress by remember { mutableStateOf("") }
                 var addError by remember { mutableStateOf<String?>(null) }
@@ -5992,7 +6141,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 TextField(
                     value = newLabel,
                     onValueChange = { newLabel = it },
-                    placeholder = { Text("Label (optional)", color = Color.DarkGray) },
+                    placeholder = { Text(stringResource(R.string.label_optional), color = Color.DarkGray) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(50.dp).clip(RoundedCornerShape(12.dp)),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = LocalAppColors.current.surfaceVariant,
@@ -6011,7 +6160,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                     TextField(
                         value = newAddress,
                         onValueChange = { newAddress = it; addError = null },
-                        placeholder = { Text("host:port or grpcs://host", color = Color.DarkGray) },
+                        placeholder = { Text(stringResource(R.string.host_port_or_grpcs_host), color = Color.DarkGray) },
                         modifier = Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(12.dp)),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = LocalAppColors.current.surfaceVariant,
@@ -6048,7 +6197,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
 
                 if (savedNodeAddresses.isEmpty()) {
                     Text(
-                        "No saved addresses",
+                        stringResource(R.string.no_saved_addresses),
                         color = LocalAppColors.current.textSecondary,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(16.dp)
@@ -6061,7 +6210,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                                 .fillMaxWidth()
                                 .clickable {
                                     clipboardManager.setText(AnnotatedString(entry.address))
-                                    Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(16.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -6086,7 +6235,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                         }
                     }
                 }
-                SettingsFooter("Save your own node addresses here, then tap one to copy it and paste into the Kaspa Node field above.")
+                SettingsFooter(stringResource(R.string.save_your_own_node_addresses_here))
             }
 
             Button(
@@ -6095,7 +6244,7 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surface),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Reset to Defaults", color = Color.Red, fontSize = 18.sp)
+                Text(stringResource(R.string.reset_to_defaults), color = Color.Red, fontSize = 18.sp)
             }
             
             Spacer(modifier = Modifier.height(100.dp))
@@ -6309,7 +6458,7 @@ fun AnimatedQrDisplay(frames: List<ByteArray>, modifier: Modifier = Modifier, fr
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Image(painter = painter, contentDescription = "QR code", modifier = Modifier.fillMaxSize())
+            Image(painter = painter, contentDescription = stringResource(R.string.qr_code_2), modifier = Modifier.fillMaxSize())
         }
         if (frames.size > 1) {
             Spacer(Modifier.height(12.dp))
@@ -6349,7 +6498,10 @@ fun AnimatedQrDisplay(frames: List<ByteArray>, modifier: Modifier = Modifier, fr
     }
 }
 
-/** Full-bleed QR overlay over the current screen's content area — tap anywhere to dismiss. [message], if given, renders as a caption below the code (e.g. funding guidance). */
+/** Full-bleed QR overlay over the current screen's content area — matches iOS's push-navigated
+ *  QR screens (full-screen white, dismissed via a back arrow/system back, not a tap-anywhere
+ *  gesture that could be triggered by mistake). [message], if given, renders as a caption below
+ *  the code (e.g. funding guidance). */
 @Composable
 fun QrCodeOverlay(
     value: String,
@@ -6358,16 +6510,29 @@ fun QrCodeOverlay(
     borderColor: Color = KaspaTeal,
     borderWidth: Dp = 2.dp
 ) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    BackHandler(onBack = onDismiss)
+
     // Full-screen white, not the app's own themed background — a bright, high-contrast quiet
     // zone around the code is what actually gets a reliable scan on another device's camera,
     // regardless of whether KaChat itself is in light or dark mode.
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
-            .clickable(onClick = onDismiss),
+            .background(Color.White),
         contentAlignment = Alignment.Center
     ) {
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(4.dp)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.Black)
+        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             val qrPainter = rememberQrBitmapPainter(value)
             Box(
@@ -6381,12 +6546,33 @@ fun QrCodeOverlay(
             ) {
                 Image(
                     painter = qrPainter,
-                    contentDescription = "QR Code",
+                    contentDescription = stringResource(R.string.qr_code),
                     modifier = Modifier.fillMaxSize()
                 )
             }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = value,
+                color = Color.Black,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = {
+                clipboardManager.setText(AnnotatedString(value))
+                Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
+            }) {
+                Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.copy_address), color = KaspaTeal, fontWeight = FontWeight.Bold)
+            }
             if (message != null) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = message,
                     color = Color(0xFF6B6B70),
@@ -6544,7 +6730,7 @@ fun CreateChatScreen(
                 },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Cancel", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.cancel), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -6562,7 +6748,7 @@ fun CreateChatScreen(
                                 },
                                 enabled = canCreateGroup
                             ) {
-                                Text("Create", color = if (canCreateGroup) KaspaTeal else Color.DarkGray, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.create), color = if (canCreateGroup) KaspaTeal else Color.DarkGray, fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {
@@ -6578,7 +6764,7 @@ fun CreateChatScreen(
                             },
                             enabled = isValidAddress
                         ) {
-                            Text("Add", color = if (isValidAddress) KaspaTeal else Color.DarkGray, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.add), color = if (isValidAddress) KaspaTeal else Color.DarkGray, fontWeight = FontWeight.Bold)
                         }
                     }
                 },
@@ -6604,7 +6790,7 @@ fun CreateChatScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Group Chat", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.group_chat), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
                 Switch(
                     checked = isGroupMode,
                     onCheckedChange = {
@@ -6635,7 +6821,7 @@ fun CreateChatScreen(
             }
 
             Text(
-                text = "Address",
+                text = stringResource(R.string.address),
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -6651,14 +6837,14 @@ fun CreateChatScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Kaspa Address or KNS Domain",
+                    text = stringResource(R.string.kaspa_address_or_kns_domain),
                     color = LocalAppColors.current.textSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
                 TextField(
                     value = address,
                     onValueChange = { address = it },
-                    placeholder = { Text("kaspa:qr... or name.kas", color = Color.DarkGray) },
+                    placeholder = { Text(stringResource(R.string.kaspa_qr_or_name_kas), color = Color.DarkGray) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
@@ -6676,7 +6862,7 @@ fun CreateChatScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), color = KaspaTeal, strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
-                        Text("Resolving domain…", color = LocalAppColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.resolving_domain), color = LocalAppColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 } else if (looksLikeKnsDomain && knsError != null) {
@@ -6708,7 +6894,7 @@ fun CreateChatScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Valid address",
+                            text = stringResource(R.string.valid_address),
                             color = Color(0xFF4CD964),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -6745,7 +6931,7 @@ fun CreateChatScreen(
             Spacer(modifier = Modifier.height(12.dp))
             
             Text(
-                text = "Enter a Kaspa address (kaspa:...) or KNS domain name (e.g., alice.kas)",
+                text = stringResource(R.string.enter_a_kaspa_address_kaspa_or),
                 color = LocalAppColors.current.textSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -6753,7 +6939,7 @@ fun CreateChatScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Name (Optional)",
+                text = stringResource(R.string.name_optional),
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -6764,7 +6950,7 @@ fun CreateChatScreen(
             TextField(
                 value = name,
                 onValueChange = { name = it },
-                placeholder = { Text("Contact name", color = Color.DarkGray) },
+                placeholder = { Text(stringResource(R.string.contact_name_2), color = Color.DarkGray) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(25.dp)),
@@ -6882,7 +7068,7 @@ fun GroupChatCreationFields(
     }
 
     Text(
-        text = "Group Name",
+        text = stringResource(R.string.group_name),
         color = LocalAppColors.current.textPrimary,
         fontWeight = FontWeight.Bold,
         style = MaterialTheme.typography.titleMedium
@@ -6891,7 +7077,7 @@ fun GroupChatCreationFields(
     TextField(
         value = groupName,
         onValueChange = onGroupNameChange,
-        placeholder = { Text("Group name", color = Color.DarkGray) },
+        placeholder = { Text(stringResource(R.string.group_name_2), color = Color.DarkGray) },
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
@@ -6910,7 +7096,7 @@ fun GroupChatCreationFields(
     Spacer(modifier = Modifier.height(32.dp))
 
     Text(
-        text = "Members",
+        text = stringResource(R.string.members),
         color = LocalAppColors.current.textPrimary,
         fontWeight = FontWeight.Bold,
         style = MaterialTheme.typography.titleMedium
@@ -6956,7 +7142,7 @@ fun GroupChatCreationFields(
                         onValueChange = { newValue ->
                             onRowsChange(rows.map { if (it.id == row.id) it.copy(text = newValue) else it })
                         },
-                        placeholder = { Text("kaspa:qr... or name.kas", color = Color.DarkGray) },
+                        placeholder = { Text(stringResource(R.string.kaspa_qr_or_name_kas), color = Color.DarkGray) },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
@@ -6971,7 +7157,7 @@ fun GroupChatCreationFields(
                     )
                     if (rows.size > 1) {
                         IconButton(onClick = { removeRow(row.id) }) {
-                            Icon(Icons.Default.RemoveCircle, contentDescription = "Remove", tint = Color(0xFFFF3B30))
+                            Icon(Icons.Default.RemoveCircle, contentDescription = stringResource(R.string.remove), tint = Color(0xFFFF3B30))
                         }
                     }
                 }
@@ -6981,7 +7167,7 @@ fun GroupChatCreationFields(
                         row.isResolvingKns -> Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(modifier = Modifier.size(14.dp), color = KaspaTeal, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Resolving KNS domain…", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                            Text(stringResource(R.string.resolving_kns_domain), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                         }
                         row.knsError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(14.dp))
@@ -7038,7 +7224,7 @@ fun GroupChatCreationFields(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Add Address", color = if (isValidRow(row)) Color.Black else Color.Gray, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.add_address), color = if (isValidRow(row)) Color.Black else Color.Gray, fontWeight = FontWeight.Bold)
                 }
             } else {
                 // Committed: collapsed to a single row - tap the name/address to edit it again,
@@ -7057,7 +7243,7 @@ fun GroupChatCreationFields(
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { removeRow(row.id) }) {
-                        Icon(Icons.Default.RemoveCircle, contentDescription = "Remove", tint = Color(0xFFFF3B30))
+                        Icon(Icons.Default.RemoveCircle, contentDescription = stringResource(R.string.remove), tint = Color(0xFFFF3B30))
                     }
                 }
             }
@@ -7155,7 +7341,7 @@ fun ChatInfoScreen(
                 title = { Text(if (fromBroadcast) "User Info" else "Chat Info", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Cancel", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.cancel), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -7163,7 +7349,7 @@ fun ChatInfoScreen(
                         chatViewModel.updateContactName(contactId, contactName)
                         onBack()
                     }) {
-                        Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -7204,7 +7390,7 @@ fun ChatInfoScreen(
                         TextField(
                             value = contactName,
                             onValueChange = { contactName = it },
-                            placeholder = { Text("Contact Name", color = LocalAppColors.current.textSecondary) },
+                            placeholder = { Text(stringResource(R.string.contact_name), color = LocalAppColors.current.textSecondary) },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
@@ -7222,7 +7408,7 @@ fun ChatInfoScreen(
             }
 
             if (ownedDomains.isNotEmpty()) {
-                SettingsSection(title = "KNS Profile") {
+                SettingsSection(title = stringResource(R.string.kns_profile)) {
                     Column {
                         val bannerUrl = knsFields?.bannerUrl?.takeIf { it.isNotBlank() }
                         if (bannerUrl != null) {
@@ -7291,7 +7477,7 @@ fun ChatInfoScreen(
                                     .padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("More Info", color = KaspaTeal, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Text(stringResource(R.string.more_info), color = KaspaTeal, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 Icon(
                                     if (moreInfoExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                     contentDescription = if (moreInfoExpanded) "Collapse" else "Expand",
@@ -7340,7 +7526,7 @@ fun ChatInfoScreen(
                         // Incoming Notifications' pattern.
                         HorizontalDivider(color = LocalAppColors.current.divider)
                         SettingsNavigationItem(
-                            "Domains",
+                            stringResource(R.string.domains),
                             Icons.Default.Language,
                             knsProfile?.selectedDomain ?: "",
                             onClick = { onNavigateToDomainSettings(contactId) }
@@ -7349,13 +7535,13 @@ fun ChatInfoScreen(
                 }
             }
 
-            SettingsSection(title = "Address") {
+            SettingsSection(title = stringResource(R.string.address)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
                             clipboardManager.setText(AnnotatedString(contactId))
-                            Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
                         }
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -7382,7 +7568,7 @@ fun ChatInfoScreen(
                 }
             }
 
-            SettingsSection(title = "System Contact") {
+            SettingsSection(title = stringResource(R.string.system_contact)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     if (systemContactId != null) {
                         Row(
@@ -7390,14 +7576,14 @@ fun ChatInfoScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Linked", color = LocalAppColors.current.textPrimary)
+                            Text(stringResource(R.string.linked), color = LocalAppColors.current.textPrimary)
                             Text(systemContactName ?: "", color = LocalAppColors.current.textSecondary)
                         }
                         Spacer(Modifier.height(12.dp))
                         HorizontalDivider(color = LocalAppColors.current.divider)
                         Spacer(Modifier.height(12.dp))
                     } else {
-                        Text("Not linked", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.not_linked), color = LocalAppColors.current.textSecondary)
                         Spacer(Modifier.height(12.dp))
                     }
 
@@ -7407,7 +7593,7 @@ fun ChatInfoScreen(
                     ) {
                         Icon(Icons.Default.PersonAddAlt1, null, tint = KaspaTeal, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Link from Contacts", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.link_from_contacts), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
 
                     if (systemContactId != null) {
@@ -7418,27 +7604,27 @@ fun ChatInfoScreen(
                         ) {
                             Icon(Icons.Default.RemoveCircleOutline, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Unlink", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.unlink), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
             if (!fromBroadcast) {
-                SettingsSection(title = "Incoming Notifications") {
+                SettingsSection(title = stringResource(R.string.incoming_notifications)) {
                     val notificationOverride = com.kachat.app.models.ContactNotificationMode.fromName(conversation?.contact?.notificationOverride)
                     SettingsNavigationItem(
-                        "Incoming Notifications",
+                        stringResource(R.string.incoming_notifications),
                         Icons.Default.NotificationsNone,
                         notificationOverride?.displayName ?: "Default",
                         onClick = { onNavigateToNotificationSettings(contactId) }
                     )
                 }
 
-                SettingsSection(title = "Photos") {
+                SettingsSection(title = stringResource(R.string.photos)) {
                     val photoOverride = com.kachat.app.models.PhotoAutoDisplayMode.fromName(conversation?.contact?.photoAutoDisplayOverride)
                     SettingsNavigationItem(
-                        "Photos",
+                        stringResource(R.string.photos),
                         Icons.Default.Photo,
                         photoOverride.displayName,
                         onClick = { onNavigateToPhotoSettings(contactId) }
@@ -7447,7 +7633,7 @@ fun ChatInfoScreen(
             }
 
             if (!fromBroadcast) {
-                SettingsSection(title = "Info") {
+                SettingsSection(title = stringResource(R.string.info)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         val addedDate = remember(conversation) {
                             conversation?.contact?.addedAt?.let {
@@ -7465,14 +7651,14 @@ fun ChatInfoScreen(
                         }
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Added", color = LocalAppColors.current.textPrimary)
+                            Text(stringResource(R.string.added), color = LocalAppColors.current.textPrimary)
                             Text(addedDate, color = LocalAppColors.current.textSecondary)
                         }
                         Spacer(Modifier.height(12.dp))
                         HorizontalDivider(color = LocalAppColors.current.divider)
                         Spacer(Modifier.height(12.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Last Message", color = LocalAppColors.current.textPrimary)
+                            Text(stringResource(R.string.last_message), color = LocalAppColors.current.textPrimary)
                             Text(lastMessageTime, color = LocalAppColors.current.textSecondary)
                         }
                         Spacer(Modifier.height(24.dp))
@@ -7503,7 +7689,7 @@ fun ContactPhotoSettingsScreen(contactId: String, onBack: () -> Unit, chatViewMo
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Photos", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.photos), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -7530,7 +7716,7 @@ fun ContactPhotoSettingsScreen(contactId: String, onBack: () -> Unit, chatViewMo
                 style = MaterialTheme.typography.bodySmall
             )
 
-            SettingsSection(title = "Photos") {
+            SettingsSection(title = stringResource(R.string.photos)) {
                 com.kachat.app.models.PhotoAutoDisplayMode.entries.forEachIndexed { index, mode ->
                     Row(
                         modifier = Modifier
@@ -7569,7 +7755,7 @@ fun ContactNotificationSettingsScreen(contactId: String, onBack: () -> Unit, cha
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Incoming Notifications", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.incoming_notifications), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -7590,12 +7776,12 @@ fun ContactNotificationSettingsScreen(contactId: String, onBack: () -> Unit, cha
             Spacer(Modifier.height(8.dp))
 
             Text(
-                "Default follows Settings > Notifications. Off disables notifications for this contact.",
+                stringResource(R.string.default_follows_settings_notifications_off_disables),
                 color = LocalAppColors.current.textSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
 
-            SettingsSection(title = "Incoming Notifications") {
+            SettingsSection(title = stringResource(R.string.incoming_notifications)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -7603,7 +7789,7 @@ fun ContactNotificationSettingsScreen(contactId: String, onBack: () -> Unit, cha
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Default", color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.default_option), color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     if (notificationOverride == null) {
                         Icon(Icons.Default.Check, null, tint = KaspaTeal)
                     }
@@ -7651,7 +7837,7 @@ fun ContactDomainSettingsScreen(contactId: String, onBack: () -> Unit, chatViewM
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Domains", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.domains), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
@@ -7672,12 +7858,12 @@ fun ContactDomainSettingsScreen(contactId: String, onBack: () -> Unit, chatViewM
             Spacer(Modifier.height(8.dp))
 
             Text(
-                "Pick which domain you want to represent this contact. It's also used as their name if you haven't set a nickname.",
+                stringResource(R.string.pick_which_domain_you_want_to),
                 color = LocalAppColors.current.textSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
 
-            SettingsSection(title = "Domains") {
+            SettingsSection(title = stringResource(R.string.domains)) {
                 ownedDomains.forEachIndexed { index, domain ->
                     Row(
                         modifier = Modifier

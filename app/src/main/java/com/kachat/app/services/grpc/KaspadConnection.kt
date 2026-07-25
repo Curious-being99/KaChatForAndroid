@@ -127,9 +127,16 @@ class KaspadConnection internal constructor(
 
     private var streamJob: Job? = null
 
+    /** Consecutive auto-reconnect attempts since the last successful [connect] - drives backoff
+     * so a node that's actively rejecting new streams (e.g. it logged "reached connection
+     * capacity") gets breathing room instead of a retry every ~100ms-1s indefinitely, which
+     * just keeps re-triggering the same rejection. */
+    private var reconnectAttempts = 0
+
     fun connect() {
         if (isConnected) return
         isConnected = true
+        reconnectAttempts = 0
         streamJob = scope.launch {
             try {
                 stub.messageStream(outbound.receiveAsFlow()).collect { response ->
@@ -163,8 +170,19 @@ class KaspadConnection internal constructor(
      * reconnects don't all slam the network at once.
      */
     private fun scheduleAutoReconnect() {
+        reconnectAttempts++
+        val attempt = reconnectAttempts
         scope.launch {
-            delay((100L..1000L).random())
+            // First attempt: small jitter only. Later attempts: capped exponential backoff
+            // (1, 2, 4, 8, 16, 30, 30...s) - a node that's actively rejecting new streams needs
+            // breathing room, not a retry every ~100ms-1s forever.
+            val delayMs = if (attempt <= 1) {
+                (100L..1000L).random()
+            } else {
+                val backoffSeconds = minOf(30.0, Math.pow(2.0, (attempt - 2).toDouble()))
+                ((backoffSeconds + Math.random() * 0.3 * backoffSeconds) * 1000).toLong()
+            }
+            delay(delayMs)
             if (!isConnected && !closed) {
                 connect()
             }

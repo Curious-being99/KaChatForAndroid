@@ -26,6 +26,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -242,7 +243,7 @@ fun ChatsScreen(
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(22.dp)),
-                        placeholder = { Text("Search chats", color = LocalAppColors.current.textSecondary) },
+                        placeholder = { Text(stringResource(R.string.search_chats), color = LocalAppColors.current.textSecondary) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium,
                         leadingIcon = {
@@ -251,7 +252,7 @@ fun ChatsScreen(
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear search", tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search), tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(18.dp))
                                 }
                             }
                         },
@@ -283,7 +284,7 @@ fun ChatsScreen(
                         text = {
                             TabBadge(count = chatsUnreadCount) {
                                 Text(
-                                    "Chats",
+                                    stringResource(R.string.chats),
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSelectionMode && isOnGroupsTab) LocalContentColor.current.copy(alpha = 0.25f) else LocalContentColor.current
                                 )
@@ -298,7 +299,7 @@ fun ChatsScreen(
                         text = {
                             TabBadge(count = groupsUnreadCount) {
                                 Text(
-                                    "Group Chats",
+                                    stringResource(R.string.group_chats),
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSelectionMode && !isOnGroupsTab) LocalContentColor.current.copy(alpha = 0.25f) else LocalContentColor.current
                                 )
@@ -347,7 +348,7 @@ fun ChatsScreen(
                         ) {
                             Icon(Icons.Default.MarkEmailRead, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Mark as Read", color = LocalAppColors.current.textPrimary, fontSize = 13.sp)
+                            Text(stringResource(R.string.mark_as_read), color = LocalAppColors.current.textPrimary, fontSize = 13.sp)
                         }
                         Button(
                             onClick = {
@@ -366,7 +367,7 @@ fun ChatsScreen(
                         ) {
                             Icon(Icons.Default.MarkEmailUnread, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Mark as Unread", color = LocalAppColors.current.textPrimary, fontSize = 13.sp)
+                            Text(stringResource(R.string.mark_as_unread), color = LocalAppColors.current.textPrimary, fontSize = 13.sp)
                         }
                     }
                 }
@@ -426,7 +427,7 @@ fun ChatsScreen(
                         )
                         Spacer(Modifier.height(24.dp))
                         Text(
-                            text = "No Conversations Yet",
+                            text = stringResource(R.string.no_conversations_yet),
                             style = MaterialTheme.typography.headlineSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = LocalAppColors.current.textPrimary
@@ -434,7 +435,7 @@ fun ChatsScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = "Start a new chat by adding a contact",
+                            text = stringResource(R.string.start_a_new_chat_by_adding),
                             style = MaterialTheme.typography.bodyLarge,
                             color = LocalAppColors.current.textSecondary,
                             textAlign = TextAlign.Center
@@ -454,7 +455,7 @@ fun ChatsScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = "Add Contact",
+                                    text = stringResource(R.string.add_contact),
                                     color = Color.Black,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -469,7 +470,7 @@ fun ChatsScreen(
                     modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)
                 ) {
                     Text(
-                        text = "No Matching Chats",
+                        text = stringResource(R.string.no_matching_chats),
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold,
                             color = LocalAppColors.current.textPrimary
@@ -523,7 +524,7 @@ fun ChatsScreen(
                                 if (isSelectionMode) {
                                     Icon(
                                         imageVector = if (convo.contact.id in selectedContactIds) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                        contentDescription = "Select chat",
+                                        contentDescription = stringResource(R.string.select_chat),
                                         tint = if (convo.contact.id in selectedContactIds) KaspaTeal else Color.Gray,
                                         modifier = Modifier.padding(start = 16.dp).size(22.dp)
                                     )
@@ -569,7 +570,7 @@ fun ChatsScreen(
                         title = { Text("Delete Chat with $label", color = LocalAppColors.current.textPrimary) },
                         text = {
                             Text(
-                                "This permanently deletes every message with them on this device. This cannot be undone; messaging them again starts a brand new conversation.",
+                                stringResource(R.string.this_permanently_deletes_every_message_with),
                                 color = LocalAppColors.current.textSecondary
                             )
                         },
@@ -578,12 +579,12 @@ fun ChatsScreen(
                                 chatViewModel.deleteChat(contactId)
                                 contactToDelete = null
                             }) {
-                                Text("Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { contactToDelete = null }) {
-                                Text("Cancel", color = LocalAppColors.current.textSecondary)
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                             }
                         }
                     )
@@ -648,7 +649,7 @@ private fun BroadcastsEntryRow(onClick: () -> Unit) {
             }
             Spacer(modifier = Modifier.width(16.dp))
             Text(
-                text = "Broadcasts",
+                text = stringResource(R.string.broadcasts),
                 style = MaterialTheme.typography.titleMedium,
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
@@ -699,7 +700,7 @@ fun GroupListBody(
             modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)
         ) {
             Text(
-                text = "No Matching Groups",
+                text = stringResource(R.string.no_matching_groups),
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold,
                     color = LocalAppColors.current.textPrimary
@@ -727,7 +728,7 @@ fun GroupListBody(
             )
             Spacer(Modifier.height(24.dp))
             Text(
-                text = "No Group Chats Yet",
+                text = stringResource(R.string.no_group_chats_yet),
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold,
                     color = LocalAppColors.current.textPrimary
@@ -735,7 +736,7 @@ fun GroupListBody(
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "Start a group from the add-chat button",
+                text = stringResource(R.string.start_a_group_from_the_add),
                 style = MaterialTheme.typography.bodyLarge,
                 color = LocalAppColors.current.textSecondary,
                 textAlign = TextAlign.Center
@@ -761,11 +762,18 @@ fun GroupListBody(
                     trailingColor = Color(0xFFFF3B30),
                     onTrailingClick = { groupToDelete = convo.group.groupId }
                 ) {
-                    Column {
+                    // .background() is on this outer Column (covering the divider row below too),
+                    // not just the inner Row - SwipeActionRow's teal/red swipe-action strips
+                    // underneath are sized to this whole content block, and the divider's own
+                    // `padding(start = 88.dp)` leaves a gap it doesn't paint over on the left edge
+                    // (and only partially covers on the right, being semi-transparent) - without an
+                    // opaque background spanning the full block, those gaps showed the swipe colors
+                    // through as a stray line at the bottom of every row. Matches the regular Chats
+                    // tab's identical row, which already scopes its background this way.
+                    Column(modifier = Modifier.background(LocalAppColors.current.background)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(LocalAppColors.current.background)
                                 .clickable {
                                     if (isSelectionMode) {
                                         onToggleGroupSelected(convo.group.groupId)
@@ -779,7 +787,7 @@ fun GroupListBody(
                             if (isSelectionMode) {
                                 Icon(
                                     imageVector = if (convo.group.groupId in selectedGroupIds) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = "Select group",
+                                    contentDescription = stringResource(R.string.select_group),
                                     tint = if (convo.group.groupId in selectedGroupIds) KaspaTeal else Color.Gray,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -862,7 +870,7 @@ fun GroupListBody(
             title = { Text("Delete \"$groupName\"", color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "This removes the group and its messages from this device. This cannot be undone, and other members won't be notified.",
+                    stringResource(R.string.this_removes_the_group_and_its),
                     color = LocalAppColors.current.textSecondary
                 )
             },
@@ -871,12 +879,12 @@ fun GroupListBody(
                     onDeleteGroup(groupId)
                     groupToDelete = null
                 }) {
-                    Text("Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { groupToDelete = null }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )

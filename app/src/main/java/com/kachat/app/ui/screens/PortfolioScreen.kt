@@ -86,6 +86,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -108,21 +109,37 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
 
-private fun formatUsd(value: Double): String {
+/** Resolves a lowercase ISO 4217 code (e.g. "usd", "eur" - see AppSettingsRepository.currency)
+ *  to its display symbol (e.g. "$", "€"), falling back to the uppercased code itself if the
+ *  platform doesn't recognize it. */
+private fun currencySymbolFor(currencyCode: String): String {
+    // Not ISO 4217 - Currency.getInstance() below throws for it (caught, falling back to "BTC"),
+    // but the Unicode Bitcoin sign reads better as a prefix than the bare code.
+    if (currencyCode.equals("btc", ignoreCase = true)) return "₿"
+    return try {
+        java.text.NumberFormat.getCurrencyInstance(Locale.US).apply {
+            currency = java.util.Currency.getInstance(currencyCode.uppercase())
+        }.currency?.symbol ?: currencyCode.uppercase()
+    } catch (e: Exception) {
+        currencyCode.uppercase()
+    }
+}
+
+private fun formatUsd(value: Double, currencyCode: String): String {
     val sign = if (value < 0) "-" else ""
-    return "$sign$${String.format(Locale.US, "%,.2f", kotlin.math.abs(value))}"
+    return "$sign${currencySymbolFor(currencyCode)}${String.format(Locale.US, "%,.2f", kotlin.math.abs(value))}"
 }
 
 /**
- * For a single coin's price rather than a dollar total — KAS trades under $1, where 2 decimals
- * (CoinGecko rounds $0.0288... to "$0.03") loses essentially all the precision that actually
- * distinguishes one day's price from the next. Sub-$1 prices get 5 decimals instead; anything
- * $1 and up still just gets the usual 2.
+ * For a single coin's price rather than a fiat total — KAS trades under 1 unit of most tracked
+ * currencies, where 2 decimals (CoinGecko rounds 0.0288... to "0.03") loses essentially all the
+ * precision that actually distinguishes one day's price from the next. Sub-1 prices get 5
+ * decimals instead; anything 1 and up still just gets the usual 2.
  */
-private fun formatUsdPrice(value: Double): String {
+private fun formatUsdPrice(value: Double, currencyCode: String): String {
     val sign = if (value < 0) "-" else ""
     val decimals = if (kotlin.math.abs(value) < 1.0) 5 else 2
-    return "$sign$${String.format(Locale.US, "%,.${decimals}f", kotlin.math.abs(value))}"
+    return "$sign${currencySymbolFor(currencyCode)}${String.format(Locale.US, "%,.${decimals}f", kotlin.math.abs(value))}"
 }
 
 private fun formatKasAmount(kas: Double): String {
@@ -148,6 +165,7 @@ fun PortfolioScreen(
     val valueHistory by viewModel.valueHistory.collectAsState()
     val summary by viewModel.summary.collectAsState()
     val isRefreshing by viewModel.isRefreshingPortfolio.collectAsState()
+    val currencyCode by viewModel.currency.collectAsState()
     // (timestamp, price) while scrubbing the price sparkline above, null otherwise — lifted up
     // here (rather than kept local to PriceChartCard) since the summary card below needs it too.
     var scrubbedPrice by remember { mutableStateOf<Pair<Long, Double>?>(null) }
@@ -168,7 +186,7 @@ fun PortfolioScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Portfolio", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.portfolio), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -194,7 +212,7 @@ fun PortfolioScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                PortfolioSummaryCard(summary = summary, currentPriceUsd = currentPriceUsd, scrubbedPrice = scrubbedPrice)
+                PortfolioSummaryCard(summary = summary, currentPriceUsd = currentPriceUsd, scrubbedPrice = scrubbedPrice, currencyCode = currencyCode)
                 if (priceHistory.size >= 2) {
                     PriceChartCard(
                         priceHistory = priceHistory,
@@ -204,7 +222,7 @@ fun PortfolioScreen(
                     )
                 }
                 if (valueHistory.size >= 2) {
-                    PortfolioValueChartCard(valueHistory = valueHistory)
+                    PortfolioValueChartCard(valueHistory = valueHistory, currencyCode = currencyCode)
                 }
                 PortfolioNavRow(
                     icon = Icons.Default.Receipt,
@@ -262,6 +280,7 @@ fun PortfolioTransactionsScreen(
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val currentPriceUsd by viewModel.currentPriceUsd.collectAsState()
+    val currencyCode by viewModel.currency.collectAsState()
     val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(prefillType != null) }
     // Only the auto-opened dialog (arriving from a swap) should be prefilled — cleared the moment
@@ -286,7 +305,7 @@ fun PortfolioTransactionsScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Transactions", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.transactions), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -308,7 +327,7 @@ fun PortfolioTransactionsScreen(
                         .widthIn(min = 120.dp)
                 ) {
                     Text(
-                        "Add Transaction",
+                        stringResource(R.string.add_transaction),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -327,7 +346,7 @@ fun PortfolioTransactionsScreen(
                     }
                     if (showCsvMenu) {
                         CenteredOptionsMenu(onDismissRequest = { showCsvMenu = false }) {
-                            PopupMenuRow(Icons.Default.FileDownload, "Export CSV") {
+                            PopupMenuRow(Icons.Default.FileDownload, stringResource(R.string.export_csv)) {
                                 showCsvMenu = false
                                 viewModel.exportCsv { uri ->
                                     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -339,7 +358,7 @@ fun PortfolioTransactionsScreen(
                                 }
                             }
                             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                            PopupMenuRow(Icons.Default.FileUpload, "Import CSV") {
+                            PopupMenuRow(Icons.Default.FileUpload, stringResource(R.string.import_csv)) {
                                 showCsvMenu = false
                                 importCsvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
                             }
@@ -357,7 +376,7 @@ fun PortfolioTransactionsScreen(
             if (transactions.isEmpty()) {
                 item {
                     Text(
-                        "No transactions yet. Tap + to add your first buy or sell.",
+                        stringResource(R.string.no_transactions_yet_tap_to_add),
                         color = LocalAppColors.current.textSecondary,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         textAlign = TextAlign.Center
@@ -368,7 +387,8 @@ fun PortfolioTransactionsScreen(
                     TransactionRow(
                         tx = tx,
                         onClick = { editingTransaction = tx },
-                        onDelete = { viewModel.deleteTransaction(tx.id) }
+                        onDelete = { viewModel.deleteTransaction(tx.id) },
+                        currencyCode = currencyCode
                     )
                 }
             }
@@ -386,6 +406,7 @@ fun PortfolioTransactionsScreen(
             prefillTimestampMillis = if (existing == null) prefillTimestampMillis else null,
             prefillNotes = if (existing == null) prefillNotes else null,
             currentPriceUsd = currentPriceUsd,
+            currencyCode = currencyCode,
             onDismiss = {
                 showAddDialog = false
                 editingTransaction = null
@@ -414,7 +435,7 @@ fun PortfolioTransactionsScreen(
 }
 
 @Composable
-private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Double?, scrubbedPrice: Pair<Long, Double>? = null) {
+private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Double?, scrubbedPrice: Pair<Long, Double>? = null, currencyCode: String) {
     val plColor = if (summary.totalPL >= 0) Color(0xFF4CD964) else Color(0xFFFF3B30)
     Column(
         modifier = Modifier
@@ -430,8 +451,8 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
         )
         Text(
             text = when {
-                scrubbedPrice != null -> formatUsdPrice(scrubbedPrice.second)
-                currentPriceUsd != null -> formatUsdPrice(currentPriceUsd)
+                scrubbedPrice != null -> formatUsdPrice(scrubbedPrice.second, currencyCode)
+                currentPriceUsd != null -> formatUsdPrice(currentPriceUsd, currencyCode)
                 else -> "—"
             },
             color = LocalAppColors.current.textPrimary,
@@ -441,12 +462,12 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
-                Text("Holdings", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.holdings), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Text("${formatKasAmount(summary.holdingsKas)} KAS", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("Current Value", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-                Text(formatUsd(summary.currentValue), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.current_value), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(formatUsd(summary.currentValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -454,11 +475,11 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
-                Text("Total Invested", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-                Text(formatUsd(summary.totalInvested), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.total_invested), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(formatUsd(summary.totalInvested, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("Total P&L", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.total_p_l), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         if (summary.totalPL >= 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
@@ -468,7 +489,7 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "${formatUsd(summary.totalPL)} (${String.format(Locale.US, "%.1f", summary.totalPLPercent)}%)",
+                        "${formatUsd(summary.totalPL, currencyCode)} (${String.format(Locale.US, "%.1f", summary.totalPLPercent)}%)",
                         color = plColor,
                         fontWeight = FontWeight.Bold
                     )
@@ -564,7 +585,7 @@ private fun PriceChartCard(
  * dragging, and reverts to the latest value on release.
  */
 @Composable
-private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>) {
+private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>, currencyCode: String) {
     var touchX by remember { mutableStateOf<Float?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -591,7 +612,7 @@ private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>) {
             Triple("Value Over Time", valueHistory.last().first, valueHistory.last().second)
         }
         Text(headerLabel, color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-        Text(formatUsd(headerValue), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text(formatUsd(headerValue, currencyCode), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
         val textSecondaryColor = LocalAppColors.current.textSecondary
         Canvas(
@@ -628,7 +649,7 @@ private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>) {
 }
 
 @Composable
-private fun TransactionRow(tx: PortfolioTransactionEntity, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun TransactionRow(tx: PortfolioTransactionEntity, onClick: () -> Unit, onDelete: () -> Unit, currencyCode: String) {
     val isBuy = tx.type == "buy"
     val amountKas = tx.amountSompi / 100_000_000.0
     val dateStr = remember(tx.timestampMillis) {
@@ -667,7 +688,7 @@ private fun TransactionRow(tx: PortfolioTransactionEntity, onClick: () -> Unit, 
         }
         Column(horizontalAlignment = Alignment.End) {
             Text("${formatKasAmount(amountKas)} KAS", color = LocalAppColors.current.textPrimary)
-            Text(formatUsd(tx.fiatValue), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+            Text(formatUsd(tx.fiatValue, currencyCode), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
         }
         Spacer(Modifier.width(8.dp))
         IconButton(onClick = onDelete, modifier = Modifier.size(20.dp)) {
@@ -684,6 +705,7 @@ private fun formatDateTime(millis: Long): String =
 private fun TransactionDialog(
     existing: PortfolioTransactionEntity?,
     currentPriceUsd: Double?,
+    currencyCode: String,
     onDismiss: () -> Unit,
     onSave: (type: String, amountKas: Double, fiatValue: Double, timestampMillis: Long, notes: String?) -> Unit,
     onDelete: (() -> Unit)? = null,
@@ -777,8 +799,8 @@ private fun TransactionDialog(
                         Icon(painterResource(R.drawable.ic_kaspa_logo), null, tint = Color.Unspecified, modifier = Modifier.size(16.dp))
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text("Kaspa", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("KAS", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.kaspa), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.kas_2), color = LocalAppColors.current.textSecondary)
                 }
                 Spacer(Modifier.height(12.dp))
 
@@ -788,7 +810,7 @@ private fun TransactionDialog(
                 OutlinedTextField(
                     value = quantityText,
                     onValueChange = { quantityText = it },
-                    label = { Text("Quantity") },
+                    label = { Text(stringResource(R.string.quantity)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
@@ -797,8 +819,8 @@ private fun TransactionDialog(
                 OutlinedTextField(
                     value = priceText,
                     onValueChange = { priceText = it },
-                    label = { Text("Price Per Coin") },
-                    leadingIcon = { Text("$", color = LocalAppColors.current.textSecondary) },
+                    label = { Text(stringResource(R.string.price_per_coin)) },
+                    leadingIcon = { Text(currencySymbolFor(currencyCode), color = LocalAppColors.current.textSecondary) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
@@ -823,8 +845,8 @@ private fun TransactionDialog(
                 OutlinedTextField(
                     value = feeText,
                     onValueChange = { feeText = it },
-                    label = { Text("Fee (USD, optional)") },
-                    leadingIcon = { Text("$", color = LocalAppColors.current.textSecondary) },
+                    label = { Text(stringResource(R.string.fee_usd_optional)) },
+                    leadingIcon = { Text(currencySymbolFor(currencyCode), color = LocalAppColors.current.textSecondary) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
@@ -833,7 +855,7 @@ private fun TransactionDialog(
                 OutlinedTextField(
                     value = notesText,
                     onValueChange = { notesText = it },
-                    label = { Text("Notes (optional)") },
+                    label = { Text(stringResource(R.string.notes_optional)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -848,7 +870,7 @@ private fun TransactionDialog(
                 ) {
                     Text(if (isBuy) "Total Spent" else "Total Received", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                     Text(
-                        text = if (total != null) formatUsd(total) else "$0",
+                        text = if (total != null) formatUsd(total, currencyCode) else "${currencySymbolFor(currencyCode)}0",
                         color = LocalAppColors.current.textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp
@@ -878,7 +900,7 @@ private fun TransactionDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("Delete Transaction", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.delete_transaction), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -921,9 +943,9 @@ private fun DateTimePickerFlow(
                 TextButton(onClick = {
                     pickedDateMillis = dateState.selectedDateMillis ?: initialMillis
                     pickingTime = true
-                }) { Text("Next") }
+                }) { Text(stringResource(R.string.next)) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
         ) {
             DatePicker(state = dateState)
         }
@@ -931,7 +953,7 @@ private fun DateTimePickerFlow(
         AlertDialog(
             onDismissRequest = onDismiss,
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Select Time", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.select_time), color = LocalAppColors.current.textPrimary) },
             text = { TimePicker(state = timeState) },
             confirmButton = {
                 TextButton(onClick = {
@@ -952,9 +974,9 @@ private fun DateTimePickerFlow(
                         set(Calendar.MILLISECOND, 0)
                     }
                     onConfirm(merged.timeInMillis)
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
         )
     }
 }

@@ -85,19 +85,20 @@ class PortfolioRepository @Inject constructor(
 
     suspend fun deleteTransaction(id: String) = database.portfolioDao().delete(id)
 
-    /** Null on any failure (offline, rate-limited, etc.) — callers fall back to the last-known price. */
-    suspend fun getCurrentPriceUsd(): Double? {
+    /** Null on any failure (offline, rate-limited, etc.) — callers fall back to the last-known price.
+     *  [currency] is the lowercase ISO 4217 code (Settings > Customization > Currency, defaults to "usd"). */
+    suspend fun getCurrentPriceUsd(currency: String = "usd"): Double? {
         return try {
-            coinGeckoApi.getSimplePrice().kaspa["usd"]
+            coinGeckoApi.getSimplePrice(vsCurrencies = currency).kaspa[currency]
         } catch (e: Exception) {
             null
         }
     }
 
-    /** (timestampMillis, priceUsd) pairs, oldest first — empty on failure rather than throwing. */
-    suspend fun getPriceHistory(days: Int = 30): List<Pair<Long, Double>> {
+    /** (timestampMillis, price) pairs in [currency], oldest first — empty on failure rather than throwing. */
+    suspend fun getPriceHistory(days: Int = 30, currency: String = "usd"): List<Pair<Long, Double>> {
         return try {
-            coinGeckoApi.getMarketChart(days = days).prices.mapNotNull { point ->
+            coinGeckoApi.getMarketChart(vsCurrency = currency, days = days).prices.mapNotNull { point ->
                 if (point.size < 2) null else point[0].toLong() to point[1]
             }
         } catch (e: Exception) {

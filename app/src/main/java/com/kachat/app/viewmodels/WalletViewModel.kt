@@ -71,6 +71,22 @@ class WalletViewModel @Inject constructor(
     private val _onMnemonicGenerated = MutableStateFlow<String?>(null)
     val onMnemonicGenerated: StateFlow<String?> = _onMnemonicGenerated
 
+    // Set once `BackupMnemonicScreen.onComplete` finishes the create-a-new-wallet flow (never for
+    // `ImportWalletScreen`'s import path) so the main app can show the Welcome Guide automatically
+    // for a brand-new account, but never for an imported one. Transient/in-memory only — the first
+    // composable to notice it is expected to call `consumeJustCreatedNewWallet()` right after
+    // presenting the guide, so this is a one-shot signal, not a persisted flag.
+    private val _justCreatedNewWallet = MutableStateFlow(false)
+    val justCreatedNewWallet: StateFlow<Boolean> = _justCreatedNewWallet
+
+    fun markJustCreatedNewWallet() {
+        _justCreatedNewWallet.value = true
+    }
+
+    fun consumeJustCreatedNewWallet() {
+        _justCreatedNewWallet.value = false
+    }
+
     private val _address = MutableStateFlow<String?>(null)
     val address: StateFlow<String?> = _address
 
@@ -291,6 +307,15 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             walletService.refreshBalance()
         }
+    }
+
+    /** Suspend variant of [refreshBalance] - awaits the actual balance fetch instead of firing it
+     *  into [viewModelScope] and returning immediately, for callers (the KNS create-profile
+     *  wizard's funding gate, now checking the identity/chatting address since all KNS activity
+     *  is funded and settled there) that need to know the balance is current before deciding
+     *  whether to proceed. */
+    suspend fun refreshBalanceAndAwait() {
+        walletService.refreshBalance()
     }
 
     fun login(address: String? = null) {
@@ -650,6 +675,9 @@ class WalletViewModel @Inject constructor(
                 } catch (e: Exception) {
                     results.add(EditProfileFieldResult("avatarUrl", false, e.message))
                 }
+                // Published incrementally (not just once at the end) so the details screen can
+                // show a live per-field checkmark as each one actually finishes.
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
             }
 
             _pendingBannerUri.value?.let { uri ->
@@ -661,6 +689,7 @@ class WalletViewModel @Inject constructor(
                 } catch (e: Exception) {
                     results.add(EditProfileFieldResult("bannerUrl", false, e.message))
                 }
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
             }
 
             for ((fieldKey, rawValue) in textFields) {
@@ -674,6 +703,7 @@ class WalletViewModel @Inject constructor(
                 } catch (e: Exception) {
                     results.add(EditProfileFieldResult(fieldKey, false, e.message))
                 }
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
             }
 
             refreshKnsProfile()
@@ -743,6 +773,15 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch { settings.setDarkModeEnabled(enabled) }
     }
 
+    /** Settings > Customization > Currency — lowercase ISO 4217 code (e.g. "usd", "eur"). Global,
+     *  not per-account (see [AppSettingsRepository.currency]). */
+    val currency: StateFlow<String> = settings.currency
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "usd")
+
+    fun setCurrency(code: String) {
+        viewModelScope.launch { settings.setCurrency(code) }
+    }
+
     /** Settings > Security — whether viewing the seed phrase requires device authentication first. */
     val biometricSeedPhraseEnabled: StateFlow<Boolean> = settings.biometricSeedPhraseEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
@@ -757,6 +796,22 @@ class WalletViewModel @Inject constructor(
 
     fun setBiometricAccountLoginEnabled(enabled: Boolean) {
         viewModelScope.launch { settings.setBiometricAccountLoginEnabled(enabled) }
+    }
+
+    /**
+     * Settings > Customization — whether the "Setup Guide" re-entry points (the Profile screen's
+     * "Welcome Guide" row, the "Edit KNS Profile" screen's "Setup Guide" section) are shown.
+     * Scoped to the currently active account's address (see [AppSettingsRepository.showSetupGuides]),
+     * so it re-derives whenever [address] changes rather than sticking to whichever account was
+     * active when this StateFlow was first collected.
+     */
+    val showSetupGuides: StateFlow<Boolean> = address
+        .flatMapLatest { addr -> if (addr != null) settings.showSetupGuides(addr) else flowOf(true) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    fun setShowSetupGuides(enabled: Boolean) {
+        val addr = _address.value ?: return
+        viewModelScope.launch { settings.setShowSetupGuides(addr, enabled) }
     }
 
     private var previewJob: Job? = null

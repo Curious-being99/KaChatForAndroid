@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.kachat.app.ui.theme.KaspaTeal
@@ -62,7 +64,7 @@ fun MenuVisibilityScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Menu", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.menu), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -80,7 +82,7 @@ fun MenuVisibilityScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                "Choose which tabs appear in your bottom menu.",
+                stringResource(R.string.choose_which_tabs_appear_in_your),
                 color = LocalAppColors.current.textSecondary,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -152,7 +154,7 @@ private fun MenuVisibilityRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(label, color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
             if (locked) {
-                Text("Always shown", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.always_shown), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
             }
         }
         Icon(

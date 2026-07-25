@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.R
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Size
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
@@ -127,7 +129,7 @@ fun MultiFrameQrScannerOverlay(
     var done by remember { mutableStateOf(false) }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text("Scan Signed Transaction", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(stringResource(R.string.scan_signed_transaction), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Spacer(Modifier.height(12.dp))
 
         Box(
@@ -166,14 +168,14 @@ fun MultiFrameQrScannerOverlay(
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Camera permission is needed to scan a QR code",
+                        stringResource(R.string.camera_permission_is_needed_to_scan),
                         color = LocalAppColors.current.textSecondary,
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                        Text("Grant Permission", color = KaspaTeal)
+                        Text(stringResource(R.string.grant_permission), color = KaspaTeal)
                     }
                 }
             }
@@ -196,12 +198,12 @@ fun MultiFrameQrScannerOverlay(
             Spacer(Modifier.height(6.dp))
             Text("$received / $total frames", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
         } else {
-            Text("Waiting for camera...", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.waiting_for_camera), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onCancel) {
-            Text("Cancel", color = LocalAppColors.current.textSecondary)
+            Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
         }
     }
 }
@@ -240,13 +242,13 @@ private fun ScannerScaffold(onDismiss: () -> Unit, content: @Composable BoxScope
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "Camera permission is needed to scan a QR code",
+                    stringResource(R.string.camera_permission_is_needed_to_scan),
                     color = LocalAppColors.current.textPrimary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                    Text("Grant permission")
+                    Text(stringResource(R.string.grant_permission_2))
                 }
             }
         }
@@ -264,7 +266,7 @@ private fun ScannerScaffold(onDismiss: () -> Unit, content: @Composable BoxScope
                 // of light/dark theme rather than following LocalAppColors.
                 .background(Color(0xCC000000), CircleShape)
         ) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(28.dp))
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color.White, modifier = Modifier.size(28.dp))
         }
     }
 }

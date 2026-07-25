@@ -199,6 +199,16 @@ fun MainShell(
         }
     }
 
+    // Shows the Welcome Guide automatically the first time this shell renders after creating a
+    // brand-new wallet (never after importing one) — see `WalletViewModel.justCreatedNewWallet`.
+    val justCreatedNewWallet by walletViewModel.justCreatedNewWallet.collectAsState()
+    LaunchedEffect(justCreatedNewWallet) {
+        if (justCreatedNewWallet) {
+            navController.navigate("welcome_guide")
+            walletViewModel.consumeJustCreatedNewWallet()
+        }
+    }
+
     Scaffold(
         containerColor = LocalAppColors.current.background,
         bottomBar = {
@@ -603,7 +613,35 @@ fun MainShell(
                 EditKnsProfileScreen(
                     viewModel = walletViewModel,
                     onBack = { navController.popBackStack() },
-                    onNavigateToDomains = { navController.navigate("kns_domains") }
+                    onNavigateToDomains = { navController.navigate("kns_domains") },
+                    onNavigateToSetupGuide = { navController.navigate("create_kns_profile") }
+                )
+            }
+
+            composable("create_kns_profile") {
+                KnsCreateProfileWizardScreen(
+                    viewModel = walletViewModel,
+                    onFinished = {
+                        // Reached either straight from the Profile tab (pop back one step is
+                        // correct) or from Edit KNS Profile's "Setup Guide" row - in the latter
+                        // case, pop back PAST that screen too rather than returning to it: its
+                        // text fields are seeded once from the profile that existed when it
+                        // opened, so returning to it after the wizard just wrote new values could
+                        // show stale fields and let a later Save silently overwrite what the
+                        // wizard just inscribed.
+                        if (navController.previousBackStackEntry?.destination?.route == "edit_kns_profile") {
+                            navController.popBackStack(route = "edit_kns_profile", inclusive = true)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    }
+                )
+            }
+
+            composable("welcome_guide") {
+                WelcomeGuideScreen(
+                    walletViewModel = walletViewModel,
+                    onFinished = { navController.popBackStack() }
                 )
             }
 
@@ -620,6 +658,18 @@ fun MainShell(
 
             composable("connection_settings") {
                 ConnectionSettingsScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("language_settings") {
+                LanguageSettingsScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("currency_settings") {
+                CurrencySettingsScreen(
                     onBack = { navController.popBackStack() }
                 )
             }

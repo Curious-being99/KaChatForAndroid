@@ -3,7 +3,7 @@ package com.kachat.app
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.fragment.app.FragmentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -22,9 +22,14 @@ import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Single Activity — all navigation is handled in Compose via NavHost.
+ *
+ * Extends [AppCompatActivity] (rather than plain `FragmentActivity`, which it's a superset of)
+ * because the per-app language API (`AppCompatDelegate.setApplicationLocales`, used by the
+ * Language setting in Settings) relies on `AppCompatActivity`'s `attachBaseContext` override to
+ * apply the locale override on API levels below 33.
  */
 @AndroidEntryPoint
-class MainActivity : FragmentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private var pendingContactId by mutableStateOf<String?>(null)
     private var pendingChannelName by mutableStateOf<String?>(null)

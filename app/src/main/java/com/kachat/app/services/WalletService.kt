@@ -432,14 +432,9 @@ class WalletService @Inject constructor(
         val payloadJson = Gson().toJson(KnsCreateDomainPayload(op = "create", p = "domain", v = label)).toByteArray()
         val revealTarget = if (availability.isReservedDomain) myAddress else MAINNET_REVENUE_ADDRESS
 
-        // Registration/profile/transfer fees are paid from the spending-address chain, not the
-        // identity address — same "Pay in Kaspa" funding source as any other spend (see
-        // WalletManager's spending-address doc comment). Domain OWNERSHIP still lands on the
-        // identity address above (revealTarget for reserved domains, and the redeem script's
-        // embedded pubkey) — only the funding source and self-change move to spending.
+        // KNS activity is funded and settled entirely on the identity/chatting address chain -
+        // no spending-address split, so nothing ends up scattered across two addresses.
         val identityPrivateKey = walletManager.getPrivateKeyBytes()
-        val spendingAddress = walletManager.currentSpendingAddress()
-        val spendingPrivateKey = walletManager.currentSpendingPrivateKeyBytes()
 
         onStep(KnsInscribeStep.SUBMITTING_COMMIT)
         val commit = knsInscriptionEngine.buildAndSubmitCommit(
@@ -448,12 +443,12 @@ class WalletService @Inject constructor(
             revealAmountSompi = revealSompi,
             revealTargetAddress = revealTarget,
             operationType = "domain",
-            fundingAddress = spendingAddress,
-            fundingPrivateKey = spendingPrivateKey,
+            fundingAddress = myAddress,
+            fundingPrivateKey = identityPrivateKey,
             ownerPrivateKey = identityPrivateKey
         )
         onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, revealTarget, spendingAddress, identityPrivateKey)
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, revealTarget, myAddress, identityPrivateKey)
 
         onStep(KnsInscribeStep.VERIFYING)
         val verified = verifyDomainOwnership(fullDomain, myAddress)
@@ -489,25 +484,24 @@ class WalletService @Inject constructor(
 
         val payloadJson = Gson().toJson(KnsAddProfilePayload(op = "addProfile", id = trimmedAssetId, key = fieldKey, value = trimmedValue)).toByteArray()
 
-        // Self-funded and self-returned — both the fee and the ~1 KAS reveal "change" come out of
-        // and back into the spending-address chain, same as inscribeDomain's funding source.
+        // KNS activity is funded and settled entirely on the identity/chatting address chain -
+        // no spending-address split, so nothing ends up scattered across two addresses.
+        val myAddress = walletManager.getAddress()
         val identityPrivateKey = walletManager.getPrivateKeyBytes()
-        val spendingAddress = walletManager.currentSpendingAddress()
-        val spendingPrivateKey = walletManager.currentSpendingPrivateKeyBytes()
 
         onStep(KnsInscribeStep.SUBMITTING_COMMIT)
         val commit = knsInscriptionEngine.buildAndSubmitCommit(
             payloadJson = payloadJson,
             commitAmountSompi = PROFILE_COMMIT_SOMPI,
             revealAmountSompi = PROFILE_REVEAL_SOMPI,
-            revealTargetAddress = spendingAddress,
+            revealTargetAddress = myAddress,
             operationType = "profile",
-            fundingAddress = spendingAddress,
-            fundingPrivateKey = spendingPrivateKey,
+            fundingAddress = myAddress,
+            fundingPrivateKey = identityPrivateKey,
             ownerPrivateKey = identityPrivateKey
         )
         onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, spendingAddress, spendingAddress, identityPrivateKey)
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, myAddress, myAddress, identityPrivateKey)
 
         onStep(KnsInscribeStep.VERIFYING)
         val verified = verifyProfileField(trimmedAssetId, fieldKey, trimmedValue)

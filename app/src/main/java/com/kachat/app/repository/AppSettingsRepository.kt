@@ -132,6 +132,10 @@ class AppSettingsRepository @Inject constructor(
         val KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED = booleanPreferencesKey("biometric_account_login_enabled")
         // One-time ChangeNOW terms/liability disclaimer shown the first time Swap is opened.
         val KEY_SWAP_DISCLAIMER_AGREED = booleanPreferencesKey("swap_disclaimer_agreed")
+        // Settings > Customization > Currency. Fiat currency for Portfolio's live KAS price/value
+        // display - lowercase ISO 4217 code, doubling as the literal CoinGecko `vs_currency` value
+        // (see CoinGeckoApi). Global, not per-account, matching darkModeEnabled/hiddenTabs.
+        val KEY_CURRENCY = stringPreferencesKey("currency")
     }
 
     // -------------------------------------------------------------------------
@@ -212,6 +216,9 @@ class AppSettingsRepository @Inject constructor(
     val hiddenTabs: Flow<Set<String>> = dataStore.data.map { it[KEY_HIDDEN_TABS] ?: emptySet() }
 
     val darkModeEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_DARK_MODE_ENABLED] ?: true }
+
+    /** Lowercase ISO 4217 code (e.g. "usd", "eur") - see KEY_CURRENCY. */
+    val currency: Flow<String> = dataStore.data.map { it[KEY_CURRENCY] ?: "usd" }
 
     val biometricSeedPhraseEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_SEED_PHRASE_ENABLED] ?: true }
     val biometricAccountLoginEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] ?: true }
@@ -307,6 +314,17 @@ class AppSettingsRepository @Inject constructor(
         it[handshakeSyncCursorKey(address)]
     }
 
+    /**
+     * Per-account toggle for whether the "Setup Guide" re-entry points (the Profile screen's
+     * "Welcome Guide" row and the "Edit KNS Profile" screen's "Setup Guide" section) are shown.
+     * Keyed per-address like [paymentSyncBaseline] so switching accounts on the same device
+     * doesn't carry the choice over. Defaults to `true` (unset key) to match pre-existing
+     * behavior for anyone who had these guides visible before this toggle existed.
+     */
+    fun showSetupGuides(address: String): Flow<Boolean> = dataStore.data.map {
+        it[showSetupGuidesKey(address)] ?: true
+    }
+
     // -------------------------------------------------------------------------
     // Write helpers (suspend — call from coroutine / ViewModel)
     // -------------------------------------------------------------------------
@@ -351,6 +369,7 @@ class AppSettingsRepository @Inject constructor(
         prefs[KEY_HIDDEN_TABS] = if (hidden) current + route else current - route
     }
     suspend fun setDarkModeEnabled(value: Boolean) = dataStore.edit { it[KEY_DARK_MODE_ENABLED] = value }
+    suspend fun setCurrency(value: String) = dataStore.edit { it[KEY_CURRENCY] = value }
     suspend fun setBiometricSeedPhraseEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_SEED_PHRASE_ENABLED] = value }
     suspend fun setBiometricAccountLoginEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] = value }
     suspend fun setSwapDisclaimerAgreed(value: Boolean) = dataStore.edit { it[KEY_SWAP_DISCLAIMER_AGREED] = value }
@@ -366,7 +385,9 @@ class AppSettingsRepository @Inject constructor(
     suspend fun clearPendingKnsCommit() = dataStore.edit { it.remove(KEY_PENDING_KNS_COMMIT) }
     suspend fun setPaymentSyncBaseline(address: String, value: Long) = dataStore.edit { it[paymentSyncBaselineKey(address)] = value }
     suspend fun setHandshakeSyncCursor(address: String, value: Long) = dataStore.edit { it[handshakeSyncCursorKey(address)] = value }
+    suspend fun setShowSetupGuides(address: String, value: Boolean) = dataStore.edit { it[showSetupGuidesKey(address)] = value }
 
     private fun paymentSyncBaselineKey(address: String) = longPreferencesKey("payment_sync_baseline_$address")
     private fun handshakeSyncCursorKey(address: String) = longPreferencesKey("handshake_sync_cursor_$address")
+    private fun showSetupGuidesKey(address: String) = booleanPreferencesKey("show_setup_guides_$address")
 }

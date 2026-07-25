@@ -1,5 +1,7 @@
 package com.kachat.app.ui.screens
 
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -85,6 +88,7 @@ fun OnboardingScreen(viewModel: WalletViewModel) {
                 mnemonic = words,
                 onComplete = {
                     viewModel.clearMnemonic()
+                    viewModel.markJustCreatedNewWallet()
                     viewModel.login()
                 }
             )
@@ -110,14 +114,14 @@ fun WelcomeScreen(viewModel: WalletViewModel, onNavigateToCreate: () -> Unit, on
             // App logo
             Image(
                 painter = painterResource(id = R.drawable.ic_kachat_logo),
-                contentDescription = "KaChat Logo",
+                contentDescription = stringResource(R.string.kachat_logo),
                 modifier = Modifier.size(160.dp)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "KaChat",
+                text = stringResource(R.string.kachat),
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 36.sp
@@ -128,7 +132,7 @@ fun WelcomeScreen(viewModel: WalletViewModel, onNavigateToCreate: () -> Unit, on
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Secure messaging on Kaspa BlockDAG",
+                text = stringResource(R.string.secure_messaging_on_kaspa_blockdag),
                 style = MaterialTheme.typography.bodyLarge,
                 color = KaspaSubtext,
                 textAlign = TextAlign.Center
@@ -148,7 +152,7 @@ fun WelcomeScreen(viewModel: WalletViewModel, onNavigateToCreate: () -> Unit, on
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = "Saved Accounts",
+                        text = stringResource(R.string.saved_accounts),
                         color = LocalAppColors.current.textPrimary,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -188,7 +192,7 @@ fun WelcomeScreen(viewModel: WalletViewModel, onNavigateToCreate: () -> Unit, on
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Create New Account",
+                        text = stringResource(R.string.create_new_account),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.Black
                     )
@@ -214,7 +218,7 @@ fun WelcomeScreen(viewModel: WalletViewModel, onNavigateToCreate: () -> Unit, on
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Import Existing Account",
+                        text = stringResource(R.string.import_existing_account),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = LocalAppColors.current.textPrimary
                     )
@@ -291,14 +295,14 @@ fun SavedAccountCard(
             IconButton(onClick = { showMenu = true }) {
                 Icon(
                     imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit account",
+                    contentDescription = stringResource(R.string.edit_account),
                     tint = KaspaTeal,
                     modifier = Modifier.size(20.dp)
                 )
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 DropdownMenuItem(
-                    text = { Text("Rename") },
+                    text = { Text(stringResource(R.string.rename)) },
                     leadingIcon = { Icon(Icons.Default.Edit, null) },
                     onClick = {
                         showMenu = false
@@ -307,7 +311,7 @@ fun SavedAccountCard(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Delete") },
+                    text = { Text(stringResource(R.string.delete)) },
                     leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
                     onClick = {
                         showMenu = false
@@ -322,7 +326,7 @@ fun SavedAccountCard(
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Rename Account", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.rename_account), color = LocalAppColors.current.textPrimary) },
             text = {
                 OutlinedTextField(
                     value = nameInput,
@@ -345,12 +349,12 @@ fun SavedAccountCard(
                         showRenameDialog = false
                     }
                 ) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRenameDialog = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -360,7 +364,7 @@ fun SavedAccountCard(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Delete Account", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.delete_account), color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
                     "This removes \"${account.name}\" from this device. Without its saved seed phrase, any remaining balance is unrecoverable.",
@@ -372,12 +376,12 @@ fun SavedAccountCard(
                     showDeleteConfirm = false
                     onDelete()
                 }) {
-                    Text("Delete", color = Color.Red, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.delete), color = Color.Red, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -415,7 +419,7 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.back),
                     tint = LocalAppColors.current.textPrimary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -424,7 +428,7 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Create Account",
+                text = stringResource(R.string.create_account),
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = LocalAppColors.current.textPrimary
             )
@@ -448,14 +452,14 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
-                        text = "Important",
+                        text = stringResource(R.string.important),
                         color = Color(0xFFF39C12),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "You will be shown a seed phrase. This is the only way to recover your account. Make sure you only write this down. Never take a screenshot or store it on your device.",
+                        text = stringResource(R.string.you_will_be_shown_a_seed),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -465,7 +469,7 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Seed Phrase Length",
+                text = stringResource(R.string.seed_phrase_length),
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -488,7 +492,7 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                         inactiveContentColor = LocalAppColors.current.textSecondary
                     )
                 ) {
-                    Text("24 words (recommended)", fontSize = 12.sp)
+                    Text(stringResource(R.string.n_24_words_recommended), fontSize = 12.sp)
                 }
                 SegmentedButton(
                     selected = wordCount == 12,
@@ -501,14 +505,14 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                         inactiveContentColor = LocalAppColors.current.textSecondary
                     )
                 ) {
-                    Text("12 words", fontSize = 12.sp)
+                    Text(stringResource(R.string.n_12_words), fontSize = 12.sp)
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Account Name",
+                text = stringResource(R.string.account_name),
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -557,7 +561,7 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Generate Account",
+                        text = stringResource(R.string.generate_account),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.Black
                     )
@@ -612,7 +616,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.back),
                     tint = LocalAppColors.current.textPrimary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -621,7 +625,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Import Account",
+                text = stringResource(R.string.import_account),
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = LocalAppColors.current.textPrimary
             )
@@ -634,7 +638,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Seed Phrase",
+                    text = stringResource(R.string.seed_phrase),
                     color = LocalAppColors.current.textPrimary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
@@ -657,7 +661,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
                     .heightIn(min = 120.dp)
                     .clip(RoundedCornerShape(12.dp)),
                 textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
-                placeholder = { Text("Enter your 12 or 24 word seed phrase", color = LocalAppColors.current.textSecondary) },
+                placeholder = { Text(stringResource(R.string.enter_your_12_or_24_word), color = LocalAppColors.current.textSecondary) },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrect = false),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = LocalAppColors.current.surface,
@@ -673,7 +677,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
             if (seedPhraseText.isNotBlank() && !isValidCount) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Please enter exactly 12 or 24 words",
+                    text = stringResource(R.string.please_enter_exactly_12_or_24),
                     color = Color(0xFFFF3B30),
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -684,13 +688,13 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
             TextButton(onClick = { clipboardManager.getText()?.text?.let { seedPhraseText = it } }) {
                 Icon(Icons.Default.ContentPaste, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Paste from Clipboard", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Account Name",
+                text = stringResource(R.string.account_name),
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -731,7 +735,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
                     CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
                     Text(
-                        text = "Import Account",
+                        text = stringResource(R.string.import_account),
                         color = if (canImport) Color.Black else Color.Gray,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
@@ -747,11 +751,11 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
         AlertDialog(
             onDismissRequest = { viewModel.resetImportWalletState() },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Error", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.error), color = LocalAppColors.current.textPrimary) },
             text = { Text(importState.errorMessage ?: "Something went wrong", color = LocalAppColors.current.textSecondary) },
             confirmButton = {
                 TextButton(onClick = { viewModel.resetImportWalletState() }) {
-                    Text("OK", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.ok), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -762,6 +766,17 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
 @Composable
 fun BackupMnemonicScreen(mnemonic: String, onComplete: () -> Unit) {
     val words = remember { mnemonic.split(" ") }
+    var hasConfirmedBackup by remember { mutableStateOf(false) }
+
+    // Blocks screenshots and screen recording of the freshly-generated seed phrase for as long
+    // as this screen is on-screen - see SeedPhraseScreen's identical guard in Screens.kt.
+    val window = (LocalContext.current as? Activity)?.window
+    DisposableEffect(window) {
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
 
     Surface(
         color = LocalAppColors.current.background,
@@ -780,9 +795,13 @@ fun BackupMnemonicScreen(mnemonic: String, onComplete: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Spacer(modifier = Modifier.width(40.dp))
-                Text("Seed Phrase", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = onComplete) {
-                    Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.seed_phrase), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = onComplete, enabled = hasConfirmedBackup) {
+                    Text(
+                        stringResource(R.string.done),
+                        color = if (hasConfirmedBackup) KaspaTeal else LocalAppColors.current.textSecondary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -805,14 +824,14 @@ fun BackupMnemonicScreen(mnemonic: String, onComplete: () -> Unit) {
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
-                        text = "Security Warning",
+                        text = stringResource(R.string.security_warning),
                         color = Color(0xFFF39C12),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Anyone with your seed phrase can access your account. Never share it with anyone. Make sure you only write this down. Never take a screenshot or store it on your device.",
+                        text = stringResource(R.string.anyone_with_your_seed_phrase_can),
                         color = Color(0xFF948B8B),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -854,17 +873,42 @@ fun BackupMnemonicScreen(mnemonic: String, onComplete: () -> Unit) {
 
             Spacer(modifier = Modifier.weight(1f))
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { hasConfirmedBackup = !hasConfirmedBackup }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = hasConfirmedBackup,
+                    onCheckedChange = { hasConfirmedBackup = it },
+                    colors = CheckboxDefaults.colors(checkedColor = KaspaTeal, checkmarkColor = Color.Black)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.i_have_written_down_my_seed_phrase),
+                    color = LocalAppColors.current.textPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Button(
                 onClick = onComplete,
+                enabled = hasConfirmedBackup,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
+                colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surfaceVariant),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = "I've backed it up",
-                    color = Color.Black,
+                    text = stringResource(R.string.i_ve_backed_it_up),
+                    color = if (hasConfirmedBackup) Color.Black else LocalAppColors.current.textSecondary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )

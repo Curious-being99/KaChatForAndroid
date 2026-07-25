@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.R
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.kachat.app.services.ColdStorageAddressDiscovery
@@ -120,7 +122,7 @@ fun ColdStorageListScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Cold Storage", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.cold_storage), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -147,7 +149,7 @@ fun ColdStorageListScreen(
                     border = BorderStroke(1.5.dp, KaspaTeal),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = KaspaTeal)
                 ) {
-                    Text("Paste kpub", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.paste_kpub), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Button(
                     onClick = { showScanner = true },
@@ -155,11 +157,12 @@ fun ColdStorageListScreen(
                     shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
                 ) {
+                    val scanContentDescription = stringResource(R.string.scan_kpub_from_kassigner)
                     Text(
-                        "Scan",
+                        stringResource(R.string.scan),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.semantics { contentDescription = "Scan kpub from KasSigner" }
+                        modifier = Modifier.semantics { contentDescription = scanContentDescription }
                     )
                 }
             }
@@ -174,7 +177,7 @@ fun ColdStorageListScreen(
                 Icon(Icons.Default.Lock, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "No cold storage accounts yet. Scan a kpub exported from your KasSigner device to watch its balance and send from it.",
+                    stringResource(R.string.no_cold_storage_accounts_yet_scan),
                     color = LocalAppColors.current.textSecondary,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
@@ -233,11 +236,11 @@ fun ColdStorageListScreen(
         AlertDialog(
             onDismissRequest = { showManualEntry = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Enter kpub", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.enter_kpub), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "Paste the kpub exported from your KasSigner device. This contains no private key material.",
+                        stringResource(R.string.paste_the_kpub_exported_from_your),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -245,7 +248,7 @@ fun ColdStorageListScreen(
                     OutlinedTextField(
                         value = manualKpubInput,
                         onValueChange = { manualKpubInput = it },
-                        label = { Text("kpub...") },
+                        label = { Text(stringResource(R.string.kpub_2)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -270,12 +273,12 @@ fun ColdStorageListScreen(
                         nameInput = "Cold Storage ${accounts.size + 1}"
                     }
                 ) {
-                    Text("Next", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.next), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showManualEntry = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -287,7 +290,7 @@ fun ColdStorageListScreen(
         AlertDialog(
             onDismissRequest = { pendingKpub = null; viewModel.resetImportState() },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Import Cold Storage Account", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.import_cold_storage_account), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
@@ -299,7 +302,7 @@ fun ColdStorageListScreen(
                     OutlinedTextField(
                         value = nameInput,
                         onValueChange = { nameInput = it },
-                        label = { Text("Name") },
+                        label = { Text(stringResource(R.string.name)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -324,12 +327,12 @@ fun ColdStorageListScreen(
                     enabled = nameInput.isNotBlank(),
                     onClick = { viewModel.importKpub(kpub, nameInput) }
                 ) {
-                    Text("Import", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.import_action), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingKpub = null; viewModel.resetImportState() }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -339,12 +342,12 @@ fun ColdStorageListScreen(
         AlertDialog(
             onDismissRequest = { renamingAccount = null },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Rename Cold Storage Account", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.rename_cold_storage_account), color = LocalAppColors.current.textPrimary) },
             text = {
                 OutlinedTextField(
                     value = renameInput,
                     onValueChange = { renameInput = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.name)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = LocalAppColors.current.textPrimary,
@@ -365,12 +368,12 @@ fun ColdStorageListScreen(
                         renamingAccount = null
                     }
                 ) {
-                    Text("Save", color = if (renameInput.isNotBlank()) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = if (renameInput.isNotBlank()) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { renamingAccount = null }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -467,14 +470,15 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                     .height(56.dp)
                     .onGloballyPositioned { coords -> actionsMenuAnchor = coords.positionInWindow() }
             ) {
+                val addressActionsContentDescription = stringResource(R.string.address_actions_2)
                 Text(
-                    "Address Actions",
+                    stringResource(R.string.address_actions),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     modifier = Modifier
                         .padding(horizontal = 24.dp)
-                        .semantics { contentDescription = "Address actions" }
+                        .semantics { contentDescription = addressActionsContentDescription }
                 )
             }
             }
@@ -487,12 +491,12 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                     anchor = actionsMenuAnchor,
                     centerHorizontally = true
                 ) {
-                    PopupMenuRow(Icons.Default.AddCircleOutline, "Generate More Addresses") {
+                    PopupMenuRow(Icons.Default.AddCircleOutline, stringResource(R.string.generate_more_addresses)) {
                         showActionsMenu = false
                         if (!isDiscovering) viewModel.generateMoreAddresses(accountId)
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.Search, "Discover Addresses") {
+                    PopupMenuRow(Icons.Default.Search, stringResource(R.string.discover_addresses)) {
                         showActionsMenu = false
                         if (!isDiscovering) {
                             viewModel.refreshAddresses(accountId) { count ->
@@ -524,7 +528,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Name", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                            Text(stringResource(R.string.name), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                             Text(
                                 account?.name ?: "Cold Storage",
                                 color = LocalAppColors.current.textPrimary,
@@ -543,7 +547,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    Text("kpub", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                    Text(stringResource(R.string.kpub), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         account?.kpub ?: "",
@@ -560,7 +564,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                     ) {
                         Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Copy kpub", color = KaspaTeal, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.copy_kpub), color = KaspaTeal, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -573,7 +577,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                         .background(LocalAppColors.current.surface)
                         .padding(20.dp)
                 ) {
-                    Text("Total Balance", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                    Text(stringResource(R.string.total_balance), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                     Text(
                         "%.8f KAS".format(java.util.Locale.US, totalBalanceKas),
                         color = LocalAppColors.current.textPrimary,
@@ -590,7 +594,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "Addresses",
+                        stringResource(R.string.addresses),
                         color = LocalAppColors.current.textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -661,10 +665,10 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Remove Cold Storage Account", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.remove_cold_storage_account), color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "This only removes it from KaChat's watch list. It has no effect on the KasSigner device or any funds it holds.",
+                    stringResource(R.string.this_only_removes_it_from_kachat),
                     color = LocalAppColors.current.textSecondary
                 )
             },
@@ -674,12 +678,12 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                     showDeleteConfirm = false
                     navController.popBackStack()
                 }) {
-                    Text("Remove", color = Color.Red, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.remove), color = Color.Red, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -689,12 +693,12 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Rename Cold Storage Account", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.rename_cold_storage_account), color = LocalAppColors.current.textPrimary) },
             text = {
                 OutlinedTextField(
                     value = renameInput,
                     onValueChange = { renameInput = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.name)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = LocalAppColors.current.textPrimary,
@@ -715,12 +719,12 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                         showRenameDialog = false
                     }
                 ) {
-                    Text("Save", color = if (renameInput.isNotBlank()) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = if (renameInput.isNotBlank()) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRenameDialog = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -730,7 +734,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
         AlertDialog(
             onDismissRequest = { labelingRow = null },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Name This Address", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.name_this_address), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(row.address, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
@@ -738,7 +742,7 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                     OutlinedTextField(
                         value = labelInput,
                         onValueChange = { labelInput = it },
-                        label = { Text("Name") },
+                        label = { Text(stringResource(R.string.name)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -759,12 +763,12 @@ fun ColdStorageDetailScreen(accountId: String, navController: NavController, vie
                         labelingRow = null
                     }
                 ) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { labelingRow = null }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -806,7 +810,7 @@ fun ColdStorageHiddenAddressesScreen(accountId: String, navController: NavContro
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Hidden Addresses", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.hidden_addresses), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -824,7 +828,7 @@ fun ColdStorageHiddenAddressesScreen(accountId: String, navController: NavContro
             ) {
                 Icon(Icons.Default.VisibilityOff, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
-                Text("No hidden addresses.", color = LocalAppColors.current.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(stringResource(R.string.no_hidden_addresses), color = LocalAppColors.current.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         } else {
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -856,7 +860,7 @@ fun ColdStorageHiddenAddressesScreen(accountId: String, navController: NavContro
         AlertDialog(
             onDismissRequest = { labelingRow = null },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Name This Address", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.name_this_address), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(row.address, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
@@ -864,7 +868,7 @@ fun ColdStorageHiddenAddressesScreen(accountId: String, navController: NavContro
                     OutlinedTextField(
                         value = labelInput,
                         onValueChange = { labelInput = it },
-                        label = { Text("Name") },
+                        label = { Text(stringResource(R.string.name)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -885,12 +889,12 @@ fun ColdStorageHiddenAddressesScreen(accountId: String, navController: NavContro
                         labelingRow = null
                     }
                 ) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { labelingRow = null }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -980,24 +984,24 @@ private fun ColdAddressRow(
 
     if (showMenu) {
         CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
-            PopupMenuRow(Icons.Default.ContentCopy, "Copy Address") {
+            PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_address)) {
                 showMenu = false
                 onCopyClick()
             }
             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.QrCode, "Show QR Code") {
+            PopupMenuRow(Icons.Default.QrCode, stringResource(R.string.show_qr_code)) {
                 showMenu = false
                 onShowQrClick()
             }
             if (row.balanceSompi > 0) {
                 HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                PopupMenuRow(Icons.AutoMirrored.Filled.Send, "Send From This Address") {
+                PopupMenuRow(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_from_this_address)) {
                     showMenu = false
                     onSendClick()
                 }
             }
             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.Edit, "Rename Address") {
+            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename_address)) {
                 showMenu = false
                 onLabelClick()
             }
@@ -1067,7 +1071,7 @@ private fun ColdSendFlow(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Send from Cold Storage", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.send_from_cold_storage), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { if (!inFlight) onDone() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = if (inFlight) Color.Gray else KaspaTeal)
@@ -1092,7 +1096,7 @@ private fun ColdSendFlow(
                     .background(LocalAppColors.current.surface)
                     .padding(16.dp)
             ) {
-                Text("From", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.from), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Text(fromAddress, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(4.dp))
                 Text("Available: %.8f KAS".format(java.util.Locale.US, availableKas), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
@@ -1103,7 +1107,7 @@ private fun ColdSendFlow(
                     OutlinedTextField(
                         value = toAddress,
                         onValueChange = { toAddress = it },
-                        label = { Text("Recipient address") },
+                        label = { Text(stringResource(R.string.recipient_address)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -1117,16 +1121,16 @@ private fun ColdSendFlow(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { clipboardManager.getText()?.text?.let { toAddress = it.trim() } }) {
-                            Text("Paste from Clipboard", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                         }
                         TextButton(onClick = { showRecipientScanner = true }) {
-                            Text("Scan QR Code", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { amountText = it },
-                        label = { Text("Amount (KAS)") },
+                        label = { Text(stringResource(R.string.amount_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -1138,7 +1142,7 @@ private fun ColdSendFlow(
                                     amountText = "%.8f".format(java.util.Locale.US, maxSompi / 100_000_000.0)
                                 }
                             ) {
-                                Text("Max", color = KaspaTeal)
+                                Text(stringResource(R.string.max), color = KaspaTeal)
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1173,7 +1177,7 @@ private fun ColdSendFlow(
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text(
-                            "Build Unsigned Transaction",
+                            stringResource(R.string.build_unsigned_transaction),
                             color = if (isValidRecipient && (amountSompi ?: 0) > 0) Color.Black else Color.Gray,
                             fontWeight = FontWeight.Bold
                         )
@@ -1184,7 +1188,7 @@ private fun ColdSendFlow(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
                         CircularProgressIndicator(color = KaspaTeal)
                         Spacer(Modifier.height(12.dp))
-                        Text("Building transaction...", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.building_transaction), color = LocalAppColors.current.textSecondary)
                     }
                 }
 
@@ -1200,7 +1204,7 @@ private fun ColdSendFlow(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(20.dp)) {
                                 Text(
-                                    "Scan this with your KasSigner device, review it there, then sign.",
+                                    stringResource(R.string.scan_this_with_your_kassigner_device),
                                     color = Color(0xFF6B6B70),
                                     style = MaterialTheme.typography.bodySmall,
                                     textAlign = TextAlign.Center
@@ -1220,7 +1224,7 @@ private fun ColdSendFlow(
                             colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                             modifier = Modifier.fillMaxWidth().height(48.dp)
                         ) {
-                            Text("Scan Signed Transaction", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.scan_signed_transaction), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     } else {
                         MultiFrameQrScannerOverlay(
@@ -1238,7 +1242,7 @@ private fun ColdSendFlow(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
                         CircularProgressIndicator(color = KaspaTeal)
                         Spacer(Modifier.height(12.dp))
-                        Text("Broadcasting...", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.broadcasting), color = LocalAppColors.current.textSecondary)
                     }
                 }
 
@@ -1246,7 +1250,7 @@ private fun ColdSendFlow(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                         Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CD964), modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text("Sent", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(stringResource(R.string.sent), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(Modifier.height(20.dp))
                         Column(
                             modifier = Modifier
@@ -1255,7 +1259,7 @@ private fun ColdSendFlow(
                                 .background(LocalAppColors.current.surface)
                                 .padding(16.dp)
                         ) {
-                            Text("To", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                            Text(stringResource(R.string.to), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                             Text(toAddress, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
                         }
                         Spacer(Modifier.height(12.dp))
@@ -1278,7 +1282,7 @@ private fun ColdSendFlow(
                             colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
                             modifier = Modifier.fillMaxWidth().height(48.dp)
                         ) {
-                            Text("Done", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.done), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1290,11 +1294,11 @@ private fun ColdSendFlow(
         AlertDialog(
             onDismissRequest = { showFeeEditor = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "If the network is busy, a higher fee can help your transaction confirm faster.",
+                        stringResource(R.string.if_the_network_is_busy_a),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -1302,7 +1306,7 @@ private fun ColdSendFlow(
                     OutlinedTextField(
                         value = feeEditorInput,
                         onValueChange = { feeEditorInput = it },
-                        label = { Text("Fee (KAS)") },
+                        label = { Text(stringResource(R.string.fee_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -1336,16 +1340,16 @@ private fun ColdSendFlow(
                     }
                     showFeeEditor = false
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { feeRateOverrideSompi = null; showFeeEditor = false }) {
-                        Text("Use Default", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -1371,7 +1375,7 @@ fun ColdStorageTxHistoryScreen(address: String, onBack: () -> Unit, viewModel: C
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Transaction History", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.transaction_history), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -1399,7 +1403,7 @@ fun ColdStorageTxHistoryScreen(address: String, onBack: () -> Unit, viewModel: C
                 }
                 txHistory.isEmpty() -> {
                     Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("No transactions yet.", color = LocalAppColors.current.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(stringResource(R.string.no_transactions_yet), color = LocalAppColors.current.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                 }
                 else -> {

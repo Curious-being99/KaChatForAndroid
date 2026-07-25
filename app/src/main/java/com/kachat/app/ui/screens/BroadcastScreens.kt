@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -123,7 +124,7 @@ fun BroadcastListScreen(
         topBar = {
             Column {
                 CenterAlignedTopAppBar(
-                    title = { Text("Broadcasts", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                    title = { Text(stringResource(R.string.broadcasts), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -152,12 +153,12 @@ fun BroadcastListScreen(
                         Tab(
                             selected = pagerState.currentPage == 0,
                             onClick = { coroutineScope.launch { pagerState.animateScrollToPage(0) } },
-                            text = { Text("Channels", fontWeight = FontWeight.Bold) }
+                            text = { Text(stringResource(R.string.channels), fontWeight = FontWeight.Bold) }
                         )
                         Tab(
                             selected = pagerState.currentPage == 1,
                             onClick = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
-                            text = { Text("Popular", fontWeight = FontWeight.Bold) }
+                            text = { Text(stringResource(R.string.popular), fontWeight = FontWeight.Bold) }
                         )
                     }
                 }
@@ -210,14 +211,14 @@ fun BroadcastListScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        "No broadcast channels yet",
+                        stringResource(R.string.no_broadcast_channels_yet),
                         color = LocalAppColors.current.textPrimary,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Broadcasts are public, unencrypted channels. Anyone who joins the same channel name sees the same messages.",
+                        stringResource(R.string.broadcasts_are_public_unencrypted_channels_anyone),
                         color = LocalAppColors.current.textSecondary,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -285,12 +286,12 @@ fun BroadcastListScreen(
                                 IconButton(onClick = { retentionSettingsChannelName = channel.channelName }) {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
-                                        contentDescription = "Message retention settings",
+                                        contentDescription = stringResource(R.string.message_retention_settings),
                                         tint = LocalAppColors.current.textSecondary
                                     )
                                 }
                                 TextButton(onClick = { channelToLeave = channel.channelName }) {
-                                    Text("Leave", color = LocalAppColors.current.textSecondary)
+                                    Text(stringResource(R.string.leave), color = LocalAppColors.current.textSecondary)
                                 }
                             }
                         }
@@ -305,11 +306,11 @@ fun BroadcastListScreen(
         AlertDialog(
             onDismissRequest = { showJoinDialog = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Join or Create a Channel", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.join_or_create_a_channel), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "Anyone who joins the same channel name can see and post messages there. There's no owner or invite.",
+                        stringResource(R.string.anyone_who_joins_the_same_channel),
                         color = LocalAppColors.current.textSecondary,
                         fontSize = 13.sp
                     )
@@ -317,7 +318,7 @@ fun BroadcastListScreen(
                     OutlinedTextField(
                         value = channelInput,
                         onValueChange = { channelInput = it },
-                        placeholder = { Text("channel-name", color = Color.DarkGray) },
+                        placeholder = { Text(stringResource(R.string.channel_name), color = Color.DarkGray) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -339,12 +340,12 @@ fun BroadcastListScreen(
                 // LaunchedEffect above closes the dialog once SUCCESS actually arrives; on
                 // FAILED it stays open showing the error text instead.
                 TextButton(onClick = { broadcastViewModel.joinChannel(channelInput) }) {
-                    Text("Join", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.join), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showJoinDialog = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -357,7 +358,7 @@ fun BroadcastListScreen(
             title = { Text("Leave #$channelName", color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "Leaving this broadcast permanently deletes every message cached for it on this device. This cannot be undone; rejoining later starts with no history.",
+                    stringResource(R.string.leaving_this_broadcast_permanently_deletes_every),
                     color = LocalAppColors.current.textSecondary
                 )
             },
@@ -366,12 +367,12 @@ fun BroadcastListScreen(
                     broadcastViewModel.leaveChannel(channelName)
                     channelToLeave = null
                 }) {
-                    Text("Leave & Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.leave_delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { channelToLeave = null }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -399,7 +400,7 @@ fun BroadcastListScreen(
                 text = {
                     Column {
                         Text(
-                            "How long messages in this broadcast stay cached on this device, up to a maximum of 3 days.",
+                            stringResource(R.string.how_long_messages_in_this_broadcast),
                             color = LocalAppColors.current.textSecondary,
                             fontSize = 13.sp
                         )
@@ -461,7 +462,7 @@ fun BroadcastListScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "Longer retention means more messages stay cached on your device, which can slow the app down over time, especially for busy rooms.",
+                            stringResource(R.string.longer_retention_means_more_messages_stay),
                             color = Color(0xFFF39C12),
                             fontSize = 12.sp
                         )
@@ -475,12 +476,12 @@ fun BroadcastListScreen(
                             retentionSettingsChannelName = null
                         }
                     ) {
-                        Text("Save", color = if (isValid) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.save), color = if (isValid) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { retentionSettingsChannelName = null }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             )
@@ -491,7 +492,7 @@ fun BroadcastListScreen(
         AlertDialog(
             onDismissRequest = { showBroadcastSettingsDialog = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Broadcast Settings", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.broadcast_settings), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Row(
@@ -500,10 +501,10 @@ fun BroadcastListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("Popular Tab", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.popular_tab), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "Shows a tab of recommended broadcast rooms you can jump into.",
+                                stringResource(R.string.shows_a_tab_of_recommended_broadcast),
                                 color = LocalAppColors.current.textSecondary,
                                 fontSize = 12.sp
                             )
@@ -521,10 +522,10 @@ fun BroadcastListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("KNS Profile Pictures", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.kns_profile_pictures), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                "Shows senders' KNS avatars in rooms and looks them up automatically as messages appear. Off shows plain initials for everyone and never fetches avatars.",
+                                stringResource(R.string.shows_senders_kns_avatars_in_rooms),
                                 color = LocalAppColors.current.textSecondary,
                                 fontSize = 12.sp
                             )
@@ -538,7 +539,7 @@ fun BroadcastListScreen(
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.5f))
                     SettingsNavigationItem(
-                        "Hidden Broadcast Room Users",
+                        stringResource(R.string.hidden_broadcast_room_users),
                         Icons.Default.VisibilityOff,
                         hiddenSenderAddresses.size.toString(),
                         onClick = {
@@ -550,7 +551,7 @@ fun BroadcastListScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showBroadcastSettingsDialog = false }) {
-                    Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -714,7 +715,7 @@ fun BroadcastChannelScreen(
                             )
                         }
                         IconButton(onClick = { broadcastViewModel.cancelReply() }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = LocalAppColors.current.textSecondary)
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel_reply), tint = LocalAppColors.current.textSecondary)
                         }
                     }
                 }
@@ -749,7 +750,7 @@ fun BroadcastChannelScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         IconButton(onClick = { broadcastViewModel.cancelVoiceRecording() }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Cancel recording", tint = Color(0xFFFF3B30))
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cancel_recording), tint = Color(0xFFFF3B30))
                         }
                         Icon(Icons.Default.Mic, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
                         Text(
@@ -761,7 +762,7 @@ fun BroadcastChannelScreen(
                             onClick = { broadcastViewModel.stopAndSendVoiceRecording(channelName) },
                             modifier = Modifier.size(40.dp).background(KaspaTeal, CircleShape)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.Black, modifier = Modifier.size(20.dp))
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.send), tint = Color.Black, modifier = Modifier.size(20.dp))
                         }
                     }
                 } else {
@@ -897,7 +898,7 @@ fun BroadcastChannelScreen(
                             )
                             if (showAvatarMenu) {
                                 CenteredOptionsMenu(onDismissRequest = { showAvatarMenu = false }, anchor = avatarMenuAnchor) {
-                                    PopupMenuRow(Icons.Default.Person, "View Profile") {
+                                    PopupMenuRow(Icons.Default.Person, stringResource(R.string.view_profile)) {
                                         broadcastViewModel.openSenderProfile(message.senderAddress) { address ->
                                             navController.navigate("chat_info/$address?fromBroadcast=true")
                                         }
@@ -905,7 +906,7 @@ fun BroadcastChannelScreen(
                                     }
                                     if (!isMine) {
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.AutoMirrored.Filled.Chat, "Open Chat") {
+                                        PopupMenuRow(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.open_chat)) {
                                             broadcastViewModel.openSenderProfile(message.senderAddress) { address ->
                                                 navController.navigate("chat/$address")
                                             }
@@ -913,20 +914,20 @@ fun BroadcastChannelScreen(
                                         }
                                     }
                                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                    PopupMenuRow(Icons.Default.ContentCopy, "Copy Address") {
+                                    PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_address)) {
                                         clipboardManager.setText(AnnotatedString(message.senderAddress))
                                         showAvatarMenu = false
                                     }
                                     if (!isMine) {
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(painterResource(R.drawable.ic_kaspa_logo), "Pay in Kaspa", iconTint = Color.Unspecified) {
+                                        PopupMenuRow(painterResource(R.drawable.ic_kaspa_logo), stringResource(R.string.pay_in_kaspa), iconTint = Color.Unspecified) {
                                             broadcastViewModel.openSenderProfile(message.senderAddress) { address ->
                                                 navController.navigate("chat/$address?paymentMode=true")
                                             }
                                             showAvatarMenu = false
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.VisibilityOff, "Hide User", labelColor = Color(0xFFFF3B30), iconTint = Color(0xFFFF3B30)) {
+                                        PopupMenuRow(Icons.Default.VisibilityOff, stringResource(R.string.hide_user), labelColor = Color(0xFFFF3B30), iconTint = Color(0xFFFF3B30)) {
                                             broadcastViewModel.hideSender(message.senderAddress)
                                             showAvatarMenu = false
                                         }
@@ -1042,7 +1043,7 @@ fun BroadcastChannelScreen(
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
-                                            "Show More",
+                                            stringResource(R.string.show_more),
                                             color = if (isMine) LocalAppColors.current.divider else KaspaTeal,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 13.sp
@@ -1079,18 +1080,18 @@ fun BroadcastChannelScreen(
 
                                 if (showMenu) {
                                     CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
-                                        PopupMenuRow(Icons.Default.ContentCopy, "Copy Message") {
+                                        PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_message)) {
                                             clipboardManager.setText(AnnotatedString(displayContent))
                                             showMenu = false
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.Tag, "Go to Explorer") {
+                                        PopupMenuRow(Icons.Default.Tag, stringResource(R.string.go_to_explorer)) {
                                             uriHandler.openUri(kaspaExplorer.txUrl(message.id))
                                             showMenu = false
                                         }
                                         if (isMine && message.deliveryStatus == "failed") {
                                             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                            PopupMenuRow(Icons.Default.Refresh, "Retry Send") {
+                                            PopupMenuRow(Icons.Default.Refresh, stringResource(R.string.retry_send)) {
                                                 broadcastViewModel.retryBroadcast(message)
                                                 showMenu = false
                                             }
@@ -1115,13 +1116,13 @@ fun BroadcastChannelScreen(
                                         when (message.deliveryStatus) {
                                             "failed" -> Icon(
                                                 imageVector = Icons.Default.Error,
-                                                contentDescription = "Failed to send",
+                                                contentDescription = stringResource(R.string.failed_to_send),
                                                 tint = Color(0xFFFF3B30),
                                                 modifier = Modifier.size(12.dp)
                                             )
                                             "pending" -> Icon(
                                                 imageVector = Icons.Default.Schedule,
-                                                contentDescription = "Sending",
+                                                contentDescription = stringResource(R.string.sending),
                                                 tint = LocalAppColors.current.textSecondary,
                                                 modifier = Modifier.size(12.dp)
                                             )
@@ -1159,7 +1160,7 @@ fun BroadcastChannelScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Scroll to latest",
+                    contentDescription = stringResource(R.string.scroll_to_latest),
                     tint = LocalAppColors.current.textPrimary
                 )
             }
@@ -1171,11 +1172,11 @@ fun BroadcastChannelScreen(
         AlertDialog(
             onDismissRequest = { showFeeEditor = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "If the network is busy, a higher fee can help your transaction confirm faster.",
+                        stringResource(R.string.if_the_network_is_busy_a),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -1183,7 +1184,7 @@ fun BroadcastChannelScreen(
                     OutlinedTextField(
                         value = feeEditorInput,
                         onValueChange = { feeEditorInput = it },
-                        label = { Text("Fee (KAS)") },
+                        label = { Text(stringResource(R.string.fee_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -1213,16 +1214,16 @@ fun BroadcastChannelScreen(
                     }
                     showFeeEditor = false
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { broadcastViewModel.setFeeRateOverride(null); showFeeEditor = false }) {
-                        Text("Use Default", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -1253,7 +1254,7 @@ fun HiddenBroadcastUsersScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Hidden Broadcast Room Users", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.hidden_broadcast_room_users), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
@@ -1270,14 +1271,14 @@ fun HiddenBroadcastUsersScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    "No hidden users",
+                    stringResource(R.string.no_hidden_users),
                     color = LocalAppColors.current.textPrimary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Users you hide from a broadcast room (via their avatar menu) show up here, and never appear or get cached in any room.",
+                    stringResource(R.string.users_you_hide_from_a_broadcast),
                     color = LocalAppColors.current.textSecondary,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 8.dp)
@@ -1306,7 +1307,7 @@ fun HiddenBroadcastUsersScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             TextButton(onClick = { broadcastViewModel.unhideSender(address) }) {
-                                Text("Unhide", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.unhide), color = KaspaTeal, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

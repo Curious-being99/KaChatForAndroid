@@ -12,7 +12,7 @@ val KAS_SWAP_COIN = SwapCoin("kas", "kas", "Kaspa")
  * Scoped down to a single pair for now: KAS <-> USDC on Polygon. ChangeNOW's network code for
  * Polygon is "matic" (not "polygon") — confirmed against the live /v2/exchange/currencies list.
  */
-val USDC_POLYGON_SWAP_COIN = SwapCoin("usdc", "matic", "USD Coin (Polygon)")
+val USDC_POLYGON_SWAP_COIN = SwapCoin("usdc", "matic", "USDC Coin (Polygon)")
 
 val CURATED_SWAP_COINS = listOf(USDC_POLYGON_SWAP_COIN)
 

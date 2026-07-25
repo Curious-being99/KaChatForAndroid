@@ -146,6 +146,9 @@ android {
 dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)
+    // Per-app language switching (AppCompatDelegate.setApplicationLocales) - the modern,
+    // Google-recommended API, native on API 33+ and backported below it via this dependency.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.process)

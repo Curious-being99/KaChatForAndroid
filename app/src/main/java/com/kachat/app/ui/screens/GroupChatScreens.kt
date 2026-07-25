@@ -1,5 +1,6 @@
 package com.kachat.app.ui.screens
 
+import com.kachat.app.R
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,11 +12,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -54,15 +58,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -77,7 +90,9 @@ import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.ChatTimeFormat
 import com.kachat.app.util.ImageMessage
+import com.kachat.app.util.rememberCameraCaptureLauncher
 import com.kachat.app.util.MessageReply
+import com.kachat.app.util.TextLinkify
 import com.kachat.app.util.VoiceMessage
 import com.kachat.app.viewmodels.ChatViewModel
 import kotlinx.coroutines.delay
@@ -123,6 +138,14 @@ object GroupMentionCodec {
     }
 }
 
+/** More than this many "@" mention matches and the inline suggestion list scrolls instead of
+ *  growing taller - see its usage below. */
+private const val visibleMentionRows = 5
+/** Approximate single-row height (14sp text + 8dp vertical padding on each side) used to size the
+ *  mention list's scroll cap to exactly `visibleMentionRows` rows - doesn't need to be
+ *  pixel-perfect, it's just clipping the scrollable area. */
+private val mentionRowHeight = 38.dp
+
 /**
  * Group chat thread — mirrors 1:1 chat's look (avatars, "+" send-mode menu, photo/audio bubbles
  * via the same [ImageBubble]/[AudioBubble]/[ImageMessage]/[VoiceMessage] components 1:1 chat
@@ -154,16 +177,61 @@ fun GroupChatThreadScreen(
     val estimatedFee = if (showFeeEstimate) estimatedFeeRaw else null
     val networkFeeRate by chatViewModel.networkFeeRate.collectAsState()
     val feeRateOverride by chatViewModel.feeRateOverride.collectAsState()
-    var draft by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(TextFieldValue("")) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showComposerMenu by remember { mutableStateOf(false) }
     var composerMenuAnchor by remember { mutableStateOf(Offset.Zero) }
-    var showMentionPicker by remember { mutableStateOf(false) }
+    // @mention inline autocomplete - the text typed after an unclosed "@" at the cursor, or null
+    // when the cursor isn't currently in a mention context. See detectMentionQuery/mentionCandidates.
+    var mentionQuery by remember { mutableStateOf<String?>(null) }
+    val primaryKnsByAddress by chatViewModel.groupMemberPrimaryKnsByAddress.collectAsState()
     val groupMembers = remember(group?.membersJson) { group?.let(::parseGroupMembers) ?: emptyList() }
     val resolveDisplayName: (String) -> String = { address ->
         contactAliasesByAddress[address]?.takeIf { it.isNotBlank() }
             ?: groupMembers.firstOrNull { it.address == address }?.displayName?.takeIf { it.isNotBlank() }
             ?: address.takeLast(10)
+    }
+    // Members mentionable via the inline "@" autocomplete - only those with an explicit primary
+    // KNS domain set (see groupMemberPrimaryKnsByAddress's doc comment for why this can't reuse
+    // the general fallback-inclusive resolveDisplayName/knsProfiles), excluding self, filtered
+    // by `query` (case-insensitive substring match against the domain) when non-empty.
+    val mentionCandidates: (String) -> List<Pair<GroupMember, String>> = { query ->
+        val normalizedQuery = query.trim().lowercase()
+        groupMembers.mapNotNull { member ->
+            if (member.address == myAddress) return@mapNotNull null
+            val domain = primaryKnsByAddress[member.address]
+            if (domain.isNullOrEmpty()) return@mapNotNull null
+            if (normalizedQuery.isNotEmpty() && !domain.lowercase().contains(normalizedQuery)) return@mapNotNull null
+            member to domain
+        }
+    }
+    // Range of the unclosed "@query" run ending at the cursor (a collapsed selection), if any -
+    // mirrors iOS's ComposerTextView.Coordinator.mentionTokenRange exactly.
+    val detectMentionQuery: (TextFieldValue) -> String? = { value ->
+        val cursor = value.selection
+        if (!cursor.collapsed) {
+            null
+        } else {
+            var start = cursor.start
+            while (start > 0 && !value.text[start - 1].isWhitespace()) {
+                start--
+            }
+            if (start < cursor.start && value.text[start] == '@') {
+                value.text.substring(start + 1, cursor.start)
+            } else {
+                null
+            }
+        }
+    }
+    val insertMention: (String) -> Unit = { domain ->
+        val cursor = draft.selection.start
+        var start = cursor
+        while (start > 0 && !draft.text[start - 1].isWhitespace()) {
+            start--
+        }
+        val newText = draft.text.replaceRange(start, cursor, "@$domain ")
+        draft = TextFieldValue(newText, TextRange(start + domain.length + 2))
+        mentionQuery = null
     }
     var showFeeEditor by remember { mutableStateOf(false) }
     var feeEditorInput by remember { mutableStateOf("") }
@@ -200,8 +268,8 @@ fun GroupChatThreadScreen(
         chatViewModel.setActiveGroup(groupId)
         onDispose { chatViewModel.setActiveGroup(null) }
     }
-    LaunchedEffect(draft) {
-        chatViewModel.setGroupMessageText(draft)
+    LaunchedEffect(draft.text) {
+        chatViewModel.setGroupMessageText(draft.text)
     }
 
     val micContext = LocalContext.current
@@ -211,6 +279,7 @@ fun GroupChatThreadScreen(
     val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) chatViewModel.setGroupPendingPhoto(uri)
     }
+    val startCameraCapture = rememberCameraCaptureLauncher { uri -> chatViewModel.setGroupPendingPhoto(uri) }
     val startVoiceRecordingIfPermitted = {
         if (chatViewModel.voiceRecordingSupported) {
             if (ContextCompat.checkSelfPermission(micContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -247,12 +316,12 @@ fun GroupChatThreadScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = LocalAppColors.current.textPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = LocalAppColors.current.textPrimary)
                     }
                 },
                 actions = {
                     IconButton(onClick = { navController.navigate("group_chat_info/$groupId") }) {
-                        Icon(Icons.Default.Info, contentDescription = "Group Info", tint = LocalAppColors.current.textPrimary)
+                        Icon(Icons.Default.Info, contentDescription = stringResource(R.string.group_info), tint = LocalAppColors.current.textPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -337,11 +406,11 @@ fun GroupChatThreadScreen(
                                     )
                                 }
                                 IconButton(onClick = { chatViewModel.cancelGroupReply() }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = LocalAppColors.current.textSecondary)
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel_reply), tint = LocalAppColors.current.textSecondary)
                                 }
                             }
                         }
-                        if (estimatedFee != null && draft.isNotEmpty()) {
+                        if (estimatedFee != null && draft.text.isNotEmpty()) {
                             Box(modifier = Modifier.fillMaxWidth()) {
                                 groupFeePill(
                                     estimatedFee,
@@ -350,11 +419,60 @@ fun GroupChatThreadScreen(
                                 )
                             }
                         }
+                        mentionQuery?.let { query ->
+                            val candidates = mentionCandidates(query)
+                            if (candidates.isNotEmpty()) {
+                                // Deliberately no fillMaxWidth() on the Column or each row's Text -
+                                // that made the box (and every row) stretch to the full available
+                                // width regardless of how short the names actually were. Removing
+                                // it alone wasn't enough though: HorizontalDivider's own default
+                                // modifier is `fillMaxWidth()` internally, so the divider between
+                                // rows was still forcing the Column back out to full width on its
+                                // own. `width(IntrinsicSize.Max)` is Compose's built-in mechanism
+                                // for exactly this - it measures the Column's width from its
+                                // widest child's own natural content width (the longest name),
+                                // then proposes *that* width to every child during actual layout,
+                                // so a `fillMaxWidth()` child like the divider fills that measured
+                                // width instead of the screen.
+                                //
+                                // Height caps at exactly `visibleMentionRows` rows' worth, then
+                                // scrolls for the rest - unlike SwiftUI's ScrollView, Compose's
+                                // Column+verticalScroll already sizes to its actual content up to
+                                // that cap rather than always growing to fill it, so this is safe
+                                // to apply unconditionally (no empty-space regression for a short
+                                // list, matching iOS's explicit >5-rows-only ScrollView gate).
+                                Column(
+                                    modifier = Modifier
+                                        .width(IntrinsicSize.Max)
+                                        .heightIn(max = mentionRowHeight * visibleMentionRows)
+                                        .padding(bottom = 8.dp)
+                                        .background(LocalAppColors.current.surface, RoundedCornerShape(14.dp))
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    candidates.forEachIndexed { index, (_, domain) ->
+                                        Text(
+                                            domain,
+                                            color = LocalAppColors.current.textPrimary,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier
+                                                .clickable { insertMention(domain) }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        )
+                                        if (index != candidates.lastIndex) {
+                                            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Row(verticalAlignment = Alignment.Bottom) {
                             TextField(
                                 value = draft,
-                                onValueChange = { draft = it },
-                                placeholder = { Text("Message", color = Color.DarkGray) },
+                                onValueChange = { newValue ->
+                                    draft = newValue
+                                    mentionQuery = detectMentionQuery(newValue)
+                                },
+                                placeholder = { Text(stringResource(R.string.message), color = Color.DarkGray) },
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(20.dp)),
@@ -370,7 +488,7 @@ fun GroupChatThreadScreen(
                                 maxLines = 5
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            if (draft.isEmpty()) {
+                            if (draft.text.isEmpty()) {
                                 Box(
                                     modifier = Modifier.onGloballyPositioned { coords ->
                                         composerMenuAnchor = coords.positionInWindow()
@@ -380,30 +498,30 @@ fun GroupChatThreadScreen(
                                 }
                                 if (showComposerMenu) {
                                     CenteredOptionsMenu(onDismissRequest = { showComposerMenu = false }, anchor = composerMenuAnchor) {
-                                        PopupMenuRow(Icons.Default.Image, "Photo") {
+                                        PopupMenuRow(Icons.Default.CameraAlt, stringResource(R.string.camera)) {
+                                            showComposerMenu = false
+                                            startCameraCapture()
+                                        }
+                                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                                        PopupMenuRow(Icons.Default.Image, stringResource(R.string.send_photo_2)) {
                                             showComposerMenu = false
                                             photoPickerLauncher.launch("image/*")
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.Mic, "Audio Message") {
+                                        PopupMenuRow(Icons.Default.Mic, stringResource(R.string.send_audio_message)) {
                                             showComposerMenu = false
                                             startVoiceRecordingIfPermitted()
-                                        }
-                                        if (groupMembers.any { it.address != myAddress }) {
-                                            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                            PopupMenuRow(Icons.Default.Email, "Mention Someone") {
-                                                showComposerMenu = false
-                                                showMentionPicker = true
-                                            }
                                         }
                                     }
                                 }
                             } else {
                                 IconButton(
                                     onClick = {
-                                        val text = GroupMentionCodec.encodeForSending(draft.trim(), groupMembers, resolveDisplayName)
+                                        val text = GroupMentionCodec.encodeForSending(draft.text.trim(), groupMembers) { address ->
+                                            primaryKnsByAddress[address] ?: ""
+                                        }
                                         if (text.isEmpty()) return@IconButton
-                                        draft = ""
+                                        draft = TextFieldValue("")
                                         errorMessage = null
                                         chatViewModel.sendGroupMessage(text, groupId) { error -> errorMessage = error }
                                     },
@@ -413,7 +531,7 @@ fun GroupChatThreadScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = "Send",
+                                        contentDescription = stringResource(R.string.send),
                                         tint = Color.Black,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -486,46 +604,15 @@ fun GroupChatThreadScreen(
         }
     }
 
-    if (showMentionPicker) {
-        AlertDialog(
-            onDismissRequest = { showMentionPicker = false },
-            containerColor = LocalAppColors.current.surface,
-            title = { Text("Mention", color = LocalAppColors.current.textPrimary) },
-            text = {
-                Column {
-                    groupMembers.filter { it.address != myAddress }.forEach { member ->
-                        Text(
-                            resolveDisplayName(member.address),
-                            color = LocalAppColors.current.textPrimary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val separator = if (draft.isEmpty() || draft.endsWith(" ")) "" else " "
-                                    draft = "$draft$separator@${resolveDisplayName(member.address)} "
-                                    showMentionPicker = false
-                                }
-                                .padding(vertical = 12.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showMentionPicker = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
-                }
-            }
-        )
-    }
-
     if (showFeeEditor) {
         AlertDialog(
             onDismissRequest = { showFeeEditor = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "If the network is busy, a higher fee can help your transaction confirm faster.",
+                        stringResource(R.string.if_the_network_is_busy_a),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -533,7 +620,7 @@ fun GroupChatThreadScreen(
                     OutlinedTextField(
                         value = feeEditorInput,
                         onValueChange = { feeEditorInput = it },
-                        label = { Text("Fee (KAS)") },
+                        label = { Text(stringResource(R.string.fee_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -561,16 +648,16 @@ fun GroupChatThreadScreen(
                     }
                     showFeeEditor = false
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { chatViewModel.setFeeRateOverride(null); showFeeEditor = false }) {
-                        Text("Use Default", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -611,7 +698,7 @@ private fun groupPhotoPreviewRow(pendingPhotoUri: android.net.Uri?, onCancel: ()
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         IconButton(onClick = onCancel) {
-            Icon(Icons.Default.Delete, contentDescription = "Cancel photo", tint = Color(0xFFFF3B30))
+            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cancel_photo), tint = Color(0xFFFF3B30))
         }
         val thumbnailContext = LocalContext.current
         val thumbnail = remember(pendingPhotoUri) {
@@ -633,14 +720,14 @@ private fun groupPhotoPreviewRow(pendingPhotoUri: android.net.Uri?, onCancel: ()
                 contentScale = ContentScale.Crop
             )
         }
-        Text("Photo", color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.photo), color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
         IconButton(
             onClick = onSend,
             modifier = Modifier.size(32.dp).background(KaspaTeal, CircleShape)
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = "Send photo",
+                contentDescription = stringResource(R.string.send_photo),
                 tint = Color.Black,
                 modifier = Modifier.size(16.dp)
             )
@@ -661,7 +748,7 @@ private fun groupRecordingRow(elapsedMs: Long, onCancel: () -> Unit, onSend: () 
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         IconButton(onClick = onCancel) {
-            Icon(Icons.Default.Delete, contentDescription = "Cancel recording", tint = Color(0xFFFF3B30))
+            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cancel_recording), tint = Color(0xFFFF3B30))
         }
         Icon(Icons.Default.Mic, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
         Text(
@@ -675,7 +762,7 @@ private fun groupRecordingRow(elapsedMs: Long, onCancel: () -> Unit, onSend: () 
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = "Send",
+                contentDescription = stringResource(R.string.send),
                 tint = Color.Black,
                 modifier = Modifier.size(20.dp)
             )
@@ -822,26 +909,55 @@ private fun GroupMessageBubble(
             when {
                 voiceContent != null -> AudioBubble(voiceContent = voiceContent, isSent = isSent, onLongPress = { showMenu = true })
                 imageContent != null -> ImageBubble(imageContent = imageContent, isSent = isSent, onLongPress = { showMenu = true }, senderDisplayName = senderName)
-                else -> Surface(
-                    color = if (isSent) KaspaTeal else LocalAppColors.current.surface,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .widthIn(max = 280.dp)
-                        .combinedClickable(onClick = {}, onLongClick = { showMenu = true })
-                ) {
-                    Text(
-                        text = displayContent,
-                        color = if (isSent) Color.Black else LocalAppColors.current.textPrimary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
+                else -> {
+                    var groupTextLayoutResult by remember(displayContent) { mutableStateOf<TextLayoutResult?>(null) }
+                    // Sent bubbles are teal with black text/links for contrast - matches 1:1 chat's
+                    // MessageBubble (Screens.kt) treatment of the same case.
+                    val groupLinkColor = if (isSent) Color.Black else KaspaTeal
+                    val annotatedGroupBody = remember(displayContent, isSent) {
+                        buildAnnotatedString {
+                            append(displayContent)
+                            for (match in TextLinkify.findUrls(displayContent)) {
+                                addStyle(SpanStyle(color = groupLinkColor, textDecoration = TextDecoration.Underline), match.range.first, match.range.last + 1)
+                                addStringAnnotation("URL", match.uri, match.range.first, match.range.last + 1)
+                            }
+                        }
+                    }
+                    Surface(
+                        color = if (isSent) KaspaTeal else LocalAppColors.current.surface,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.widthIn(max = 280.dp)
+                    ) {
+                        Text(
+                            text = annotatedGroupBody,
+                            color = if (isSent) Color.Black else LocalAppColors.current.textPrimary,
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .pointerInput(annotatedGroupBody) {
+                                    detectTapGestures(
+                                        onLongPress = { showMenu = true },
+                                        onTap = { offset ->
+                                            val layout = groupTextLayoutResult ?: return@detectTapGestures
+                                            val charOffset = layout.getOffsetForPosition(offset)
+                                            annotatedGroupBody.getStringAnnotations("URL", charOffset, charOffset)
+                                                .firstOrNull()?.let { uriHandler.openUri(it.item) }
+                                        }
+                                    )
+                                },
+                            onTextLayout = { groupTextLayoutResult = it }
+                        )
+                    }
+                    TextLinkify.findUrls(displayContent).firstOrNull()?.let { match ->
+                        LinkPreviewCard(url = match.uri, txId = message.txId)
+                    }
                 }
             }
 
             if (isSent) {
                 Row(modifier = Modifier.padding(top = 4.dp)) {
                     when (message.deliveryStatus) {
-                        "failed" -> Icon(Icons.Default.Error, contentDescription = "Failed to send", tint = Color(0xFFFF3B30), modifier = Modifier.size(12.dp))
-                        "pending" -> Icon(Icons.Default.Schedule, contentDescription = "Sending", tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(12.dp))
+                        "failed" -> Icon(Icons.Default.Error, contentDescription = stringResource(R.string.failed_to_send), tint = Color(0xFFFF3B30), modifier = Modifier.size(12.dp))
+                        "pending" -> Icon(Icons.Default.Schedule, contentDescription = stringResource(R.string.sending), tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(12.dp))
                         else -> Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CD964), modifier = Modifier.size(12.dp))
                     }
                 }
@@ -849,23 +965,23 @@ private fun GroupMessageBubble(
 
             if (showMenu) {
                 CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
-                    PopupMenuRow(Icons.AutoMirrored.Filled.Reply, "Reply") {
+                    PopupMenuRow(Icons.AutoMirrored.Filled.Reply, stringResource(R.string.reply)) {
                         onReply()
                         showMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.ContentCopy, "Copy Message") {
+                    PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_message)) {
                         clipboardManager.setText(AnnotatedString(displayContent))
                         showMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.Tag, "View in Explorer") {
+                    PopupMenuRow(Icons.Default.Tag, stringResource(R.string.view_in_explorer)) {
                         uriHandler.openUri(com.kachat.app.models.KaspaExplorer.default.txUrl(message.txId))
                         showMenu = false
                     }
                     if (canRetry) {
                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                        PopupMenuRow(Icons.Default.Refresh, "Retry Send") {
+                        PopupMenuRow(Icons.Default.Refresh, stringResource(R.string.retry_send)) {
                             onRetry()
                             showMenu = false
                         }
@@ -921,25 +1037,25 @@ private fun groupAvatarButton(
         )
         if (showAvatarMenu) {
             CenteredOptionsMenu(onDismissRequest = { showAvatarMenu = false }, anchor = avatarMenuAnchor) {
-                PopupMenuRow(Icons.Default.Person, "View Profile") {
+                PopupMenuRow(Icons.Default.Person, stringResource(R.string.view_profile)) {
                     navController.navigate("chat_info/$address?fromBroadcast=true")
                     showAvatarMenu = false
                 }
                 if (!isOwnMessage) {
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.AutoMirrored.Filled.Chat, "Open Chat") {
+                    PopupMenuRow(Icons.AutoMirrored.Filled.Chat, stringResource(R.string.open_chat)) {
                         navController.navigate("chat/$address")
                         showAvatarMenu = false
                     }
                 }
                 HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                PopupMenuRow(Icons.Default.ContentCopy, "Copy Address") {
+                PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_address)) {
                     clipboardManager.setText(AnnotatedString(address))
                     showAvatarMenu = false
                 }
                 if (!isOwnMessage) {
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(painterResource(com.kachat.app.R.drawable.ic_kaspa_logo), "Pay in Kaspa", iconTint = Color.Unspecified) {
+                    PopupMenuRow(painterResource(com.kachat.app.R.drawable.ic_kaspa_logo), stringResource(R.string.pay_in_kaspa), iconTint = Color.Unspecified) {
                         navController.navigate("chat/$address?paymentMode=true")
                         showAvatarMenu = false
                     }
@@ -952,7 +1068,7 @@ private fun groupAvatarButton(
                         showAvatarMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.VisibilityOff, "Hide User", labelColor = Color(0xFFFF3B30), iconTint = Color(0xFFFF3B30)) {
+                    PopupMenuRow(Icons.Default.VisibilityOff, stringResource(R.string.hide_user), labelColor = Color(0xFFFF3B30), iconTint = Color(0xFFFF3B30)) {
                         onHide(address)
                         showAvatarMenu = false
                     }
@@ -999,10 +1115,10 @@ fun GroupChatInfoScreen(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Group Info", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.group_info), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = LocalAppColors.current.textPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = LocalAppColors.current.textPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -1047,7 +1163,7 @@ fun GroupChatInfoScreen(
                             Text(text = memberLabel, color = LocalAppColors.current.textPrimary)
                         }
                         if (member.isAdmin) {
-                            Text("Admin", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                            Text(stringResource(R.string.admin), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                         }
                     }
                     if (index < members.size - 1) {
@@ -1068,7 +1184,7 @@ fun GroupChatInfoScreen(
             ) {
                 Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = LocalAppColors.current.textPrimary)
                 Spacer(Modifier.width(12.dp))
-                Text("Hidden Users", color = LocalAppColors.current.textPrimary)
+                Text(stringResource(R.string.hidden_users), color = LocalAppColors.current.textPrimary)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -1082,9 +1198,9 @@ fun GroupChatInfoScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Only Notify if I'm Mentioned", color = LocalAppColors.current.textPrimary)
+                    Text(stringResource(R.string.only_notify_if_i_m_mentioned), color = LocalAppColors.current.textPrimary)
                     Text(
-                        "Other messages still show up in the chat, just silently.",
+                        stringResource(R.string.other_messages_still_show_up_in),
                         color = LocalAppColors.current.textSecondary,
                         fontSize = 12.sp
                     )
@@ -1113,7 +1229,7 @@ fun GroupChatInfoScreen(
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = null, tint = LocalAppColors.current.textPrimary)
                     Spacer(Modifier.width(12.dp))
-                    Text("Rename Group", color = LocalAppColors.current.textPrimary)
+                    Text(stringResource(R.string.rename_group), color = LocalAppColors.current.textPrimary)
                 }
             }
 
@@ -1129,7 +1245,7 @@ fun GroupChatInfoScreen(
             ) {
                 Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFFF3B30))
                 Spacer(Modifier.width(12.dp))
-                Text("Delete Group", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.delete_group), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -1139,11 +1255,11 @@ fun GroupChatInfoScreen(
         AlertDialog(
             onDismissRequest = { showRename = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Rename Group", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.rename_group), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "Every member will see the new name.",
+                        stringResource(R.string.every_member_will_see_the_new),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -1151,7 +1267,7 @@ fun GroupChatInfoScreen(
                     OutlinedTextField(
                         value = renameText,
                         onValueChange = { renameText = it },
-                        label = { Text("Group name") },
+                        label = { Text(stringResource(R.string.group_name_2)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LocalAppColors.current.textPrimary,
@@ -1172,12 +1288,12 @@ fun GroupChatInfoScreen(
                     showRename = false
                     chatViewModel.renameGroup(groupId, trimmed) { error -> renameError = error }
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRename = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -1187,11 +1303,11 @@ fun GroupChatInfoScreen(
         AlertDialog(
             onDismissRequest = { renameError = null },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Couldn't Rename Group", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.couldn_t_rename_group), color = LocalAppColors.current.textPrimary) },
             text = { Text(renameError ?: "", color = LocalAppColors.current.textSecondary) },
             confirmButton = {
                 TextButton(onClick = { renameError = null }) {
-                    Text("OK", color = KaspaTeal)
+                    Text(stringResource(R.string.ok), color = KaspaTeal)
                 }
             }
         )
@@ -1206,10 +1322,10 @@ fun GroupChatInfoScreen(
         AlertDialog(
             onDismissRequest = { showHiddenUsers = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Hidden Users", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.hidden_users), color = LocalAppColors.current.textPrimary) },
             text = {
                 if (hiddenAddresses.isEmpty()) {
-                    Text("No hidden users in this group.", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.no_hidden_users_in_this_group), color = LocalAppColors.current.textSecondary)
                 } else {
                     Column {
                         hiddenAddresses.forEach { address ->
@@ -1223,7 +1339,7 @@ fun GroupChatInfoScreen(
                             ) {
                                 Text(label, color = LocalAppColors.current.textPrimary)
                                 TextButton(onClick = { chatViewModel.unhideGroupMember(groupId, address) }) {
-                                    Text("Unhide", color = KaspaTeal)
+                                    Text(stringResource(R.string.unhide), color = KaspaTeal)
                                 }
                             }
                         }
@@ -1232,7 +1348,7 @@ fun GroupChatInfoScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showHiddenUsers = false }) {
-                    Text("Done", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -1245,7 +1361,7 @@ fun GroupChatInfoScreen(
             title = { Text("Delete \"${group?.name ?: "this group"}\"", color = LocalAppColors.current.textPrimary) },
             text = {
                 Text(
-                    "This removes the group and its messages from this device. This cannot be undone, and other members won't be notified.",
+                    stringResource(R.string.this_removes_the_group_and_its),
                     color = LocalAppColors.current.textSecondary
                 )
             },
@@ -1255,12 +1371,12 @@ fun GroupChatInfoScreen(
                     showDeleteConfirmation = false
                     navController.popBackStack("chats", inclusive = false)
                 }) {
-                    Text("Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("Cancel", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )

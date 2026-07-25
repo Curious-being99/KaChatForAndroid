@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -136,10 +137,10 @@ fun SwapScreen(
 
     LaunchedEffect(createSwapState.status) {
         if (createSwapState.status == SwapViewModel.CreateSwapStatus.SUCCESS) {
-            Toast.makeText(context, "Swap started", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.swap_started), Toast.LENGTH_SHORT).show()
         }
         if (createSwapState.status == SwapViewModel.CreateSwapStatus.FAILED) {
-            Toast.makeText(context, createSwapState.errorMessage ?: "Swap failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, createSwapState.errorMessage ?: context.getString(R.string.swap_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -148,7 +149,7 @@ fun SwapScreen(
         topBar = {
             Column {
                 CenterAlignedTopAppBar(
-                    title = { Text("Swap", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                    title = { Text(stringResource(R.string.swap), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
                 )
                 TabRow(
@@ -159,12 +160,12 @@ fun SwapScreen(
                     Tab(
                         selected = pagerState.currentPage == 0,
                         onClick = { pagerScope.launch { pagerState.animateScrollToPage(0) } },
-                        text = { Text("Swap", fontWeight = FontWeight.Bold) }
+                        text = { Text(stringResource(R.string.swap), fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = pagerState.currentPage == 1,
                         onClick = { pagerScope.launch { pagerState.animateScrollToPage(1) } },
-                        text = { Text("Swap History", fontWeight = FontWeight.Bold) }
+                        text = { Text(stringResource(R.string.swap_history), fontWeight = FontWeight.Bold) }
                     )
                 }
             }
@@ -217,7 +218,7 @@ fun SwapScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Available", color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
+                        Text(stringResource(R.string.available), color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(
                             "%.8f KAS (${if (selectedFromAddress != null) "Address #${selectedFromAddress?.index}" else "Primary"})"
@@ -241,7 +242,7 @@ fun SwapScreen(
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        "Change",
+                        stringResource(R.string.change),
                         color = KaspaTeal,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
@@ -340,7 +341,7 @@ fun SwapScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Receiving KAS At", color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
+                        Text(stringResource(R.string.receiving_kas_at), color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(
                             if (toAddress.length > 20) "${toAddress.take(12)}...${toAddress.takeLast(6)}" else toAddress,
@@ -351,7 +352,7 @@ fun SwapScreen(
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        "Change",
+                        stringResource(R.string.change),
                         color = KaspaTeal,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
@@ -370,7 +371,7 @@ fun SwapScreen(
                     .background(LocalAppColors.current.surface)
                     .padding(10.dp)
             ) {
-                Text("Rate", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.rate), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Spacer(Modifier.height(2.dp))
                 val rateText = if (estimateState.status == SwapViewModel.EstimateStatus.SUCCESS) {
                     val fromAmount = amountText.toDoubleOrNull() ?: 0.0
@@ -428,7 +429,7 @@ fun SwapScreen(
                                 .clickable {
                                     result.payinAddress?.let {
                                         clipboardManager.setText(AnnotatedString(it))
-                                        Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
                                     }
                                 },
                             verticalAlignment = Alignment.CenterVertically
@@ -443,7 +444,7 @@ fun SwapScreen(
                         Spacer(Modifier.height(8.dp))
                         Text("Status: ${result.status ?: "new"}", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(8.dp))
-                        Text("ChangeNOW Exchange ID", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                        Text(stringResource(R.string.changenow_exchange_id), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                         Text(
                             result.id,
                             color = LocalAppColors.current.textPrimary,
@@ -452,20 +453,20 @@ fun SwapScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     clipboardManager.setText(AnnotatedString(result.id))
-                                    Toast.makeText(context, "Exchange ID copied", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.exchange_id_copied), Toast.LENGTH_SHORT).show()
                                 }
                         )
                         Spacer(Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
-                                "Refresh Status",
+                                stringResource(R.string.refresh_status),
                                 color = KaspaTeal,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.clickable { swapViewModel.refreshSwapStatus(result.id) }
                             )
                             Text(
-                                "View on ChangeNOW",
+                                stringResource(R.string.view_on_changenow),
                                 color = KaspaTeal,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodySmall,
@@ -486,7 +487,7 @@ fun SwapScreen(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                "Powered by ChangeNOW",
+                stringResource(R.string.powered_by_changenow),
                 color = KaspaTeal,
                 fontSize = 12.sp,
                 textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
@@ -518,7 +519,7 @@ fun SwapScreen(
                 val amountKas = (if (isKasReceived) swap.toAmount else swap.fromAmount).toDoubleOrNull()
                 val fiatValue = (if (isKasReceived) swap.fromAmount else swap.toAmount).toDoubleOrNull()
                 if (amountKas == null || fiatValue == null) {
-                    Toast.makeText(context, "Couldn't read this swap's amounts", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.couldn_t_read_this_swap_s), Toast.LENGTH_SHORT).show()
                 } else {
                     val notes = android.net.Uri.encode("ChangeNOW swap ${swap.id}")
                     selectedSwapId = null
@@ -536,11 +537,11 @@ fun SwapScreen(
         AlertDialog(
             onDismissRequest = { showFeeEditor = false },
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Adjust Network Fee", color = LocalAppColors.current.textPrimary) },
+            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
             text = {
                 Column {
                     Text(
-                        "If the network is busy, a higher fee can help your transaction confirm faster.",
+                        stringResource(R.string.if_the_network_is_busy_a),
                         color = LocalAppColors.current.textSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -548,7 +549,7 @@ fun SwapScreen(
                     OutlinedTextField(
                         value = feeEditorInput,
                         onValueChange = { feeEditorInput = it },
-                        label = { Text("Fee (KAS)") },
+                        label = { Text(stringResource(R.string.fee_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -584,7 +585,7 @@ fun SwapScreen(
                     )
                     showFeeEditor = false
                 }) {
-                    Text("Save", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -593,10 +594,10 @@ fun SwapScreen(
                         swapViewModel.setFeeRateOverride(null)
                         showFeeEditor = false
                     }) {
-                        Text("Use Default", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
-                        Text("Cancel", color = LocalAppColors.current.textSecondary)
+                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
                 }
             }
@@ -607,26 +608,22 @@ fun SwapScreen(
         AlertDialog(
             onDismissRequest = {},
             containerColor = LocalAppColors.current.surface,
-            title = { Text("Before You Swap", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.before_you_swap), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "Swaps are processed by ChangeNOW, a third-party exchange. By continuing, you " +
-                        "confirm you've read and agree to ChangeNOW's own Terms of Service. KaChat only " +
-                        "submits your swap request and displays its status; KaChat is not responsible for " +
-                        "failed, delayed, or lost swaps. If a swap doesn't go through, contact ChangeNOW " +
-                        "support directly.",
+                    stringResource(R.string.swaps_are_processed_by_changenow_a),
                     color = LocalAppColors.current.textSecondary,
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
             confirmButton = {
                 TextButton(onClick = { swapViewModel.agreeToSwapDisclaimer() }) {
-                    Text("I Agree", color = KaspaTeal, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.i_agree), color = KaspaTeal, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { navController?.popBackStack() }) {
-                    Text("Not Now", color = LocalAppColors.current.textSecondary)
+                    Text(stringResource(R.string.not_now), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -682,7 +679,7 @@ private fun SwapDetailDialog(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                Text("Deposit Address", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.deposit_address), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Text(
                     swap.payinAddress,
                     color = LocalAppColors.current.textPrimary,
@@ -691,12 +688,12 @@ private fun SwapDetailDialog(
                         .fillMaxWidth()
                         .clickable {
                             clipboardManager.setText(AnnotatedString(swap.payinAddress))
-                            Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
                         }
                 )
                 Spacer(Modifier.height(12.dp))
 
-                Text("Status", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.status), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         swap.status.replaceFirstChar { it.uppercase() },
@@ -711,7 +708,7 @@ private fun SwapDetailDialog(
                     if (swap.status == "finished") {
                         Spacer(Modifier.width(16.dp))
                         Text(
-                            "Add to Portfolio",
+                            stringResource(R.string.add_to_portfolio),
                             color = KaspaTeal,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodySmall,
@@ -721,7 +718,7 @@ private fun SwapDetailDialog(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                Text("ChangeNOW Exchange ID", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.changenow_exchange_id), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
                 Text(
                     swap.id,
                     color = LocalAppColors.current.textPrimary,
@@ -730,21 +727,21 @@ private fun SwapDetailDialog(
                         .fillMaxWidth()
                         .clickable {
                             clipboardManager.setText(AnnotatedString(swap.id))
-                            Toast.makeText(context, "Exchange ID copied", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.exchange_id_copied), Toast.LENGTH_SHORT).show()
                         }
                 )
                 Spacer(Modifier.height(20.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(
-                        "Refresh Status",
+                        stringResource(R.string.refresh_status),
                         color = KaspaTeal,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.clickable(onClick = onRefresh)
                     )
                     Text(
-                        "View on ChangeNOW",
+                        stringResource(R.string.view_on_changenow),
                         color = KaspaTeal,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodySmall,
@@ -781,7 +778,7 @@ private fun CoinIcon(coin: SwapCoin, size: Dp = 28.dp) {
             )
             Image(
                 painterResource(R.drawable.ic_polygon_network),
-                contentDescription = "Polygon network",
+                contentDescription = stringResource(R.string.polygon_network),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .size(size * 0.5f)
@@ -797,7 +794,7 @@ private fun CoinIcon(coin: SwapCoin, size: Dp = 28.dp) {
 private fun SwapHistoryPage(swapHistory: List<SwapTransactionEntity>, onSwapClick: (String) -> Unit, onSwapDelete: (String) -> Unit) {
     if (swapHistory.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-            Text("No swaps yet.", color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.no_swaps_yet), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
         }
         return
     }
@@ -886,13 +883,13 @@ private fun SwapAmountCard(
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = onAmountChange,
-                        placeholder = { Text("0.00", color = LocalAppColors.current.textSecondary) },
+                        placeholder = { Text(stringResource(R.string.n_0_00), color = LocalAppColors.current.textSecondary) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
                         ),
                         trailingIcon = onMaxClick?.let { max ->
-                            { TextButton(onClick = max) { Text("Max", color = KaspaTeal) } }
+                            { TextButton(onClick = max) { Text(stringResource(R.string.max), color = KaspaTeal) } }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = KaspaTeal,

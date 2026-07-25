@@ -108,6 +108,22 @@ data class ChessGameStatus(
     val isGameOver: Boolean get() = kind != ChessGameStatusKind.PENDING_RESPONSE && kind != ChessGameStatusKind.IN_PROGRESS
 }
 
+/** One applied move, recorded during [ChessGameEngine.summarize]'s replay - lets callers show the
+ *  actual piece that moved/was captured (e.g. the in-thread move log, captured-pieces tray)
+ *  without re-replaying the game themselves. */
+data class ChessMoveRecord(
+    val from: ChessSquare,
+    val to: ChessSquare,
+    val pieceType: ChessPieceType,
+    val color: ChessColor,
+    val capturedType: ChessPieceType?,
+    val capturedColor: ChessColor?,
+    val promotion: ChessPieceType?,
+    /** id of the chat message this move came from - lets a specific log entry look up its own
+     *  record via `moveHistory.firstOrNull { it.messageId == message.id }`. */
+    val messageId: String
+)
+
 data class ChessGameSummary(
     val gameId: String,
     val status: ChessGameStatus,
@@ -120,8 +136,17 @@ data class ChessGameSummary(
     /** Which color the local device is playing, if it's a participant - lets `statusText` say
      *  "Your turn"/"Their turn" instead of absolute White/Black, which a casual player has to
      *  stop and translate back to "wait, am I white or black in this one?" every time. */
-    val viewerColor: ChessColor? = null
+    val viewerColor: ChessColor? = null,
+    /** Every move actually applied during replay, in play order. */
+    val moveHistory: List<ChessMoveRecord> = emptyList()
 ) {
+    /** Pieces captured so far, grouped by the color that captured them (i.e. `capturedByWhite`
+     *  are black pieces White has taken) - drives a captured-pieces tray. */
+    val capturedByWhite: List<ChessPieceType>
+        get() = moveHistory.filter { it.color == ChessColor.WHITE }.mapNotNull { it.capturedType }
+    val capturedByBlack: List<ChessPieceType>
+        get() = moveHistory.filter { it.color == ChessColor.BLACK }.mapNotNull { it.capturedType }
+
     fun colorFor(address: String): ChessColor? = when (address) {
         whiteAddress -> ChessColor.WHITE
         blackAddress -> ChessColor.BLACK
@@ -181,6 +206,7 @@ object ChessGameEngine {
         var board = ChessEngine.initialBoard()
         var resignerAddress: String? = null
         var lastMessageId: String? = null
+        val moveHistory = mutableListOf<ChessMoveRecord>()
 
         for (message in messages.sortedBy { it.blockTimestamp }) {
             val replyUnwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
@@ -203,7 +229,27 @@ object ChessGameEngine {
                     val promotion = ChessPieceType.fromPromotionLetter(envelope.content.promotion)
                     val move = ChessEngine.normalizingPromotion(ChessMove(from, to, promotion), board)
                     if (!ChessEngine.isLegal(move, board)) continue
+                    val movingPiece = board.piece(from) ?: continue
+                    val isEnPassantCapture = movingPiece.type == ChessPieceType.PAWN &&
+                        to == board.enPassantTarget && board.piece(to) == null
+                    val capturedPiece = if (isEnPassantCapture) {
+                        board.piece(ChessSquare(to.file, from.rank))
+                    } else {
+                        board.piece(to)
+                    }
                     board = ChessEngine.apply(move, board)
+                    moveHistory.add(
+                        ChessMoveRecord(
+                            from = from,
+                            to = to,
+                            pieceType = movingPiece.type,
+                            color = movingPiece.color,
+                            capturedType = capturedPiece?.type,
+                            capturedColor = capturedPiece?.color,
+                            promotion = promotion,
+                            messageId = message.id
+                        )
+                    )
                 }
                 is ChessEnvelope.Resign -> {
                     resignerAddress = senderAddress
@@ -242,7 +288,8 @@ object ChessGameEngine {
             whiteAddress = whiteAddress,
             blackAddress = blackAddress,
             lastMessageId = lastMessageId ?: "",
-            viewerColor = viewerColor
+            viewerColor = viewerColor,
+            moveHistory = moveHistory
         )
     }
 
