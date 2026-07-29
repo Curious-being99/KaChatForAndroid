@@ -5,11 +5,15 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import com.kachat.app.models.PortfolioTransactionEntity
 import com.kachat.app.services.CoinGeckoApi
+import com.kachat.app.services.ColdStorageAddressDiscovery
+import com.kachat.app.services.PortfolioManager
 import com.kachat.app.services.WalletManager
 import com.kachat.app.services.database.KaChatDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -17,6 +21,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.SimpleTimeZone
@@ -30,9 +35,10 @@ import kotlin.math.roundToLong
 /**
  * KAS portfolio tracker — a manual buy/sell ledger plus current/historical price from
  * CoinGecko's free public API (same source Kaspium's wallet uses for its own price display).
- * No on-chain address tracking: an address's transaction history can't reliably distinguish a
- * real purchase from an ordinary payment, so entries are user-entered only (matches
- * CoinMarketCap's own portfolio feature).
+ * Entries are normally user-entered (an address's transaction history can't reliably distinguish
+ * a real purchase from an ordinary payment, matching CoinMarketCap's own portfolio feature), but
+ * [importAddress] offers an explicit opt-in on-chain auto-import for users who want every
+ * send/receive on an address treated as a trade with no filtering — see its doc comment.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -40,25 +46,49 @@ class PortfolioRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: KaChatDatabase,
     private val coinGeckoApi: CoinGeckoApi,
-    private val walletManager: WalletManager
+    private val walletManager: WalletManager,
+    private val portfolioManager: PortfolioManager,
+    private val coldStorageAddressDiscovery: ColdStorageAddressDiscovery
 ) {
-    /** Whichever account is currently active — re-emits automatically on account switch, same pattern as BroadcastRepository/GroupRepository. Pre-scoping rows (walletAddress="") are claimed for the first account to subscribe post-upgrade. */
+    /**
+     * Whichever portfolio is currently active within whichever wallet is currently active —
+     * re-emits automatically on either switching, same pattern as BroadcastRepository/
+     * GroupRepository. Pre-wallet-scoping rows (walletAddress="") are claimed first, then
+     * pre-portfolio-scoping rows (portfolioId="") are claimed for the wallet's default portfolio
+     * — a very old install upgrading straight from before either migration needs both claims in
+     * that order.
+     */
     fun getTransactions(): Flow<List<PortfolioTransactionEntity>> {
-        return walletManager.activeAddressFlow.flatMapLatest { address ->
-            if (address == null) {
+        return combine(walletManager.activeAddressFlow, portfolioManager.activePortfolioIdFlow) { address, portfolioId ->
+            address to portfolioId
+        }.flatMapLatest { (address, portfolioId) ->
+            if (address == null || portfolioId == null) {
                 flowOf(emptyList())
             } else {
                 database.portfolioDao().claimUnscopedTransactions(address)
-                database.portfolioDao().getTransactions(address)
+                database.portfolioDao().claimUnscopedPortfolio(address, portfolioId)
+                database.portfolioDao().getTransactions(address, portfolioId)
             }
         }
     }
 
+    /** Every portfolio's transactions for the current wallet, unfiltered — used by the picker header to compute every portfolio's card simultaneously. */
+    fun getAllTransactionsForWallet(): Flow<List<PortfolioTransactionEntity>> {
+        return walletManager.activeAddressFlow.flatMapLatest { address ->
+            if (address == null) flowOf(emptyList())
+            else database.portfolioDao().getAllTransactionsForWallet(address)
+        }
+    }
+
+    private suspend fun currentPortfolioId(): String? = portfolioManager.activePortfolioIdFlow.first()
+
     suspend fun addTransaction(type: String, amountSompi: Long, fiatValue: Double, timestampMillis: Long = System.currentTimeMillis(), notes: String? = null) {
+        val portfolioId = currentPortfolioId() ?: return
         database.portfolioDao().insert(
             PortfolioTransactionEntity(
                 id = UUID.randomUUID().toString(),
                 walletAddress = walletManager.getAddress(),
+                portfolioId = portfolioId,
                 type = type,
                 amountSompi = amountSompi,
                 fiatValue = fiatValue,
@@ -68,12 +98,21 @@ class PortfolioRepository @Inject constructor(
         )
     }
 
-    /** Same [id] — Room's REPLACE conflict strategy on insert() means this overwrites the existing row. */
+    /**
+     * Same [id] — Room's REPLACE conflict strategy on insert() means this overwrites the
+     * existing row. Preserves the row's existing [PortfolioTransactionEntity.portfolioId] (an
+     * edit never moves a transaction to a different portfolio) rather than re-stamping with
+     * whatever's currently active.
+     */
     suspend fun updateTransaction(id: String, type: String, amountSompi: Long, fiatValue: Double, timestampMillis: Long, notes: String? = null) {
+        val existingPortfolioId = database.portfolioDao().getAllTransactionsForWallet(walletManager.getAddress()).first()
+            .firstOrNull { it.id == id }?.portfolioId
+            ?: currentPortfolioId() ?: return
         database.portfolioDao().insert(
             PortfolioTransactionEntity(
                 id = id,
                 walletAddress = walletManager.getAddress(),
+                portfolioId = existingPortfolioId,
                 type = type,
                 amountSompi = amountSompi,
                 fiatValue = fiatValue,
@@ -87,9 +126,18 @@ class PortfolioRepository @Inject constructor(
 
     /** Null on any failure (offline, rate-limited, etc.) — callers fall back to the last-known price.
      *  [currency] is the lowercase ISO 4217 code (Settings > Customization > Currency, defaults to "usd"). */
-    suspend fun getCurrentPriceUsd(currency: String = "usd"): Double? {
+    /**
+     * [PriceWithChange.change24hPercent] is nil only on a decode/response oddity, not treated as
+     * a separate failure from the price fetch itself — CoinGecko returns both in the same call
+     * (`include_24hr_change=true`), so there's no second request to independently fail.
+     */
+    data class PriceWithChange(val price: Double, val change24hPercent: Double?)
+
+    suspend fun getCurrentPriceUsd(currency: String = "usd"): PriceWithChange? {
         return try {
-            coinGeckoApi.getSimplePrice(vsCurrencies = currency).kaspa[currency]
+            val kaspa = coinGeckoApi.getSimplePrice(vsCurrencies = currency).kaspa
+            val price = kaspa[currency] ?: return null
+            PriceWithChange(price, kaspa["${currency}_24h_change"])
         } catch (e: Exception) {
             null
         }
@@ -104,6 +152,131 @@ class PortfolioRepository @Inject constructor(
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    private val historyDateFormat = java.text.SimpleDateFormat("dd-MM-yyyy", java.util.Locale.US).apply {
+        timeZone = java.util.TimeZone.getTimeZone("UTC")
+    }
+
+    /**
+     * Daily-granularity snapshot price CoinGecko recorded for [dayStartMillis] (pass a UTC
+     * day-start timestamp) — used by "Add Kaspa Address" to price auto-imported transactions.
+     * Null on any failure or when CoinGecko simply has no data for that date, same "degrade
+     * gracefully" contract as [getCurrentPriceUsd]/[getPriceHistory].
+     */
+    suspend fun getHistoricalPrice(dayStartMillis: Long, currency: String = "usd"): Double? {
+        return try {
+            val dateString = synchronized(historyDateFormat) { historyDateFormat.format(java.util.Date(dayStartMillis)) }
+            coinGeckoApi.getHistory(date = dateString).marketData?.currentPrice?.get(currency)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun utcDayStartMillis(timestampMillis: Long): Long {
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        cal.timeInMillis = timestampMillis
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    private fun isValidKaspaAddress(address: String): Boolean {
+        return try {
+            com.kachat.app.util.KaspaAddress.getScriptPublicKey(address).isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Fetches [address]'s on-chain transaction history and adds new buy/sell rows into the
+     * active portfolio — every received transaction becomes a buy, every sent transaction
+     * becomes a sell, priced at that day's historical KAS price. Deliberately no attempt to
+     * filter out ordinary KaChat payments/protocol overhead (see PortfolioTransactionEntity's
+     * doc comment on why manual entry was originally the only path) — an explicit, simpler
+     * alternative the user opted into. Re-entering the same address later only adds transactions
+     * not already present for it (deduped by on-chain tx id). Every matching transaction is
+     * imported even if its day's price couldn't be fetched — it lands with fiatValue 0.0 and a
+     * note flagging it, rather than being silently dropped from the ledger.
+     */
+    suspend fun importAddress(address: String, currency: String = "usd", onProgress: (String) -> Unit): AddressImportResult {
+        val trimmed = address.trim()
+        if (!isValidKaspaAddress(trimmed)) {
+            throw PortfolioAddressImportError.InvalidAddress
+        }
+
+        val walletAddress = walletManager.getAddress()
+        val portfolioId = currentPortfolioId() ?: throw PortfolioAddressImportError.NoTransactions
+
+        val existingTxIds = database.portfolioDao().getAllTransactionsForWallet(walletAddress).first()
+            .filter { it.sourceAddress == trimmed }
+            .mapNotNull { it.sourceTxId }
+            .toSet()
+
+        onProgress("Fetching transactions…")
+        val history = coldStorageAddressDiscovery.getFullTransactionHistoryPaginated(trimmed)
+
+        data class Candidate(val txId: String, val sent: Boolean, val amountSompi: Long, val dayStartMillis: Long, val timestampMillis: Long)
+
+        val candidates = history.mapNotNull { tx ->
+            val blockTime = tx.blockTimeMillis ?: return@mapNotNull null
+            if (existingTxIds.contains(tx.txId)) return@mapNotNull null
+            Candidate(tx.txId, tx.sent, tx.amountSompi, utcDayStartMillis(blockTime), blockTime)
+        }
+        if (candidates.isEmpty()) {
+            throw PortfolioAddressImportError.NoTransactions
+        }
+
+        // One historical-price fetch per unique day (not per transaction) — CoinGecko's history
+        // endpoint is daily-granularity anyway, and this keeps request count bounded even for a
+        // very active address. Paced sequentially to stay under the free tier's rate limit.
+        val priceRequestSpacingMillis = 1_200L
+        val uniqueDays = candidates.map { it.dayStartMillis }.distinct().sorted()
+        val priceByDay = mutableMapOf<Long, Double?>()
+        for ((index, day) in uniqueDays.withIndex()) {
+            onProgress("Pricing ${index + 1}/${uniqueDays.size} days…")
+            var price = getHistoricalPrice(day, currency)
+            if (price == null) {
+                // One retry — a single transient failure shouldn't cost that whole day's rows.
+                delay(priceRequestSpacingMillis)
+                price = getHistoricalPrice(day, currency)
+            }
+            priceByDay[day] = price
+            if (index < uniqueDays.size - 1) {
+                delay(priceRequestSpacingMillis)
+            }
+        }
+
+        // Every candidate is imported regardless of whether its day's price could be fetched —
+        // a row with no price is still real ledger data (type, amount, date, source tx) the user
+        // can see and fill the price into themselves, rather than silently disappearing.
+        var importedCount = 0
+        var missingPriceCount = 0
+        for (candidate in candidates) {
+            val price = priceByDay[candidate.dayStartMillis]
+            if (price == null) missingPriceCount++
+            val amountKas = candidate.amountSompi / 100_000_000.0
+            database.portfolioDao().insert(
+                PortfolioTransactionEntity(
+                    id = UUID.randomUUID().toString(),
+                    walletAddress = walletAddress,
+                    portfolioId = portfolioId,
+                    type = if (candidate.sent) "sell" else "buy",
+                    amountSompi = candidate.amountSompi,
+                    fiatValue = amountKas * (price ?: 0.0),
+                    timestampMillis = candidate.timestampMillis,
+                    notes = if (price == null) PRICE_UNAVAILABLE_NOTE else null,
+                    sourceAddress = trimmed,
+                    sourceTxId = candidate.txId
+                )
+            )
+            importedCount++
+        }
+
+        return AddressImportResult(importedCount, missingPriceCount)
     }
 
     // -------------------------------------------------------------------------
@@ -194,7 +367,14 @@ class PortfolioRepository @Inject constructor(
      * data) rather than adding a duplicate — re-importing a corrected or re-exported CSV updates
      * the ledger instead of piling up copies. Returns the number of rows imported or replaced.
      */
+    /**
+     * Imports into whichever portfolio is currently active. Timestamp-match-and-replace only
+     * considers that portfolio's own rows (not the whole wallet's, which may include other
+     * portfolios' transactions) — otherwise a row could get silently reassigned or overwritten
+     * across portfolios just because two unrelated ledgers happen to share a timestamp.
+     */
     suspend fun importCsv(uri: Uri): Int {
+        val portfolioId = currentPortfolioId() ?: return 0
         val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: return 0
         val lines = content.split("\r\n", "\n", "\r").toMutableList()
         if (lines.isEmpty()) return 0
@@ -202,7 +382,7 @@ class PortfolioRepository @Inject constructor(
         val dateFormat = makeDateFormat(parseHeaderUtcOffset(header))
 
         val walletAddress = walletManager.getAddress()
-        val existing = database.portfolioDao().getTransactions(walletAddress).first()
+        val existing = database.portfolioDao().getTransactions(walletAddress, portfolioId).first()
         val idByTimestamp = existing.associate { it.timestampMillis to it.id }.toMutableMap()
 
         var imported = 0
@@ -243,6 +423,7 @@ class PortfolioRepository @Inject constructor(
                     PortfolioTransactionEntity(
                         id = newId,
                         walletAddress = walletAddress,
+                        portfolioId = portfolioId,
                         type = type,
                         amountSompi = amountSompi,
                         fiatValue = fiatValue,
@@ -282,4 +463,15 @@ class PortfolioRepository @Inject constructor(
         fields.add(current.toString())
         return fields
     }
+}
+
+/** [missingPriceCount] rows were still imported (with fiatValue 0.0 and a flagging note) — not skipped — because that day's historical price couldn't be fetched. */
+data class AddressImportResult(val importedCount: Int, val missingPriceCount: Int)
+
+/** Marks a [PortfolioTransactionEntity.notes] value as "auto-imported but couldn't be priced" — checked by [com.kachat.app.ui.screens.PortfolioScreen]'s transaction row to show a warning icon flagging rows that still need the user to fill in a price. */
+const val PRICE_UNAVAILABLE_NOTE = "Price unavailable — set manually"
+
+sealed class PortfolioAddressImportError(message: String) : Exception(message) {
+    object InvalidAddress : PortfolioAddressImportError("That doesn't look like a valid Kaspa address.")
+    object NoTransactions : PortfolioAddressImportError("No new transactions found for this address.")
 }

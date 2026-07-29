@@ -49,6 +49,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,7 @@ import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.ChessColor
 import com.kachat.app.util.ChessEngine
+import com.kachat.app.util.ChessEnvelope
 import com.kachat.app.util.ChessGameEngine
 import com.kachat.app.util.ChessGameStatusKind
 import com.kachat.app.util.ChessMessage
@@ -86,6 +88,7 @@ import com.kachat.app.util.MessageReply
 import com.kachat.app.util.VoiceMessage
 import com.kachat.app.viewmodels.ChatViewModel
 import com.kachat.app.viewmodels.WalletViewModel
+import kotlinx.coroutines.delay
 
 /**
  * Full-screen interactive chess board, opened by tapping a chess card in a 1:1 chat
@@ -108,6 +111,17 @@ fun ChessGameScreen(
     val messages by chatViewModel.getMessages(contactId).collectAsState(initial = emptyList())
     val myAddress by walletViewModel.address.collectAsState()
     val focusManager = LocalFocusManager.current
+
+    // ChatThreadScreen marks itself "active" (suppressing notifications for this contact while
+    // its own composable is on screen) via the identical DisposableEffect pattern, but navigating
+    // here to the chess board is a separate destination in the NavHost - Compose Navigation
+    // actually disposes ChatThreadScreen while this screen is shown, which cleared that flag and
+    // let move notifications through for a game the user was already watching live. Re-set it
+    // here so it stays active for the whole time this screen (not just the chat thread) is open.
+    DisposableEffect(contactId) {
+        chatViewModel.setActiveContact(contactId)
+        onDispose { chatViewModel.setActiveContact(null) }
+    }
 
     // Every non-chess message in the conversation - chess move/invite/response/resign envelopes
     // are deliberately excluded since the live board above already shows that state; repeating
@@ -139,6 +153,31 @@ fun ChessGameScreen(
         if (address != null) summary?.colorFor(address) else null
     }
     val isMyTurn = summary != null && myColor != null && summary.status.kind == ChessGameStatusKind.IN_PROGRESS && summary.board.sideToMove == myColor
+
+    // Cumulative wins/losses against this contact, across every chess game ever played with them
+    // (not just the current one) - see ChessGameEngine.record.
+    val chessRecord = remember(chessSourceMessages, myAddress) {
+        val address = myAddress
+        if (address != null) ChessGameEngine.record(chessSourceMessages, address, contactId) else 0 to 0
+    }
+
+    // The MessageEntity behind the most recent action in this game, whichever it was (invite/
+    // move/response/resign) - ChessGameSummary.lastMessageId already identifies it.
+    val lastActionMessage = remember(summary, messages) {
+        summary?.let { s -> messages.firstOrNull { it.id == s.lastMessageId } }
+    }
+    // Drives the "Sent"/"Retry" indicator under the turn status - only shown right after *I*
+    // made the most recent move (not after an invite/response/resign, and not when the most
+    // recent action was the opponent's move, which has no local delivery status to report).
+    val lastMoveSendStatus = remember(lastActionMessage) {
+        val message = lastActionMessage
+        if (message != null && message.direction == "sent") {
+            val unwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
+            if (ChessMessage.parseOrNull(unwrapped) is ChessEnvelope.Move) message.deliveryStatus else null
+        } else {
+            null
+        }
+    }
 
     var selectedSquare by remember { mutableStateOf<ChessSquare?>(null) }
     var pendingPromotionMove by remember { mutableStateOf<ChessMove?>(null) }
@@ -203,6 +242,12 @@ fun ChessGameScreen(
                                 fontSize = 12.sp
                             )
                         }
+                        if (lastMoveSendStatus != null) {
+                            MoveSendStatusRow(
+                                status = lastMoveSendStatus,
+                                onRetry = { lastActionMessage?.let { chatViewModel.retrySendMessage(it) } }
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -212,10 +257,13 @@ fun ChessGameScreen(
                     }
                 },
                 actions = {
-                    if (summary != null && summary.status.kind == ChessGameStatusKind.IN_PROGRESS) {
-                        TextButton(onClick = { showResignConfirm = true }) {
-                            Text(stringResource(R.string.resign), color = Color(0xFFFF3B30))
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (summary != null && summary.status.kind == ChessGameStatusKind.IN_PROGRESS) {
+                            TextButton(onClick = { showResignConfirm = true }) {
+                                Text(stringResource(R.string.resign), color = Color(0xFFFF3B30))
+                            }
                         }
+                        WinLossCounter(wins = chessRecord.first, losses = chessRecord.second)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalAppColors.current.background)
@@ -284,14 +332,19 @@ fun ChessGameScreen(
                 Spacer(Modifier.height(8.dp))
                 CapturedPiecesBar(summary, myColor ?: ChessColor.WHITE)
                 Spacer(Modifier.height(8.dp))
-                InteractiveChessBoard(
-                    board = summary.board,
-                    orientation = myColor ?: ChessColor.WHITE,
-                    selectedSquare = selectedSquare,
-                    legalDestinations = legalDestinations,
-                    lastMove = summary.moveHistory.lastOrNull(),
-                    onSquareTap = ::handleTap
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    InteractiveChessBoard(
+                        board = summary.board,
+                        orientation = myColor ?: ChessColor.WHITE,
+                        selectedSquare = selectedSquare,
+                        legalDestinations = legalDestinations,
+                        lastMove = summary.moveHistory.lastOrNull(),
+                        onSquareTap = ::handleTap
+                    )
+                    if (!isMyTurn && summary.status.kind == ChessGameStatusKind.IN_PROGRESS) {
+                        WaitingOnOpponentOverlay()
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
                 ChessChatHistory(
@@ -346,6 +399,77 @@ fun ChessGameScreen(
                 }
             },
             confirmButton = {}
+        )
+    }
+}
+
+/** "Sent"/"Retry" indicator directly under the turn status, so the player has confirmation their
+ *  move actually went through while in full-screen game mode (they can't see the normal chat
+ *  transcript's own delivery-status ticks from here). Mirrors the app's existing sent/pending/
+ *  failed icon language (see [ChessChatRow]'s status icon) rather than inventing new iconography. */
+@Composable
+private fun MoveSendStatusRow(status: String, onRetry: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = if (status == "failed") Modifier.clickable { onRetry() } else Modifier
+    ) {
+        when (status) {
+            "sent" -> {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CD964), modifier = Modifier.size(14.dp))
+                Text(stringResource(R.string.sent), color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
+            }
+            "failed" -> {
+                Icon(Icons.Default.Error, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(14.dp))
+                Text(stringResource(R.string.retry), color = Color(0xFFFF3B30), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            else -> {
+                Icon(Icons.Default.Schedule, contentDescription = null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(14.dp))
+                Text(stringResource(R.string.sending), color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+/** "W" / "L" small labels over a "0 - 0"-style tally - top bar, under the Resign button, always
+ *  visible (not just mid-game) so the running record against this contact stays in view. */
+@Composable
+private fun WinLossCounter(wins: Int, losses: Int) {
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("W", fontSize = 9.sp, color = LocalAppColors.current.textSecondary)
+            Text("$wins", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LocalAppColors.current.textPrimary)
+        }
+        Text("-", fontSize = 12.sp, color = LocalAppColors.current.textSecondary)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("L", fontSize = 9.sp, color = LocalAppColors.current.textSecondary)
+            Text("$losses", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LocalAppColors.current.textPrimary)
+        }
+    }
+}
+
+/** Overlay shown on the board while waiting for the opponent's move - the "..." cycles 1/2/3 dots
+ *  like a typing indicator rather than sitting static, so it reads as "still waiting" rather than
+ *  looking frozen/stuck. */
+@Composable
+private fun WaitingOnOpponentOverlay() {
+    var dotCount by remember { mutableStateOf(1) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            dotCount = (dotCount % 3) + 1
+        }
+    }
+    Box(
+        modifier = Modifier
+            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Text(
+            stringResource(R.string.waiting_on_opponent) + ".".repeat(dotCount),
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
         )
     }
 }

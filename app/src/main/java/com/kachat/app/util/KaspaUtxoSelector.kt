@@ -82,6 +82,43 @@ object KaspaUtxoSelector {
     }
 
     /**
+     * Coin control: prices and validates a user-picked, fixed set of UTXOs instead of greedily
+     * growing one. Same "close enough" leeway and always-price-a-change-output policy as
+     * [selectUtxosAndCalculateFee].
+     */
+    fun selectManualUtxosAndCalculateFee(
+        utxos: List<UtxoEntry>,
+        amountSompi: Long,
+        feeRateSompiPerGram: Long,
+        recipientScriptLen: Int,
+        changeScriptLen: Int
+    ): SelectionResult {
+        val totalSelected = utxos.sumOf { it.utxoEntry.amount }
+        val outputScriptLens = if (amountSompi > 0) listOf(recipientScriptLen, changeScriptLen) else listOf(changeScriptLen)
+        val mass = KaspaMass.calculateMass(numInputs = utxos.size, outputScriptLens = outputScriptLens, payloadSize = 0)
+        val estimatedFee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
+
+        var finalAmount = amountSompi
+        var requiredAmount = amountSompi + estimatedFee
+        if (totalSelected < requiredAmount) {
+            if (totalSelected > estimatedFee && (requiredAmount - totalSelected) < 2000) {
+                finalAmount = totalSelected - estimatedFee
+                requiredAmount = totalSelected
+            }
+        }
+        val changeAmount = totalSelected - finalAmount - estimatedFee
+
+        return SelectionResult(
+            selectedUtxos = utxos,
+            totalSelected = totalSelected,
+            estimatedFee = estimatedFee,
+            finalAmount = finalAmount,
+            changeAmount = changeAmount,
+            requiredAmount = requiredAmount
+        )
+    }
+
+    /**
      * For the spending-address "sweep everything on every send" design (see
      * KaspaWalletEngine.sendSpendingPayment): unlike [selectUtxosAndCalculateFee], which stops
      * as soon as it's picked *enough* large UTXOs to cover the amount+fee, this always spends

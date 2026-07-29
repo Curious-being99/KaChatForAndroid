@@ -24,7 +24,17 @@ fun formatFiatAmount(value: Double, currencyCode: String): String {
     return "$sign${currencySymbolFor(currencyCode)}${String.format(Locale.US, "%,.2f", kotlin.math.abs(value))}"
 }
 
-/** Trimmed 8-decimal KAS amount (e.g. "12.5" rather than "12.50000000"). */
+/**
+ * Trimmed 8-decimal KAS amount (e.g. "12.5" rather than "12.50000000"). Deliberately no thousands
+ * separators — this feeds live-editable amount text fields ([KaspaFiatAmountState] and the
+ * Portfolio transaction editor's quantity field), where a comma would break `toDoubleOrNull()`
+ * parsing. For a display-only comma-grouped variant, see [formatKasAmountGrouped].
+ */
 fun formatKasAmount(kas: Double): String {
     return String.format(Locale.US, "%.8f", kas).trimEnd('0').trimEnd('.')
+}
+
+/** Same as [formatKasAmount] but with thousands separators (e.g. "12,345.5") — for read-only display only, never for a value that gets parsed back (e.g. an editable text field). */
+fun formatKasAmountGrouped(kas: Double): String {
+    return String.format(Locale.US, "%,.8f", kas).trimEnd('0').trimEnd('.')
 }

@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">بررسی حجم پشتیبان Drive</string>
     <string name="checking_availability">بررسی در دسترس بودن...</string>
     <string name="checking_your_chatting_address_balance">در حال بررسی موجودی آدرس گفتگوی شما...</string>
+    <string name="chess_stats">امار شطرنج</string>
     <string name="choose_avatar">آواتار را انتخاب کنید</string>
     <string name="choose_banner">بنر را انتخاب کنید</string>
+    <string name="choose_coin">انتخاب سکه</string>
     <string name="choose_photo">انتخاب عکس</string>
     <string name="choose_which_tabs_appear_in_your">انتخاب کنید کدام تب‌ها در منوی پایینی شما نمایش داده شوند.</string>
     <string name="clear">پاک کردن</string>
@@ -90,6 +92,8 @@
     <string name="delete">حذف</string>
     <string name="delete_account">حذف حساب</string>
     <string name="delete_group">حذف گروه</string>
+    <string name="delete_swap_history_message">این فقط آن را از تاریخچه محلی شما حذف می‌کند - روی مبادله واقعی تأثیری ندارد.</string>
+    <string name="delete_this_swap">این تبادل حذف شود؟</string>
     <string name="delete_transaction">حذف تراکنش</string>
     <string name="deposit_address">آدرس واریز</string>
     <string name="domain_name">نام دامنه</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">کد QR</string>
     <string name="quantity">مقدار</string>
     <string name="rate">نرخ</string>
+    <string name="read">خوانده‌شده</string>
     <string name="receiving_kas_at">دریافت KAS در</string>
     <string name="recipient_address">آدرس گیرنده</string>
     <string name="recipient_address_or_kas_name">آدرس گیرنده یا نام .kas</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">در حال تحلیل دامنه…</string>
     <string name="resolving">در حال تحلیل...</string>
     <string name="retention">نگهداری</string>
+    <string name="retry">تلاش مجدد</string>
     <string name="retry_inscription_reveal">تلاش مجدد برای رونمایی کتیبه</string>
     <string name="save">ذخیره</string>
     <string name="saved_accounts">حساب‌های ذخیره‌شده</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">این را با دستگاه KasSigner خود اسکن کنید، آنجا بررسی کنید، سپس امضا کنید.</string>
     <string name="scroll_to_latest">پیمایش به آخرین</string>
     <string name="search_chats">جستجوی گفتگوها</string>
+    <string name="search_coins">جستجوی سکه‌ها</string>
     <string name="secure_messaging_on_kaspa_blockdag">پیام‌رسانی امن روی Kaspa BlockDAG</string>
     <string name="security_warning">هشدار امنیتی</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">تلاش مجدد</string>
     <string name="unhide">لغو پنهان‌سازی</string>
     <string name="unlink">حذف پیوند</string>
+    <string name="unread">خوانده‌نشده</string>
     <string name="use_default">استفاده از پیش‌فرض</string>
     <string name="users_you_hide_from_a_broadcast">کاربرانی که از یک اتاق پخش پنهان می‌کنید (از طریق منوی آواتار آن‌ها) اینجا نمایش داده می‌شوند و هرگز در هیچ اتاقی ظاهر یا ذخیره نمی‌شوند.</string>
     <string name="valid_address">آدرس معتبر</string>
     <string name="view_on_changenow">مشاهده در ChangeNOW</string>
     <string name="waiting_for_camera">در انتظار دوربین...</string>
+    <string name="waiting_on_opponent">در انتظار حریف</string>
     <string name="walk_through_setting_up_your_domain">شما را گام‌به‌گام در راه‌اندازی دامنه، بنر، آواتار و جزئیات خود راهنمایی می‌کند.</string>
     <string name="when_you_message_someone_new_on">وقتی به شخص جدیدی در KaChat پیام می‌دهید، او اعلانی دریافت نمی‌کند و پیام شما پنهان می‌ماند تا زمانی که به شما پاسخ دهد یا شما را نیز اضافه کند. این از هرزنامه محافظت کرده و حریم خصوصی شما را افزایش می‌دهد. اگر می‌خواهید او مطلع شود، روی آیکون دست ضربه بزنید تا درخواست ارتباطی ارسال کنید که 0.2 KAS هزینه دارد. (توجه: تمام برنامه‌های پیام‌رسانی غیر از KaChat به درخواست ارتباط نیاز خواهند داشت)</string>
     <string name="wipe_account">پاک کردن حساب</string>

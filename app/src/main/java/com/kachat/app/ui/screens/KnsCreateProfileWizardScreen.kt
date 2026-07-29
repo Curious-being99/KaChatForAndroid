@@ -697,7 +697,7 @@ private fun KnsDetailsStep(viewModel: WalletViewModel, existingProfile: KnsProfi
         )
         Spacer(Modifier.height(16.dp))
 
-        KnsDetailField(stringResource(R.string.bio), "bio", editProfileState, bio) { bio = it }
+        KnsDetailField(stringResource(R.string.bio), "bio", editProfileState, bio, singleLine = false) { bio = it }
         KnsDetailField(stringResource(R.string.website), "website", editProfileState, website) { website = it }
         KnsDetailField(stringResource(R.string.x_twitter), "x", editProfileState, x) { x = it }
         KnsDetailField(stringResource(R.string.telegram), "telegram", editProfileState, telegram) { telegram = it }
@@ -762,6 +762,7 @@ private fun KnsDetailField(
     fieldKey: String,
     editProfileState: WalletViewModel.EditProfileUiState,
     value: String,
+    singleLine: Boolean = true,
     onValueChange: (String) -> Unit
 ) {
     val isSubmittingThisField = editProfileState.step == WalletViewModel.EditProfileStep.SUBMITTING_FIELD &&
@@ -794,7 +795,7 @@ private fun KnsDetailField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            singleLine = true,
+            singleLine = singleLine,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = LocalAppColors.current.textPrimary,
                 unfocusedTextColor = LocalAppColors.current.textPrimary,

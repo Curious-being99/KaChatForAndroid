@@ -160,13 +160,17 @@ fun GroupChatThreadScreen(
     groupId: String,
     chatViewModel: ChatViewModel = hiltViewModel(),
     walletViewModel: com.kachat.app.viewmodels.WalletViewModel = hiltViewModel(),
-    settingsViewModel: com.kachat.app.viewmodels.SettingsViewModel = hiltViewModel()
+    settingsViewModel: com.kachat.app.viewmodels.SettingsViewModel = hiltViewModel(),
+    connectionViewModel: com.kachat.app.viewmodels.ConnectionViewModel = hiltViewModel()
 ) {
+    val dotColorHex by connectionViewModel.dotColorHex.collectAsState()
     val myAddress by walletViewModel.address.collectAsState()
     val myKnsProfile by walletViewModel.knsProfile.collectAsState()
     val groups by chatViewModel.groups.collectAsState()
     val group = groups.firstOrNull { it.groupId == groupId }
     val messages by chatViewModel.getGroupMessages(groupId).collectAsState(initial = emptyList())
+    val groupReactions by chatViewModel.getGroupReactions(groupId).collectAsState(initial = emptyList())
+    val groupReactionsByTxId = remember(groupReactions) { groupReactions.groupBy { it.targetTxId } }
     val groupReplyingTo by chatViewModel.groupReplyingTo.collectAsState()
     val contactAvatarsByAddress by chatViewModel.contactAvatarsByAddress.collectAsState()
     val contactAliasesByAddress by chatViewModel.contactAliasesByAddress.collectAsState()
@@ -290,8 +294,20 @@ fun GroupChatThreadScreen(
         }
     }
 
+    // The very first population of the list (opening the group chat) jumps instantly instead of
+    // animating - matches ChatThreadScreen's identical fix in Screens.kt (the LazyColumn otherwise
+    // renders at the top first, and animating from there visibly scrolls through the whole
+    // history before settling at the bottom). Only messages arriving while already open animate.
+    var hasScrolledToInitialPosition by remember { mutableStateOf(false) }
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isNotEmpty()) {
+            if (!hasScrolledToInitialPosition) {
+                listState.scrollToItem(messages.size - 1)
+                hasScrolledToInitialPosition = true
+            } else {
+                listState.animateScrollToItem(messages.size - 1)
+            }
+        }
     }
 
     // KNS name/avatar for each member isn't fetched automatically - the roster's own
@@ -320,6 +336,17 @@ fun GroupChatThreadScreen(
                     }
                 },
                 actions = {
+                    val statusColor = Color(dotColorHex)
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(LocalAppColors.current.surface, CircleShape)
+                            .clickable { navController.navigate("connection_status") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(modifier = Modifier.size(10.dp).background(statusColor, CircleShape))
+                    }
+                    Spacer(Modifier.width(8.dp))
                     IconButton(onClick = { navController.navigate("group_chat_info/$groupId") }) {
                         Icon(Icons.Default.Info, contentDescription = stringResource(R.string.group_info), tint = LocalAppColors.current.textPrimary)
                     }
@@ -485,6 +512,18 @@ fun GroupChatThreadScreen(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent
                                 ),
+                                // Quick-access camera, replacing what used to be a "Camera" entry
+                                // in the "+" menu - living right in the message bubble instead
+                                // since it's the most common non-text action. Matches 1:1 chat.
+                                trailingIcon = {
+                                    IconButton(onClick = { startCameraCapture() }) {
+                                        Icon(
+                                            Icons.Default.CameraAlt,
+                                            contentDescription = stringResource(R.string.camera),
+                                            tint = LocalAppColors.current.textSecondary
+                                        )
+                                    }
+                                },
                                 maxLines = 5
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -498,11 +537,6 @@ fun GroupChatThreadScreen(
                                 }
                                 if (showComposerMenu) {
                                     CenteredOptionsMenu(onDismissRequest = { showComposerMenu = false }, anchor = composerMenuAnchor) {
-                                        PopupMenuRow(Icons.Default.CameraAlt, stringResource(R.string.camera)) {
-                                            showComposerMenu = false
-                                            startCameraCapture()
-                                        }
-                                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
                                         PopupMenuRow(Icons.Default.Image, stringResource(R.string.send_photo_2)) {
                                             showComposerMenu = false
                                             photoPickerLauncher.launch("image/*")
@@ -589,6 +623,12 @@ fun GroupChatThreadScreen(
                         navController = navController,
                         onRetry = { chatViewModel.retryGroupMessage(groupId, message.content) },
                         onReply = { chatViewModel.startGroupReplyTo(message) },
+                        reactions = groupReactionsByTxId[message.txId] ?: emptyList(),
+                        onReact = { emoji ->
+                            val existing = groupReactionsByTxId[message.txId]?.find { it.reactorAddress == myAddress }
+                            val action = if (existing?.emoji == emoji) "remove" else "add"
+                            chatViewModel.sendGroupReaction(groupId, message.txId, emoji, action)
+                        },
                         onJumpToReply = jumpToReply,
                         isHighlighted = message.txId == highlightedMessageId,
                         resolveMentionName = resolveDisplayName,
@@ -782,6 +822,8 @@ private fun GroupMessageBubble(
     navController: NavController,
     onRetry: () -> Unit,
     onReply: () -> Unit = {},
+    reactions: List<com.kachat.app.models.ReactionEntity> = emptyList(),
+    onReact: (String) -> Unit = {},
     /** Tapping the reply quote (if any) jumps to and highlights the original message. */
     onJumpToReply: (String) -> Unit = {},
     isHighlighted: Boolean = false,
@@ -820,6 +862,7 @@ private fun GroupMessageBubble(
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     var showMenu by remember { mutableStateOf(false) }
+    var showQuickReactionBar by remember { mutableStateOf(false) }
     var menuAnchor by remember { mutableStateOf(Offset.Zero) }
     val canRetry = isSent && message.deliveryStatus == "failed"
     val highlightColor by animateColorAsState(
@@ -907,8 +950,8 @@ private fun GroupMessageBubble(
             }
 
             when {
-                voiceContent != null -> AudioBubble(voiceContent = voiceContent, isSent = isSent, onLongPress = { showMenu = true })
-                imageContent != null -> ImageBubble(imageContent = imageContent, isSent = isSent, onLongPress = { showMenu = true }, senderDisplayName = senderName)
+                voiceContent != null -> AudioBubble(voiceContent = voiceContent, isSent = isSent, onLongPress = { showMenu = true }, onDoubleClick = { showQuickReactionBar = true })
+                imageContent != null -> ImageBubble(imageContent = imageContent, isSent = isSent, onLongPress = { showMenu = true }, onDoubleClick = { showQuickReactionBar = true }, senderDisplayName = senderName)
                 else -> {
                     var groupTextLayoutResult by remember(displayContent) { mutableStateOf<TextLayoutResult?>(null) }
                     // Sent bubbles are teal with black text/links for contrast - matches 1:1 chat's
@@ -936,6 +979,7 @@ private fun GroupMessageBubble(
                                 .pointerInput(annotatedGroupBody) {
                                     detectTapGestures(
                                         onLongPress = { showMenu = true },
+                                        onDoubleTap = { showQuickReactionBar = true },
                                         onTap = { offset ->
                                             val layout = groupTextLayoutResult ?: return@detectTapGestures
                                             val charOffset = layout.getOffsetForPosition(offset)
@@ -986,6 +1030,26 @@ private fun GroupMessageBubble(
                             showMenu = false
                         }
                     }
+                }
+            }
+
+            if (showQuickReactionBar) {
+                QuickReactionBar(
+                    onDismissRequest = { showQuickReactionBar = false },
+                    anchor = menuAnchor,
+                    onReact = onReact,
+                    onReply = onReply
+                )
+            }
+
+            if (reactions.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    ReactionPill(
+                        reactions = reactions,
+                        modifier = Modifier
+                            .align(if (isSent) Alignment.CenterStart else Alignment.CenterEnd)
+                            .offset(y = 10.dp)
+                    )
                 }
             }
         }

@@ -14,7 +14,9 @@ import com.kachat.app.models.GroupSyncCursorEntity
 import com.kachat.app.models.HiddenBroadcastSenderEntity
 import com.kachat.app.models.MessageEntity
 import com.kachat.app.models.MessageSyncCursorEntity
+import com.kachat.app.models.PortfolioEntity
 import com.kachat.app.models.PortfolioTransactionEntity
+import com.kachat.app.models.ReactionEntity
 import com.kachat.app.models.SwapTransactionEntity
 
 /**
@@ -34,12 +36,14 @@ import com.kachat.app.models.SwapTransactionEntity
         DeletedContactEntity::class,
         MessageSyncCursorEntity::class,
         PortfolioTransactionEntity::class,
+        PortfolioEntity::class,
         SwapTransactionEntity::class,
         GroupEntity::class,
         GroupMessageEntity::class,
         GroupSyncCursorEntity::class,
+        ReactionEntity::class,
     ],
-    version = 28,
+    version = 31,
     exportSchema = true
 )
 abstract class KaChatDatabase : RoomDatabase() {
@@ -47,8 +51,10 @@ abstract class KaChatDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun broadcastDao(): BroadcastDao
     abstract fun portfolioDao(): PortfolioDao
+    abstract fun portfolioDefinitionDao(): PortfolioDefinitionDao
     abstract fun swapDao(): SwapDao
     abstract fun groupDao(): GroupDao
+    abstract fun reactionDao(): ReactionDao
 
     companion object {
         /**
@@ -277,6 +283,54 @@ abstract class KaChatDatabase : RoomDatabase() {
         val MIGRATION_27_28 = object : Migration(27, 28) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `walletAddress` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * Adds the "up to 5 named portfolios per wallet" split - see PortfolioEntity's doc
+         * comment. New `portfolios` table plus a `portfolioId` column on `portfolio_transactions`
+         * (existing rows get '', a non-null default for the same ALTER TABLE reason as
+         * MIGRATION_27_28's `walletAddress`) - claimed for the wallet's default portfolio lazily
+         * by PortfolioRepository/PortfolioManager, not here.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `portfolios` (
+                        `id` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `name` TEXT NOT NULL,
+                        `sortOrder` INTEGER NOT NULL, `createdAtMillis` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`))"""
+                )
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `portfolioId` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * Adds "Add Kaspa Address" auto-import support - see PortfolioTransactionEntity's doc
+         * comment. Both columns are genuinely nullable (not a migrated-in requirement like the
+         * two ALTER TABLEs above), so no lazy-claim step is needed here or in PortfolioRepository.
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `sourceAddress` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `sourceTxId` TEXT DEFAULT NULL")
+            }
+        }
+
+        /**
+         * Adds `reactions` - tapback-style reactions sent/received for both 1:1 and group
+         * messages (one row per (targetTxId, walletAddress, reactorAddress); see
+         * [com.kachat.app.models.ReactionEntity]). Purely additive, no data to backfill.
+         */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `reactions` (
+                        `targetTxId` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `reactorAddress` TEXT NOT NULL,
+                        `emoji` TEXT NOT NULL, `reactionTxId` TEXT, `blockTimestamp` INTEGER NOT NULL,
+                        `contactId` TEXT, `groupId` TEXT,
+                        PRIMARY KEY(`targetTxId`, `walletAddress`, `reactorAddress`))"""
+                )
             }
         }
     }

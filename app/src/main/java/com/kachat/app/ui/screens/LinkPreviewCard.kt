@@ -48,10 +48,10 @@ import com.kachat.app.ui.theme.LocalAppColors
 private val VIDEO_HOSTS = setOf("youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com")
 
 /** Rich link-preview card shown below a chat bubble's text when the message contains a link -
- *  mirrors iMessage. Renders nothing while the fetch is in flight and nothing if no preview data
- *  was found (a bare/broken link, or a site with no Open Graph tags), rather than a placeholder
- *  that could flash or look broken. Used by [MessageBubble] and `GroupMessageBubble` only -
- *  broadcast rooms never call this.
+ *  mirrors iMessage. Renders nothing while the fetch is in flight, rather than a placeholder that
+ *  could flash or look broken. If no preview data is found (a bare/broken link, or a site with no
+ *  Open Graph tags), falls back to [fallbackText] if given, else renders nothing. Used by
+ *  [MessageBubble] and `GroupMessageBubble` only - broadcast rooms never call this.
  *
  *  [txId] is the owning message's transaction id, for the "View in Explorer" long-press action -
  *  matches every other bubble type's identical action ([MessageBubble]'s
@@ -60,7 +60,13 @@ private val VIDEO_HOSTS = setOf("youtube.com", "www.youtube.com", "youtu.be", "m
 fun LinkPreviewCard(
     url: String,
     txId: String,
-    kaspaExplorer: KaspaExplorer = KaspaExplorer.default
+    kaspaExplorer: KaspaExplorer = KaspaExplorer.default,
+    /** Non-null only when this card is standing in for the *entire* message (nothing but a bare
+     *  link, no separate text bubble shown alongside it) - shown as a plain tappable-link bubble
+     *  if the fetch finds no preview data, so the message doesn't render as nothing at all. Null
+     *  when used alongside a real text bubble, where showing nothing on failure is correct since
+     *  the message's own text is already visible. Mirrors iOS's `LinkPreviewCardView.fallbackText`. */
+    fallbackText: String? = null
 ) {
     var preview by remember(url) { mutableStateOf<LinkPreviewData?>(null) }
     var hasFinishedLoading by remember(url) { mutableStateOf(false) }
@@ -73,6 +79,49 @@ fun LinkPreviewCard(
 
     if (hasFinishedLoading && preview != null) {
         LinkPreviewCardContent(data = preview!!, url = url, txId = txId, kaspaExplorer = kaspaExplorer)
+    } else if (hasFinishedLoading && fallbackText != null) {
+        LinkPreviewFallbackBubble(text = fallbackText, url = url, txId = txId, kaspaExplorer = kaspaExplorer)
+    }
+}
+
+@Composable
+private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, kaspaExplorer: KaspaExplorer) {
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
+    var showMenu by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf(Offset.Zero) }
+
+    Text(
+        text,
+        color = LocalAppColors.current.textPrimary,
+        modifier = Modifier
+            .widthIn(max = 280.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(LocalAppColors.current.surface)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .onGloballyPositioned { coords ->
+                menuAnchor = coords.positionInWindow() + Offset(0f, coords.size.height.toFloat())
+            }
+            .pointerInput(url) {
+                detectTapGestures(
+                    onLongPress = { showMenu = true },
+                    onTap = { uriHandler.openUri(url) }
+                )
+            }
+    )
+
+    if (showMenu) {
+        CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
+            PopupMenuRow(Icons.Default.ContentCopy, "Copy Link") {
+                clipboardManager.setText(AnnotatedString(url))
+                showMenu = false
+            }
+            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+            PopupMenuRow(Icons.Default.Tag, "View in Explorer") {
+                uriHandler.openUri(kaspaExplorer.txUrl(txId))
+                showMenu = false
+            }
+        }
     }
 }
 

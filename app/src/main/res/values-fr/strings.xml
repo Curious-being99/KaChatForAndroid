@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Verifier la taille de la sauvegarde Drive</string>
     <string name="checking_availability">Vérification de la disponibilité...</string>
     <string name="checking_your_chatting_address_balance">Verification du solde de votre adresse de discussion...</string>
+    <string name="chess_stats">Statistiques d\'echecs</string>
     <string name="choose_avatar">Choisissez un avatar</string>
     <string name="choose_banner">Choisissez une bannière</string>
+    <string name="choose_coin">Choisir la piece</string>
     <string name="choose_photo">Choisir une photo</string>
     <string name="choose_which_tabs_appear_in_your">Choisissez les onglets qui apparaissent dans votre menu inferieur.</string>
     <string name="clear">Effacer</string>
@@ -90,6 +92,8 @@
     <string name="delete">Supprimer</string>
     <string name="delete_account">Supprimer le compte</string>
     <string name="delete_group">Supprimer le groupe</string>
+    <string name="delete_swap_history_message">Cela le supprime uniquement de votre historique local - cela n\'affecte pas l\'échange réel.</string>
+    <string name="delete_this_swap">Supprimer cet échange ?</string>
     <string name="delete_transaction">Supprimer la transaction</string>
     <string name="deposit_address">Adresse de depot</string>
     <string name="domain_name">Nom de domaine</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">Code QR</string>
     <string name="quantity">Quantite</string>
     <string name="rate">Taux</string>
+    <string name="read">Lu</string>
     <string name="receiving_kas_at">Reception de KAS a</string>
     <string name="recipient_address">Adresse du destinataire</string>
     <string name="recipient_address_or_kas_name">Adresse du destinataire ou nom .kas</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">Resolution du domaine…</string>
     <string name="resolving">Resolution...</string>
     <string name="retention">Retention</string>
+    <string name="retry">Reessayer</string>
     <string name="retry_inscription_reveal">Reessayer la revelation de l\'inscription</string>
     <string name="save">Enregistrer</string>
     <string name="saved_accounts">Comptes enregistrés</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">Scannez ceci avec votre appareil KasSigner, verifiez-le la-bas, puis signez.</string>
     <string name="scroll_to_latest">Defiler jusqu\'au plus recent</string>
     <string name="search_chats">Rechercher dans les discussions</string>
+    <string name="search_coins">Rechercher des pieces</string>
     <string name="secure_messaging_on_kaspa_blockdag">Messagerie sécurisée sur Kaspa BlockDAG</string>
     <string name="security_warning">Avertissement de sécurité</string>
     <string name="seed_phrase">Phrase de récupération</string>
@@ -314,11 +321,13 @@
     <string name="try_again">Reessayer</string>
     <string name="unhide">Ne plus masquer</string>
     <string name="unlink">Dissocier</string>
+    <string name="unread">Non lu</string>
     <string name="use_default">Utiliser par defaut</string>
     <string name="users_you_hide_from_a_broadcast">Les utilisateurs que vous masquez d\'un salon de diffusion (via leur menu d\'avatar) apparaissent ici, et n\'apparaissent ni ne sont mis en cache dans aucun salon.</string>
     <string name="valid_address">Adresse valide</string>
     <string name="view_on_changenow">Voir sur ChangeNOW</string>
     <string name="waiting_for_camera">En attente de la camera...</string>
+    <string name="waiting_on_opponent">En attente de l\'adversaire</string>
     <string name="walk_through_setting_up_your_domain">Suivez pas a pas la configuration de votre domaine, banniere, avatar et details.</string>
     <string name="when_you_message_someone_new_on">Quand vous ecrivez a quelqu\'un de nouveau sur KaChat, il ne recevra pas de notification et votre message restera cache jusqu\'a ce qu\'il vous reponde ou vous ajoute aussi. Cela protege contre le spam et augmente votre confidentialite. Si vous voulez qu\'il soit notifie, touchez l\'icone de la main pour envoyer une demande de communication qui coutera 0,2 KAS. (Remarque : toutes les applications de messagerie hors KaChat necessiteront une demande de communication)</string>
     <string name="wipe_account">Effacer le compte</string>

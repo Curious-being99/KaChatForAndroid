@@ -7,25 +7,20 @@ import com.kachat.app.services.ChangeNowCreateTransactionRequest
 import com.kachat.app.services.ChangeNowEstimateResponse
 import com.kachat.app.services.ChangeNowRangeResponse
 import com.kachat.app.services.ChangeNowTransactionResponse
-import com.kachat.app.services.WalletService
 import com.kachat.app.services.database.KaChatDatabase
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * ChangeNOW-powered coin swaps — quotes/creates/tracks exchanges via [ChangeNowApi], and for the
- * KAS-is-the-"from"-side case, sends the KAS itself via [WalletService] rather than making the
- * user do that manually in a separate app. The "to" side of a swap is never something this
- * wallet holds, so there's no equivalent auto-send for a KAS-is-the-"to"-side exchange — that
- * direction only ever gets as far as showing the deposit address for the user to pay into from
- * wherever they're holding that other coin.
+ * ChangeNOW-powered coin swaps — quotes/creates/tracks exchanges via [ChangeNowApi]. Neither side
+ * of a swap is something this app sends automatically: whichever coin the user is giving up
+ * (including KAS), they pay into the returned `payinAddress` themselves, shown as a QR code.
  */
 @Singleton
 class SwapRepository @Inject constructor(
     private val database: KaChatDatabase,
-    private val changeNowApi: ChangeNowApi,
-    private val walletService: WalletService
+    private val changeNowApi: ChangeNowApi
 ) {
     fun getSwapHistory(): Flow<List<SwapTransactionEntity>> = database.swapDao().getSwaps()
 
@@ -70,19 +65,17 @@ class SwapRepository @Inject constructor(
     }
 
     /**
-     * Opens the exchange with ChangeNOW, saves it to local history, and — only when [from] is KAS
-     * — immediately sends [fromAmount] from this wallet's spending balance to the returned
-     * `payinAddress`. [payoutAddress] is where ChangeNOW sends the "to" coin: this wallet's own
-     * identity/spending address when [to] is KAS, otherwise wherever the user wants the other
-     * coin delivered.
+     * Opens the exchange with ChangeNOW and saves it to local history. [payoutAddress] is where
+     * ChangeNOW sends the "to" coin: this wallet's own identity/spending address when [to] is
+     * KAS, otherwise wherever the user wants the other coin delivered. The returned
+     * `payinAddress` is shown to the user as a QR code to pay into themselves, regardless of
+     * which coin they're giving up.
      */
     suspend fun createSwap(
         from: SwapCoin,
         to: SwapCoin,
         fromAmount: String,
-        payoutAddress: String,
-        fromSpendingIndex: Int? = null,
-        feeRateOverride: Long? = null
+        payoutAddress: String
     ): Result<ChangeNowTransactionResponse> {
         return try {
             val response = changeNowApi.createTransaction(
@@ -100,16 +93,6 @@ class SwapRepository @Inject constructor(
                 return Result.failure(IllegalStateException("ChangeNOW didn't return a deposit address"))
             }
 
-            var kasSendTxId: String? = null
-            if (from.ticker == "kas") {
-                val amountSompi = Math.round(fromAmount.toDouble() * 100_000_000.0)
-                kasSendTxId = if (fromSpendingIndex != null) {
-                    walletService.sendFromSpendingAddress(fromSpendingIndex, payinAddress, amountSompi, feeRateOverride)
-                } else {
-                    walletService.sendFromCurrentSpendingAddress(payinAddress, amountSompi, feeRateOverride)
-                }
-            }
-
             database.swapDao().insert(
                 SwapTransactionEntity(
                     id = response.id,
@@ -123,7 +106,7 @@ class SwapRepository @Inject constructor(
                     payoutAddress = payoutAddress,
                     status = response.status ?: "new",
                     createdAtMillis = System.currentTimeMillis(),
-                    kasSendTxId = kasSendTxId
+                    kasSendTxId = null
                 )
             )
 

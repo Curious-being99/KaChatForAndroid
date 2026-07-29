@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Проверить размер резервной копии Drive</string>
     <string name="checking_availability">Проверяем наличие...</string>
     <string name="checking_your_chatting_address_balance">Проверка баланса вашего адреса для чата...</string>
+    <string name="chess_stats">Статистика шахмат</string>
     <string name="choose_avatar">Выбрать аватар</string>
     <string name="choose_banner">Выбрать баннер</string>
+    <string name="choose_coin">Выберите монету</string>
     <string name="choose_photo">Выбрать фото</string>
     <string name="choose_which_tabs_appear_in_your">Выберите, какие вкладки отображаются в нижнем меню.</string>
     <string name="clear">Очистить</string>
@@ -90,6 +92,8 @@
     <string name="delete">Удалить</string>
     <string name="delete_account">Удалить аккаунт</string>
     <string name="delete_group">Удалить группу</string>
+    <string name="delete_swap_history_message">Это удалит его только из вашей локальной истории и не повлияет на сам обмен.</string>
+    <string name="delete_this_swap">Удалить этот обмен?</string>
     <string name="delete_transaction">Удалить транзакцию</string>
     <string name="deposit_address">Адрес депозита</string>
     <string name="domain_name">Имя домена</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">QR-код</string>
     <string name="quantity">Количество</string>
     <string name="rate">Курс</string>
+    <string name="read">Прочитано</string>
     <string name="receiving_kas_at">Получение KAS на</string>
     <string name="recipient_address">Адрес получателя</string>
     <string name="recipient_address_or_kas_name">Адрес получателя или имя .kas</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">Разрешение домена…</string>
     <string name="resolving">Разрешение...</string>
     <string name="retention">Хранение</string>
+    <string name="retry">Повторить</string>
     <string name="retry_inscription_reveal">Повторить раскрытие инскрипции</string>
     <string name="save">Сохранить</string>
     <string name="saved_accounts">Сохраненные аккаунты</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">Отсканируйте это на вашем устройстве KasSigner, проверьте там, затем подпишите.</string>
     <string name="scroll_to_latest">Прокрутить к последнему</string>
     <string name="search_chats">Поиск чатов</string>
+    <string name="search_coins">Поиск монет</string>
     <string name="secure_messaging_on_kaspa_blockdag">Безопасные сообщения в Kaspa BlockDAG</string>
     <string name="security_warning">Предупреждение безопасности</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">Повторить</string>
     <string name="unhide">Показать снова</string>
     <string name="unlink">Отвязать</string>
+    <string name="unread">Непрочитано</string>
     <string name="use_default">Использовать по умолчанию</string>
     <string name="users_you_hide_from_a_broadcast">Пользователи, которых вы скрываете из комнаты трансляции (через их меню аватара), появляются здесь и никогда не отображаются и не кэшируются ни в одной комнате.</string>
     <string name="valid_address">Действительный адрес</string>
     <string name="view_on_changenow">Посмотреть на ChangeNOW</string>
     <string name="waiting_for_camera">Ожидание камеры...</string>
+    <string name="waiting_on_opponent">Ожидание соперника</string>
     <string name="walk_through_setting_up_your_domain">Пошагово проведет вас через настройку домена, баннера, аватара и деталей.</string>
     <string name="when_you_message_someone_new_on">Когда вы пишете кому-то новому в KaChat, он не получит уведомления, а ваше сообщение останется скрытым, пока он не ответит вам или тоже не добавит вас. Это защищает от спама и повышает вашу приватность. Если хотите, чтобы он получил уведомление, нажмите значок руки, чтобы отправить запрос на общение, который будет стоить 0,2 KAS. (Примечание: все мессенджеры, кроме KaChat, потребуют запрос на общение)</string>
     <string name="wipe_account">Удалить аккаунт</string>

@@ -42,11 +42,16 @@ class ColdStorageSendEngine @Inject constructor(
      * stay unambiguous, every input in a single send is sourced from exactly one address (picked
      * by the user from the account's address list), never aggregated across several.
      */
+    /** [manualUtxos], if given (coin control), fixes the exact input set instead of letting
+     *  [KaspaUtxoSelector.selectUtxosAndCalculateFee] greedily grow one — re-resolved against
+     *  this call's own fresh [api.getUtxos] fetch by outpoint, not used as-is, so a UTXO spent
+     *  since the coin-control picker was shown can't silently get included. */
     suspend fun buildUnsignedTransaction(
         fromAddress: String,
         toAddress: String,
         amountSompi: Long,
-        feeRateOverride: Long? = null
+        feeRateOverride: Long? = null,
+        manualUtxos: List<UtxoEntry>? = null
     ): Result<UnsignedColdTx> = mutex.withLock {
         try {
             require(KaspaAddress.isValid(toAddress)) { "Invalid recipient address" }
@@ -60,25 +65,32 @@ class ColdStorageSendEngine @Inject constructor(
                 return@withLock Result.failure(IllegalStateException("No spendable UTXOs at this address"))
             }
 
-            val feeRateSompiPerGram = feeRateOverride?.coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM) ?: try {
-                val estimate = api.getFeeEstimate()
-                val quoted = estimate.normalBuckets.firstOrNull()?.feerate ?: KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM.toDouble()
-                ceil(quoted).toLong().coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
-            } catch (e: Exception) {
-                KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
-            }
+            val feeRateSompiPerGram = feeRateOverride?.coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+                ?: fetchQuotedFeeRateSompiPerGram()
 
             val recipientScriptHex = KaspaAddress.getScriptPublicKey(toAddress)
             val changeScriptHex = KaspaAddress.getScriptPublicKey(fromAddress)
 
-            val selection = KaspaUtxoSelector.selectUtxosAndCalculateFee(
-                utxos = utxos,
-                amountSompi = amountSompi,
-                feeRateSompiPerGram = feeRateSompiPerGram,
-                payloadBytes = null,
-                recipientScriptLen = recipientScriptHex.length / 2,
-                changeScriptLen = changeScriptHex.length / 2
-            )
+            val selection = if (!manualUtxos.isNullOrEmpty()) {
+                val freshByOutpoint = utxos.associateBy { it.outpoint }
+                val resolved = manualUtxos.mapNotNull { freshByOutpoint[it.outpoint] }
+                KaspaUtxoSelector.selectManualUtxosAndCalculateFee(
+                    utxos = resolved,
+                    amountSompi = amountSompi,
+                    feeRateSompiPerGram = feeRateSompiPerGram,
+                    recipientScriptLen = recipientScriptHex.length / 2,
+                    changeScriptLen = changeScriptHex.length / 2
+                )
+            } else {
+                KaspaUtxoSelector.selectUtxosAndCalculateFee(
+                    utxos = utxos,
+                    amountSompi = amountSompi,
+                    feeRateSompiPerGram = feeRateSompiPerGram,
+                    payloadBytes = null,
+                    recipientScriptLen = recipientScriptHex.length / 2,
+                    changeScriptLen = changeScriptHex.length / 2
+                )
+            }
             if (selection.totalSelected < selection.requiredAmount) {
                 return@withLock Result.failure(
                     IllegalStateException("Insufficient funds: needed ${selection.requiredAmount}, have ${selection.totalSelected}")
@@ -121,6 +133,105 @@ class ColdStorageSendEngine @Inject constructor(
         } catch (e: Exception) {
             Log.e("ColdStorageSendEngine", "Failed to build unsigned transaction", e)
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Live max-sendable estimate — matches iOS's `estimateMaxAmount` exactly: a fresh
+     * `getUtxos` fetch, not the cached balance shown in the address list. That cached value can
+     * be stale (this address's real balance moved since the list was last refreshed), so basing
+     * Max on it can offer more than what's actually spendable, and the real build then fails
+     * with insufficient funds even though the on-screen "Available" looked fine.
+     */
+    /** If coin control has fixed a UTXO set ([manualUtxos]), Max reflects only that subset
+     *  (re-resolved against this call's own fresh fetch, same as [buildUnsignedTransaction])
+     *  rather than the whole address's balance. */
+    suspend fun estimateMaxAmount(fromAddress: String, feeRateOverride: Long? = null, manualUtxos: List<UtxoEntry>? = null): Long {
+        val api = networkService.kaspaRestApi.value
+            ?: throw IllegalStateException("Network service unavailable")
+        val fetched = api.getUtxos(fromAddress)
+        if (fetched.isEmpty()) return 0L
+
+        val utxos = if (!manualUtxos.isNullOrEmpty()) {
+            val freshByOutpoint = fetched.associateBy { it.outpoint }
+            manualUtxos.mapNotNull { freshByOutpoint[it.outpoint] }
+        } else {
+            fetched
+        }
+        if (utxos.isEmpty()) return 0L
+
+        val totalBalance = utxos.sumOf { it.utxoEntry.amount }
+        val feeRateSompiPerGram = feeRateOverride?.coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+            ?: fetchQuotedFeeRateSompiPerGram()
+
+        val mass = KaspaMass.calculateMass(numInputs = maxOf(utxos.size, 1), outputScriptLens = listOf(34, 34), payloadSize = 0)
+        val fee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
+        return if (totalBalance > fee) totalBalance - fee else 0L
+    }
+
+    data class AutomaticSelectionPreview(val utxos: List<UtxoEntry>, val feeSompi: Long)
+
+    /**
+     * Live preview of what automatic selection *would* pick for [amountSompi] at
+     * [feeRateSompiPerGram] — same selector [buildUnsignedTransaction] itself uses, just without
+     * actually building. Lets the send form show a fee that's already exact (not the 1-input
+     * reference-mass guess) whenever a fresh preview is available, and — critically — lets the
+     * form pass this exact same UTXO set into the real build as `manualUtxos`, so the two numbers
+     * can't diverge the way they could when each independently guessed at the input count. Uses
+     * standard 34-byte output script lengths (matching the form's own reference-mass constant)
+     * since this only needs to be right about *how many inputs*, not the recipient's exact
+     * address.
+     */
+    suspend fun previewAutomaticSelection(fromAddress: String, amountSompi: Long, feeRateSompiPerGram: Long): AutomaticSelectionPreview? {
+        if (amountSompi <= 0) return null
+        val api = networkService.kaspaRestApi.value ?: return null
+        val utxos = try {
+            api.getUtxos(fromAddress)
+        } catch (e: Exception) {
+            return null
+        }
+        if (utxos.isEmpty()) return null
+
+        val selection = KaspaUtxoSelector.selectUtxosAndCalculateFee(
+            utxos = utxos,
+            amountSompi = amountSompi,
+            feeRateSompiPerGram = feeRateSompiPerGram,
+            payloadBytes = null,
+            recipientScriptLen = 34,
+            changeScriptLen = 34
+        )
+        if (selection.totalSelected < selection.requiredAmount) return null
+        return AutomaticSelectionPreview(utxos = selection.selectedUtxos, feeSompi = selection.estimatedFee)
+    }
+
+    /** Raw UTXOs at [fromAddress] for the coin-control picker — unlike
+     *  [com.kachat.app.services.ColdStorageAddressDiscovery.getUtxos] (a simplified display
+     *  model), these are the actual [UtxoEntry] objects [buildUnsignedTransaction] and
+     *  [estimateMaxAmount] accept as `manualUtxos`. */
+    suspend fun fetchUtxos(fromAddress: String): List<UtxoEntry> {
+        val api = networkService.kaspaRestApi.value ?: return emptyList()
+        return try {
+            api.getUtxos(fromAddress)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Live quoted fee rate (sompi per mass-gram) — whichever is higher, the network's current
+     *  "normal" bucket quote or the protocol minimum. Falls back to the minimum on any request
+     *  failure. Shared by [buildUnsignedTransaction]'s default, [estimateMaxAmount]'s default,
+     *  and the send form's own fee preview (via [com.kachat.app.viewmodels.ColdStorageViewModel]),
+     *  so all three always agree on the same rate instead of each doing its own separate fetch
+     *  that could return a slightly different quote and make the fee shown before Build not
+     *  match what the real transaction costs. */
+    suspend fun fetchQuotedFeeRateSompiPerGram(): Long {
+        val api = networkService.kaspaRestApi.value ?: return KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+        return try {
+            val estimate = api.getFeeEstimate()
+            val quoted = estimate.normalBuckets.firstOrNull()?.feerate ?: KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM.toDouble()
+            ceil(quoted).toLong().coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+        } catch (e: Exception) {
+            KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
         }
     }
 

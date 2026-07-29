@@ -102,6 +102,7 @@ fun ChatsScreen(
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedContactIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedGroupIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     // Selection is scoped to whichever tab it was started on - switching tabs mid-select would
     // either strand a selection the visible list can't act on, or blend Chats and Group Chats
@@ -346,9 +347,7 @@ fun ChatsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.MarkEmailRead, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.mark_as_read), color = LocalAppColors.current.textPrimary, fontSize = 13.sp)
+                            Icon(Icons.Default.MarkEmailRead, stringResource(R.string.read), tint = KaspaTeal, modifier = Modifier.size(18.dp))
                         }
                         Button(
                             onClick = {
@@ -365,9 +364,15 @@ fun ChatsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.MarkEmailUnread, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.mark_as_unread), color = LocalAppColors.current.textPrimary, fontSize = 13.sp)
+                            Icon(Icons.Default.MarkEmailUnread, stringResource(R.string.unread), tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        }
+                        Button(
+                            onClick = { showBulkDeleteConfirmation = true },
+                            enabled = if (isOnGroupsTab) selectedGroupIds.isNotEmpty() else selectedContactIds.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Delete, stringResource(R.string.delete), tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -584,6 +589,50 @@ fun ChatsScreen(
                         },
                         dismissButton = {
                             TextButton(onClick = { contactToDelete = null }) {
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                            }
+                        }
+                    )
+                }
+
+                if (showBulkDeleteConfirmation) {
+                    val count = if (isOnGroupsTab) selectedGroupIds.size else selectedContactIds.size
+                    AlertDialog(
+                        onDismissRequest = { showBulkDeleteConfirmation = false },
+                        containerColor = LocalAppColors.current.surface,
+                        title = {
+                            Text(
+                                if (isOnGroupsTab) "Delete $count Group${if (count == 1) "" else "s"}?" else "Delete $count Chat${if (count == 1) "" else "s"}?",
+                                color = LocalAppColors.current.textPrimary
+                            )
+                        },
+                        text = {
+                            Text(
+                                if (isOnGroupsTab) {
+                                    "This removes each selected group and its messages from this device. This cannot be undone, and other members won't be notified."
+                                } else {
+                                    "This permanently deletes every message in each selected chat, including from iCloud, so they're removed from your other devices too. This cannot be undone."
+                                },
+                                color = LocalAppColors.current.textSecondary
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (isOnGroupsTab) {
+                                    chatViewModel.deleteGroupChats(selectedGroupIds)
+                                } else {
+                                    chatViewModel.deleteChats(selectedContactIds)
+                                }
+                                showBulkDeleteConfirmation = false
+                                isSelectionMode = false
+                                selectedContactIds = emptySet()
+                                selectedGroupIds = emptySet()
+                            }) {
+                                Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showBulkDeleteConfirmation = false }) {
                                 Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                             }
                         }

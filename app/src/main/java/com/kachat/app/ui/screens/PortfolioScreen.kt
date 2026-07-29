@@ -7,9 +7,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,7 +34,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
@@ -39,9 +41,9 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,14 +58,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -72,16 +76,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -98,19 +103,23 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.kachat.app.R
 import com.kachat.app.models.PortfolioTransactionEntity
+import com.kachat.app.repository.PRICE_UNAVAILABLE_NOTE
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.currencySymbolFor
 import com.kachat.app.util.formatFiatAmount
 import com.kachat.app.util.formatKasAmount
+import com.kachat.app.util.formatKasAmountGrouped
 import com.kachat.app.viewmodels.PortfolioSummary
 import com.kachat.app.viewmodels.PortfolioViewModel
+import com.kachat.app.viewmodels.SwapViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * For a single coin's price rather than a fiat total — KAS trades under 1 unit of most tracked
@@ -131,24 +140,36 @@ private fun priceRangeLabel(days: Int): String = when (days) {
     else -> "${days}d"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PortfolioScreen(
     navController: NavController,
-    viewModel: PortfolioViewModel = hiltViewModel()
+    viewModel: PortfolioViewModel = hiltViewModel(),
+    swapViewModel: SwapViewModel = hiltViewModel()
 ) {
     val currentPriceUsd by viewModel.currentPriceUsd.collectAsState()
+    val priceChange24h by viewModel.priceChange24h.collectAsState()
     val priceHistory by viewModel.priceHistory.collectAsState()
     val priceRangeDays by viewModel.priceRangeDays.collectAsState()
     val valueHistory by viewModel.valueHistory.collectAsState()
     val summary by viewModel.summary.collectAsState()
-    val isRefreshing by viewModel.isRefreshingPortfolio.collectAsState()
     val currencyCode by viewModel.currency.collectAsState()
+    val portfolios by viewModel.portfolios.collectAsState()
+    val activePortfolioId by viewModel.activePortfolioId.collectAsState()
+    val cardSummaries by viewModel.cardSummaries.collectAsState()
+    val isRefreshing by viewModel.isRefreshingPortfolio.collectAsState()
     // (timestamp, price) while scrubbing the price sparkline above, null otherwise — lifted up
     // here (rather than kept local to PriceChartCard) since the summary card below needs it too.
     var scrubbedPrice by remember { mutableStateOf<Pair<Long, Double>?>(null) }
-    val pullRefreshState = rememberPullToRefreshState()
+    // 0 = Data, 1 = Transactions. Swipeable (see HorizontalPager below) as well as tap-to-switch.
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val tabCoroutineScope = rememberCoroutineScope()
 
+    // Pull-to-refresh (portfolio cards + tab row stay fixed above the pager; only the FAB/toolbar
+    // refresh icon was removed, replaced by this gesture). `pullRefreshState.isRefreshing` starts
+    // the ViewModel's fetch; the second effect ends the gesture's spinner once that fetch's own
+    // `isRefreshingPortfolio` flips back to false, rather than on a fixed delay.
+    val pullRefreshState = rememberPullToRefreshState()
     LaunchedEffect(pullRefreshState.isRefreshing) {
         if (pullRefreshState.isRefreshing) {
             viewModel.refreshPrice()
@@ -174,87 +195,152 @@ fun PortfolioScreen(
             )
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-                    // Still scrollable as a safety net (smaller phones, larger system font scale),
-                    // but every element below is sized to comfortably fit a typical phone screen
-                    // without needing it.
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            PortfolioPickerHeader(
+                portfolios = portfolios,
+                activePortfolioId = activePortfolioId,
+                cardSummaries = cardSummaries,
+                currencyCode = currencyCode,
+                onSelect = { viewModel.setActivePortfolio(it) },
+                onAdd = { viewModel.addPortfolio(it) },
+                onRename = { id, name -> viewModel.renamePortfolio(id, name) },
+                onDelete = { viewModel.deletePortfolio(it) }
+            )
+            TabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = LocalAppColors.current.background,
+                contentColor = KaspaTeal
             ) {
-                PortfolioSummaryCard(summary = summary, currentPriceUsd = currentPriceUsd, scrubbedPrice = scrubbedPrice, currencyCode = currencyCode)
-                if (priceHistory.size >= 2) {
-                    PriceChartCard(
-                        priceHistory = priceHistory,
-                        onScrub = { scrubbedPrice = it },
-                        selectedRangeDays = priceRangeDays,
-                        onRangeSelected = { viewModel.setPriceRangeDays(it) }
-                    )
-                }
-                if (valueHistory.size >= 2) {
-                    PortfolioValueChartCard(valueHistory = valueHistory, currencyCode = currencyCode)
-                }
-                PortfolioNavRow(
-                    icon = Icons.Default.Receipt,
-                    label = "Transactions",
-                    onClick = { navController.navigate("portfolio_transactions") }
+                Tab(
+                    selected = pagerState.currentPage == 0,
+                    onClick = { tabCoroutineScope.launch { pagerState.animateScrollToPage(0) } },
+                    text = { Text(stringResource(R.string.data), fontWeight = FontWeight.Bold) }
+                )
+                Tab(
+                    selected = pagerState.currentPage == 1,
+                    onClick = { tabCoroutineScope.launch { pagerState.animateScrollToPage(1) } },
+                    text = { Text(stringResource(R.string.transactions), fontWeight = FontWeight.Bold) }
                 )
             }
-            PullToRefreshContainer(
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // PullToRefreshContainer translates itself fully above its own position when
+                    // idle (verticalOffset 0) via a graphicsLayer translation rather than actually
+                    // hiding - with no clip here, that translated-away circle draws outside this
+                    // Box's bounds and bleeds into the TabRow above it instead of disappearing.
+                    .clipToBounds()
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            PortfolioSummaryCard(summary = summary, currentPriceUsd = currentPriceUsd, priceChange24h = priceChange24h, scrubbedPrice = scrubbedPrice, currencyCode = currencyCode)
+                            if (priceHistory.size >= 2) {
+                                PriceChartCard(
+                                    priceHistory = priceHistory,
+                                    onScrub = { scrubbedPrice = it },
+                                    selectedRangeDays = priceRangeDays,
+                                    onRangeSelected = { viewModel.setPriceRangeDays(it) }
+                                )
+                            }
+                            if (valueHistory.size >= 2) {
+                                PortfolioValueChartCard(valueHistory = valueHistory, currencyCode = currencyCode)
+                            }
+                        }
+                        else -> PortfolioTransactionsContent(
+                            viewModel = viewModel,
+                            swapViewModel = swapViewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
         }
     }
 }
 
-/** Dark rounded-card row with a chevron — matches the style used elsewhere (Profile, Edit KNS Profile's Domains box). */
-@Composable
-private fun PortfolioNavRow(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(LocalAppColors.current.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, tint = KaspaTeal, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(label, color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
-        Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
-    }
-}
 
 /**
- * The transaction ledger, broken out from the main Portfolio screen (which now just links here)
- * so that screen can stay focused on price/value at a glance — this owns the list, CSV import/
- * export, and the add/edit/delete dialog. Shares PortfolioScreen's own PortfolioViewModel
- * instance (see KaChatApp.kt's "portfolio_transactions" route) rather than a fresh one, so a
- * transaction added/edited/deleted here is immediately reflected in the summary card and charts
- * back on Portfolio without a redundant re-fetch.
+ * Full-screen wrapper around [PortfolioTransactionsContent] for the swap-originated deep link
+ * (see KaChatApp.kt's "portfolio_transactions?..." route) — arriving here from a completed swap's
+ * "Add to Portfolio" action needs its own top bar/back button since it's pushed as a separate
+ * destination, unlike the Transactions tab embedded directly in PortfolioScreen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PortfolioTransactionsScreen(
     onBack: () -> Unit,
     viewModel: PortfolioViewModel = hiltViewModel(),
-    swapViewModel: com.kachat.app.viewmodels.SwapViewModel = hiltViewModel(),
+    swapViewModel: SwapViewModel = hiltViewModel(),
     prefillType: String? = null,
     prefillAmountKas: Double? = null,
     prefillFiatValue: Double? = null,
     prefillTimestampMillis: Long? = null,
     prefillNotes: String? = null,
     prefillSwapId: String? = null
+) {
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(R.string.transactions), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        }
+    ) { padding ->
+        PortfolioTransactionsContent(
+            viewModel = viewModel,
+            swapViewModel = swapViewModel,
+            prefillType = prefillType,
+            prefillAmountKas = prefillAmountKas,
+            prefillFiatValue = prefillFiatValue,
+            prefillTimestampMillis = prefillTimestampMillis,
+            prefillNotes = prefillNotes,
+            prefillSwapId = prefillSwapId,
+            modifier = Modifier.padding(padding)
+        )
+    }
+}
+
+/**
+ * The transaction ledger content — list, CSV import/export, and the add/edit/delete dialog — with
+ * no Scaffold/top bar of its own, so it can be embedded either inside [PortfolioTransactionsScreen]
+ * (full-screen, swap deep link) or directly as PortfolioScreen's Transactions tab. Shares whichever
+ * PortfolioViewModel instance the caller passes in rather than creating its own, so a transaction
+ * added/edited/deleted here is immediately reflected in the summary card and charts elsewhere.
+ */
+@Composable
+private fun PortfolioTransactionsContent(
+    viewModel: PortfolioViewModel,
+    swapViewModel: SwapViewModel,
+    prefillType: String? = null,
+    prefillAmountKas: Double? = null,
+    prefillFiatValue: Double? = null,
+    prefillTimestampMillis: Long? = null,
+    prefillNotes: String? = null,
+    prefillSwapId: String? = null,
+    modifier: Modifier = Modifier
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val currentPriceUsd by viewModel.currentPriceUsd.collectAsState()
@@ -266,6 +352,11 @@ fun PortfolioTransactionsScreen(
     var pendingPrefillSwapId by remember { mutableStateOf(prefillSwapId) }
     var editingTransaction by remember { mutableStateOf<PortfolioTransactionEntity?>(null) }
     var showCsvMenu by remember { mutableStateOf(false) }
+    var showAddMenu by remember { mutableStateOf(false) }
+    var showAddAddressDialog by remember { mutableStateOf(false) }
+    var isImportingAddress by remember { mutableStateOf(false) }
+    var importProgressText by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
 
     val importCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -279,76 +370,12 @@ fun PortfolioTransactionsScreen(
         }
     }
 
-    Scaffold(
-        containerColor = LocalAppColors.current.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.transactions), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
-            )
-        },
-        floatingActionButtonPosition = FabPosition.Center,
-        floatingActionButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                FloatingActionButton(
-                    onClick = { pendingPrefillSwapId = null; showAddDialog = true },
-                    containerColor = KaspaTeal,
-                    contentColor = Color.Black,
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier
-                        .height(56.dp)
-                        .widthIn(min = 120.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.add_transaction),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 20.dp)
-                    )
-                }
-                Box {
-                    FloatingActionButton(
-                        onClick = { showCsvMenu = true },
-                        containerColor = KaspaTeal,
-                        contentColor = Color.Black,
-                        shape = CircleShape,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(Icons.Default.ImportExport, "Import or export CSV")
-                    }
-                    if (showCsvMenu) {
-                        CenteredOptionsMenu(onDismissRequest = { showCsvMenu = false }) {
-                            PopupMenuRow(Icons.Default.FileDownload, stringResource(R.string.export_csv)) {
-                                showCsvMenu = false
-                                viewModel.exportCsv { uri ->
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/csv"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(intent, "Export Portfolio CSV"))
-                                }
-                            }
-                            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                            PopupMenuRow(Icons.Default.FileUpload, stringResource(R.string.import_csv)) {
-                                showCsvMenu = false
-                                importCsvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    ) { padding ->
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            // Horizontal inset is per-item below (not here). Extra bottom padding so the last
+            // row isn't hidden behind the FAB row below.
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (transactions.isEmpty()) {
@@ -356,7 +383,7 @@ fun PortfolioTransactionsScreen(
                     Text(
                         stringResource(R.string.no_transactions_yet_tap_to_add),
                         color = LocalAppColors.current.textSecondary,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(vertical = 24.dp),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -366,8 +393,74 @@ fun PortfolioTransactionsScreen(
                         tx = tx,
                         onClick = { editingTransaction = tx },
                         onDelete = { viewModel.deleteTransaction(tx.id) },
-                        currencyCode = currencyCode
+                        currencyCode = currencyCode,
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                FloatingActionButton(
+                    onClick = { showAddMenu = true },
+                    containerColor = KaspaTeal,
+                    contentColor = Color.Black,
+                    shape = CircleShape,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_transaction))
+                }
+                if (showAddMenu) {
+                    CenteredOptionsMenu(onDismissRequest = { showAddMenu = false }) {
+                        PopupMenuRow(Icons.Default.MonetizationOn, stringResource(R.string.add_transaction)) {
+                            showAddMenu = false
+                            pendingPrefillSwapId = null
+                            showAddDialog = true
+                        }
+                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                        PopupMenuRow(Icons.Default.QrCodeScanner, stringResource(R.string.add_kaspa_address)) {
+                            showAddMenu = false
+                            showAddAddressDialog = true
+                        }
+                    }
+                }
+            }
+            Box {
+                FloatingActionButton(
+                    onClick = { showCsvMenu = true },
+                    containerColor = KaspaTeal,
+                    contentColor = Color.Black,
+                    shape = CircleShape,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(Icons.Default.ImportExport, "Import or export CSV")
+                }
+                if (showCsvMenu) {
+                    CenteredOptionsMenu(onDismissRequest = { showCsvMenu = false }) {
+                        PopupMenuRow(Icons.Default.FileDownload, stringResource(R.string.export_csv)) {
+                            showCsvMenu = false
+                            viewModel.exportCsv { uri ->
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/csv"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Export Portfolio CSV"))
+                            }
+                        }
+                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                        PopupMenuRow(Icons.Default.FileUpload, stringResource(R.string.import_csv)) {
+                            showCsvMenu = false
+                            importCsvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
+                        }
+                    }
                 }
             }
         }
@@ -410,10 +503,107 @@ fun PortfolioTransactionsScreen(
             }
         )
     }
+
+    if (showAddAddressDialog) {
+        AddressEntryDialog(
+            onDismiss = { showAddAddressDialog = false },
+            onConfirm = { address ->
+                showAddAddressDialog = false
+                isImportingAddress = true
+                importProgressText = "Starting…"
+                coroutineScope.launch {
+                    val result = viewModel.importAddress(address) { text -> importProgressText = text }
+                    isImportingAddress = false
+                    val message = result.fold(
+                        onSuccess = { imported ->
+                            val base = "Imported ${imported.importedCount} transaction${if (imported.importedCount == 1) "" else "s"}"
+                            if (imported.missingPriceCount > 0) {
+                                "$base (${imported.missingPriceCount} need a price — edit to set manually)"
+                            } else {
+                                base
+                            }
+                        },
+                        onFailure = { it.message ?: "Import failed." }
+                    )
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        )
+    }
+
+    if (isImportingAddress) {
+        AlertDialog(
+            onDismissRequest = {},
+            containerColor = LocalAppColors.current.surface,
+            title = { Text("Add Kaspa Address", color = LocalAppColors.current.textPrimary) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.CircularProgressIndicator(color = KaspaTeal, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(importProgressText, color = LocalAppColors.current.textSecondary)
+                }
+            },
+            confirmButton = {}
+        )
+    }
 }
 
 @Composable
-private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Double?, scrubbedPrice: Pair<Long, Double>? = null, currencyCode: String) {
+private fun AddressEntryDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var addressText by remember { mutableStateOf("") }
+    val isValid = remember(addressText) {
+        try {
+            com.kachat.app.util.KaspaAddress.getScriptPublicKey(addressText.trim()).isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(color = LocalAppColors.current.surface, shape = RoundedCornerShape(20.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Add Kaspa Address", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, "Close", tint = LocalAppColors.current.textSecondary)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = addressText,
+                    onValueChange = { addressText = it },
+                    placeholder = { Text("kaspa:qr...") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Every received transaction on this address becomes a buy, every sent transaction becomes a sell, priced at that day's historical KAS price. Re-adding the same address later only imports transactions found since the last import.",
+                    color = LocalAppColors.current.textSecondary,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { onConfirm(addressText.trim()) },
+                    enabled = isValid,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Text("Import", color = if (isValid) Color.Black else Color.Gray, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PortfolioSummaryCard(
+    summary: PortfolioSummary,
+    currentPriceUsd: Double?,
+    priceChange24h: Double? = null,
+    scrubbedPrice: Pair<Long, Double>? = null,
+    currencyCode: String
+) {
     val plColor = if (summary.totalPL >= 0) Color(0xFF4CD964) else Color(0xFFFF3B30)
     Column(
         modifier = Modifier
@@ -427,16 +617,39 @@ private fun PortfolioSummaryCard(summary: PortfolioSummary, currentPriceUsd: Dou
             color = LocalAppColors.current.textSecondary,
             fontSize = 12.sp
         )
-        Text(
-            text = when {
-                scrubbedPrice != null -> formatUsdPrice(scrubbedPrice.second, currencyCode)
-                currentPriceUsd != null -> formatUsdPrice(currentPriceUsd, currencyCode)
-                else -> "—"
-            },
-            color = LocalAppColors.current.textPrimary,
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp
-        )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = when {
+                    scrubbedPrice != null -> formatUsdPrice(scrubbedPrice.second, currencyCode)
+                    currentPriceUsd != null -> formatUsdPrice(currentPriceUsd, currencyCode)
+                    else -> "—"
+                },
+                color = LocalAppColors.current.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp
+            )
+            // Only shown at rest — a 24h change badge next to a scrubbed historical price would
+            // be misleading (it's always "now vs 24h ago", not relative to the scrubbed point).
+            if (scrubbedPrice == null && priceChange24h != null) {
+                Spacer(Modifier.width(8.dp))
+                val isPositive = priceChange24h >= 0
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 3.dp)) {
+                    Icon(
+                        if (isPositive) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                        contentDescription = null,
+                        tint = if (isPositive) Color(0xFF4CD964) else Color(0xFFFF3B30),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        "${String.format(Locale.US, "%.2f", kotlin.math.abs(priceChange24h))}%",
+                        color = if (isPositive) Color(0xFF4CD964) else Color(0xFFFF3B30),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
@@ -627,14 +840,21 @@ private fun PortfolioValueChartCard(valueHistory: List<Pair<Long, Double>>, curr
 }
 
 @Composable
-private fun TransactionRow(tx: PortfolioTransactionEntity, onClick: () -> Unit, onDelete: () -> Unit, currencyCode: String) {
+private fun TransactionRow(
+    tx: PortfolioTransactionEntity,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    currencyCode: String,
+    modifier: Modifier = Modifier
+) {
     val isBuy = tx.type == "buy"
     val amountKas = tx.amountSompi / 100_000_000.0
+    val needsPrice = tx.notes == PRICE_UNAVAILABLE_NOTE
     val dateStr = remember(tx.timestampMillis) {
         SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date(tx.timestampMillis))
     }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(LocalAppColors.current.surface)
@@ -660,12 +880,23 @@ private fun TransactionRow(tx: PortfolioTransactionEntity, onClick: () -> Unit, 
             }
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(if (isBuy) "Buy" else "Sell", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (isBuy) "Buy" else "Sell", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                    if (needsPrice) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = stringResource(R.string.price_needed),
+                            tint = Color(0xFFFFC107),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
                 Text(dateStr, color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text("${formatKasAmount(amountKas)} KAS", color = LocalAppColors.current.textPrimary)
+            Text("${formatKasAmountGrouped(amountKas)} KAS", color = LocalAppColors.current.textPrimary)
             Text(formatFiatAmount(tx.fiatValue, currencyCode), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
         }
         Spacer(Modifier.width(8.dp))

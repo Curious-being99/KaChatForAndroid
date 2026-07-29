@@ -4,9 +4,12 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kachat.app.models.PortfolioEntity
 import com.kachat.app.models.PortfolioTransactionEntity
+import com.kachat.app.repository.AddressImportResult
 import com.kachat.app.repository.AppSettingsRepository
 import com.kachat.app.repository.PortfolioRepository
+import com.kachat.app.services.PortfolioManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +22,18 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/**
+ * Per-portfolio display data for the picker header — computed for every portfolio at once (not
+ * just the active one) since every card renders simultaneously. `todayChangeAmount`/Percent are
+ * both null when there isn't yet a 24h-old value-history sample for that portfolio (e.g. created
+ * today); callers should show a neutral/no-data state rather than a misleading number.
+ */
+data class PortfolioCardData(
+    val currentValue: Double,
+    val todayChangeAmount: Double?,
+    val todayChangePercent: Double?
+)
 
 /**
  * All-time P&L, not per-lot realized/unrealized — money still held (valued at the current
@@ -38,14 +53,42 @@ data class PortfolioSummary(
 @HiltViewModel
 class PortfolioViewModel @Inject constructor(
     private val repository: PortfolioRepository,
-    private val settings: AppSettingsRepository
+    private val settings: AppSettingsRepository,
+    private val portfolioManager: PortfolioManager
 ) : ViewModel() {
 
     val transactions = repository.getTransactions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Every portfolio for the current wallet (up to [PortfolioManager.MAX_PORTFOLIOS]) and which one is active — back the picker header. */
+    val portfolios: StateFlow<List<PortfolioEntity>> = portfolioManager.getPortfolios()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val activePortfolioId: StateFlow<String?> = portfolioManager.activePortfolioIdFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setActivePortfolio(id: String) = portfolioManager.setActivePortfolio(id)
+
+    fun addPortfolio(name: String) {
+        viewModelScope.launch { portfolioManager.addPortfolio(name) }
+    }
+
+    fun renamePortfolio(id: String, newName: String) {
+        viewModelScope.launch { portfolioManager.renamePortfolio(id, newName) }
+    }
+
+    fun deletePortfolio(id: String) {
+        viewModelScope.launch { portfolioManager.deletePortfolio(id) }
+    }
+
     private val _currentPriceUsd = MutableStateFlow<Double?>(null)
     val currentPriceUsd: StateFlow<Double?> = _currentPriceUsd.asStateFlow()
+
+    /** KAS price's percent change over the last 24 hours, from CoinGecko's own rolling 24h
+     *  figure (not derived from [priceHistory], which is a chart-range the user can toggle) —
+     *  shown next to the price in [PortfolioSummaryCard]. Null while unavailable rather than 0,
+     *  so the UI can distinguish "no data yet" from "flat". */
+    private val _priceChange24h = MutableStateFlow<Double?>(null)
+    val priceChange24h: StateFlow<Double?> = _priceChange24h.asStateFlow()
 
     /** Backs PortfolioScreen's pull-to-refresh indicator - true while a refreshPrice() call's price + history fetches are both still in flight. */
     private val _isRefreshingPortfolio = MutableStateFlow(false)
@@ -88,6 +131,26 @@ class PortfolioViewModel @Inject constructor(
     val currency: StateFlow<String> = settings.currency
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "usd")
 
+    /** A 7-day price history kept independent of [priceHistory]'s user-selected chart range
+     *  (1/7/30d) — the portfolio picker header's "today's change" per-card figures need a stable
+     *  window that doesn't shift just because the user toggled the visible chart. Declared before
+     *  the init block below for the same textual-order reason [priceHistoryCache] is. */
+    private val _sevenDayPriceHistory = MutableStateFlow<List<Pair<Long, Double>>>(emptyList())
+
+    /** Every portfolio's current value + today's change, for the picker header — computed from
+     *  every portfolio's own transactions (not just the active one) replayed against
+     *  [_sevenDayPriceHistory], since every card renders simultaneously. */
+    val cardSummaries: StateFlow<Map<String, PortfolioCardData>> = combine(
+        portfolios, repository.getAllTransactionsForWallet(), currentPriceUsd, _sevenDayPriceHistory
+    ) { portfolioList, allTransactions, price, sevenDayHistory ->
+        portfolioList.associate { portfolio ->
+            val scoped = allTransactions.filter { it.portfolioId == portfolio.id }
+            val currentValue = computeSummary(scoped, price ?: 0.0).currentValue
+            val todayChange = computeTodayChange(computeValueHistory(scoped, sevenDayHistory))
+            portfolio.id to PortfolioCardData(currentValue, todayChange?.first, todayChange?.second)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     init {
         refreshPrice()
         // Currency changed elsewhere (Settings, or the Welcome Guide's currency step) while
@@ -104,19 +167,32 @@ class PortfolioViewModel @Inject constructor(
     fun refreshPrice() {
         val currencyCode = currency.value
         val priceJob = viewModelScope.launch {
-            val price = repository.getCurrentPriceUsd(currencyCode)
-            if (price != null) {
-                _currentPriceUsd.value = price
+            val result = repository.getCurrentPriceUsd(currencyCode)
+            if (result != null) {
+                _currentPriceUsd.value = result.price
+                _priceChange24h.value = result.change24hPercent
             }
         }
         priceHistoryCache.clear()
         fetchPriceHistory(_priceRangeDays.value)
+        fetchSevenDayPriceHistoryForCards()
         val historyJob = priceHistoryJob
         viewModelScope.launch {
             _isRefreshingPortfolio.value = true
             priceJob.join()
             historyJob?.join()
             _isRefreshingPortfolio.value = false
+        }
+    }
+
+    /** Fetches (or refetches, on a currency change) the fixed 7-day window [_sevenDayPriceHistory] relies on — independent of whatever range the visible chart is currently toggled to. */
+    private fun fetchSevenDayPriceHistoryForCards() {
+        val currencyCode = currency.value
+        viewModelScope.launch {
+            val result = repository.getPriceHistory(7, currencyCode)
+            if (result.isNotEmpty()) {
+                _sevenDayPriceHistory.value = result
+            }
         }
     }
 
@@ -193,6 +269,22 @@ class PortfolioViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Suspend (not launched internally) so the caller can await the result while also observing
+     * live [onProgress] updates during the fetch/pricing steps — call from a
+     * `rememberCoroutineScope()`-launched coroutine in the UI, same as any other suspend
+     * ViewModel call. See [com.kachat.app.repository.PortfolioRepository.importAddress] for what
+     * "Add Kaspa Address" actually does.
+     */
+    suspend fun importAddress(address: String, onProgress: (String) -> Unit): Result<AddressImportResult> {
+        return try {
+            Result.success(repository.importAddress(address, currency.value, onProgress))
+        } catch (e: Exception) {
+            Log.w("PortfolioViewModel", "Address import failed", e)
+            Result.failure(e)
+        }
+    }
+
     companion object {
         internal fun computeSummary(transactions: List<PortfolioTransactionEntity>, currentPriceUsd: Double): PortfolioSummary {
             var holdingsSompi = 0L
@@ -247,6 +339,21 @@ class PortfolioViewModel @Inject constructor(
                 val holdingsKas = holdingsSompi / 100_000_000.0
                 timestamp to (holdingsKas * price)
             }
+        }
+
+        /**
+         * Real today-only $ and % change (not all-time P&L) for the portfolio picker header's
+         * cards — the latest value-history sample minus whichever sample is closest to (but not
+         * after) 24h before it. `null` when no sample exists that far back yet (e.g. a portfolio
+         * created today), so callers can show a neutral/no-data state instead of a wrong number.
+         */
+        internal fun computeTodayChange(valueHistory: List<Pair<Long, Double>>): Pair<Double, Double>? {
+            val latest = valueHistory.lastOrNull() ?: return null
+            val dayAgoMillis = latest.first - 86_400_000L
+            val basePoint = valueHistory.lastOrNull { it.first <= dayAgoMillis } ?: return null
+            val amount = latest.second - basePoint.second
+            val percent = if (basePoint.second == 0.0) 0.0 else (amount / basePoint.second) * 100.0
+            return amount to percent
         }
     }
 }

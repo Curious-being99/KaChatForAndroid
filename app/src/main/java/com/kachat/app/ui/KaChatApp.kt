@@ -520,9 +520,31 @@ fun MainShell(
                 "cold_storage_tx_history/{address}",
                 arguments = listOf(navArgument("address") { type = NavType.StringType })
             ) { backStackEntry ->
+                // Shares the SAME instance ColdStorageDetailScreen itself uses — which is the
+                // "cold_storage" list route's ViewModel (see that composable above: it shares
+                // parentEntry = getBackStackEntry("cold_storage"), not its own route's entry).
+                // Targeting "cold_storage_detail/{accountId}" here directly would resolve to that
+                // destination's OWN, never-populated ViewModelStore instead — a different,
+                // still-empty instance — since the detail screen never requests a ViewModel
+                // scoped to its own entry either. Not every caller of this route necessarily has
+                // "cold_storage" on the back stack, though (e.g. the withdraw-flow receipt-history
+                // shortcut) — getBackStackEntry throws in that case, so fall back to a fresh
+                // instance same as PortfolioTransactionsScreen above does for the same reason.
+                // (Manage Addresses/Manage Addresses Hidden used to reuse this route too, before
+                // getting their own "spending_address_detail/{index}" route below — its Send
+                // button unconditionally opened Cold Storage's external-QR-signer flow, which
+                // can't work for a spending address whose private key already lives in this wallet.)
+                val parentEntry = remember(backStackEntry) {
+                    try {
+                        navController.getBackStackEntry("cold_storage")
+                    } catch (e: IllegalArgumentException) {
+                        null
+                    }
+                }
                 ColdStorageTxHistoryScreen(
                     address = backStackEntry.arguments?.getString("address") ?: "",
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    viewModel = if (parentEntry != null) hiltViewModel(parentEntry) else hiltViewModel()
                 )
             }
 
@@ -545,15 +567,42 @@ fun MainShell(
                 )
             }
 
+            composable(
+                "spending_address_detail/{index}",
+                arguments = listOf(navArgument("index") { type = NavType.IntType })
+            ) { backStackEntry ->
+                // Deliberately its OWN route/screen rather than reusing
+                // "cold_storage_tx_history/{address}" (which Manage Addresses used to route
+                // through) — that screen's Send button unconditionally opens the external-QR-
+                // signer flow for a watch-only key, which is broken for a spending address: its
+                // private key already lives in this wallet, so it needs direct signing via
+                // WalletViewModel.withdrawFromSpendingAddress instead. Index (not address) is the
+                // route arg since that's what withdrawFromSpendingAddress signs by.
+                SpendingAddressTxHistoryScreen(
+                    index = backStackEntry.arguments?.getInt("index") ?: 0,
+                    onBack = { navController.popBackStack() },
+                    viewModel = walletViewModel
+                )
+            }
+
+            // The chatting/identity address's "Manage Address" row (Profile > Chatting Address) -
+            // field-for-field the same screen as spending_address_detail, just for the single
+            // fixed identity address instead of a spending-chain index. Used to reuse
+            // "cold_storage_tx_history/{address}" (labeled "Transaction History"), which had the
+            // exact same watch-only-signer mismatch spending addresses had before getting their
+            // own route above.
+            composable("identity_address_detail") {
+                IdentityAddressDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    viewModel = walletViewModel
+                )
+            }
+
             composable("manage_addresses") {
                 ManageAddressesScreen(
                     viewModel = walletViewModel,
                     onBack = { navController.popBackStack() },
-                    // Reuses Cold Storage's transaction-history screen/route — its data fetch
-                    // (ColdStorageAddressDiscovery.getTransactionHistory) is keyed purely by
-                    // address string, nothing cold-storage-specific about it, so it works
-                    // identically for a regular spending address.
-                    onNavigateToTxHistory = { address -> navController.navigate("cold_storage_tx_history/$address") },
+                    onNavigateToTxHistory = { index -> navController.navigate("spending_address_detail/$index") },
                     onNavigateToHidden = { navController.navigate("manage_addresses_hidden") }
                 )
             }
@@ -568,13 +617,11 @@ fun MainShell(
                     onBack = { navController.popBackStack() },
                     onNavigateToHidden = { navController.navigate("manage_addresses_hidden_pick/$target") },
                     onAddressPicked = { entry ->
+                        // Swap only ever sends the user here to pick where received KAS should
+                        // land (target == "to") - the old "pick which address to auto-send KAS
+                        // from" flow (target == "from") was removed along with Swap's auto-send.
                         val swapEntry = navController.getBackStackEntry(Screen.Swap.route)
-                        if (target == "to") {
-                            swapEntry.savedStateHandle.set("picked_to_index", entry.index)
-                        } else {
-                            swapEntry.savedStateHandle.set("picked_from_index", entry.index)
-                            swapEntry.savedStateHandle.set("picked_from_balance", entry.balanceSompi)
-                        }
+                        swapEntry.savedStateHandle.set("picked_to_index", entry.index)
                         navController.popBackStack(Screen.Swap.route, false)
                     }
                 )
@@ -583,19 +630,16 @@ fun MainShell(
             composable(
                 "manage_addresses_hidden_pick/{target}",
                 arguments = listOf(navArgument("target") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val target = backStackEntry.arguments?.getString("target") ?: "from"
+            ) { _ ->
                 ManageAddressesHiddenScreen(
                     viewModel = walletViewModel,
                     onBack = { navController.popBackStack() },
                     onAddressPicked = { entry ->
+                        // Swap only ever sends the user here to pick where received KAS should
+                        // land - the old "pick which address to auto-send KAS from" flow was
+                        // removed along with Swap's auto-send.
                         val swapEntry = navController.getBackStackEntry(Screen.Swap.route)
-                        if (target == "to") {
-                            swapEntry.savedStateHandle.set("picked_to_index", entry.index)
-                        } else {
-                            swapEntry.savedStateHandle.set("picked_from_index", entry.index)
-                            swapEntry.savedStateHandle.set("picked_from_balance", entry.balanceSompi)
-                        }
+                        swapEntry.savedStateHandle.set("picked_to_index", entry.index)
                         navController.popBackStack(Screen.Swap.route, false)
                     }
                 )
@@ -605,7 +649,7 @@ fun MainShell(
                 ManageAddressesHiddenScreen(
                     viewModel = walletViewModel,
                     onBack = { navController.popBackStack() },
-                    onNavigateToTxHistory = { address -> navController.navigate("cold_storage_tx_history/$address") }
+                    onNavigateToTxHistory = { index -> navController.navigate("spending_address_detail/$index") }
                 )
             }
 
@@ -800,8 +844,7 @@ fun MainShell(
                     onBack = { navController.popBackStack() },
                     fromBroadcast = fromBroadcast,
                     onNavigateToPhotoSettings = { id -> navController.navigate("contact_photo_settings/$id") },
-                    onNavigateToNotificationSettings = { id -> navController.navigate("contact_notification_settings/$id") },
-                    onNavigateToDomainSettings = { id -> navController.navigate("contact_domain_settings/$id") }
+                    onNavigateToNotificationSettings = { id -> navController.navigate("contact_notification_settings/$id") }
                 )
             }
 
@@ -822,17 +865,6 @@ fun MainShell(
             ) { backStackEntry ->
                 val contactId = backStackEntry.arguments?.getString("contactId") ?: return@composable
                 ContactNotificationSettingsScreen(
-                    contactId = contactId,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(
-                "contact_domain_settings/{contactId}",
-                arguments = listOf(navArgument("contactId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val contactId = backStackEntry.arguments?.getString("contactId") ?: return@composable
-                ContactDomainSettingsScreen(
                     contactId = contactId,
                     onBack = { navController.popBackStack() }
                 )

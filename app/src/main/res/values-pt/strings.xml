@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Verificar tamanho do backup do Drive</string>
     <string name="checking_availability">Verificando disponibilidade...</string>
     <string name="checking_your_chatting_address_balance">Verificando o saldo do seu endereco de chat...</string>
+    <string name="chess_stats">Estatisticas de xadrez</string>
     <string name="choose_avatar">Escolha Avatar</string>
     <string name="choose_banner">Escolha o banner</string>
+    <string name="choose_coin">Escolher moeda</string>
     <string name="choose_photo">Escolher foto</string>
     <string name="choose_which_tabs_appear_in_your">Escolha quais abas aparecem no seu menu inferior.</string>
     <string name="clear">Limpar</string>
@@ -90,6 +92,8 @@
     <string name="delete">Excluir</string>
     <string name="delete_account">Excluir conta</string>
     <string name="delete_group">Excluir grupo</string>
+    <string name="delete_swap_history_message">Isso apenas a remove do seu histórico local - não afeta a troca real.</string>
+    <string name="delete_this_swap">Excluir esta troca?</string>
     <string name="delete_transaction">Excluir transacao</string>
     <string name="deposit_address">Endereco de deposito</string>
     <string name="domain_name">Nome de dominio</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">Codigo QR</string>
     <string name="quantity">Quantidade</string>
     <string name="rate">Taxa de cambio</string>
+    <string name="read">Lida</string>
     <string name="receiving_kas_at">Recebendo KAS em</string>
     <string name="recipient_address">Endereco do destinatario</string>
     <string name="recipient_address_or_kas_name">Endereco do destinatario ou nome .kas</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">Resolvendo dominio…</string>
     <string name="resolving">Resolvendo...</string>
     <string name="retention">Retencao</string>
+    <string name="retry">Tentar novamente</string>
     <string name="retry_inscription_reveal">Tentar novamente a revelacao da inscricao</string>
     <string name="save">Salvar</string>
     <string name="saved_accounts">Contas salvas</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">Escaneie isto com seu dispositivo KasSigner, revise-o la e depois assine.</string>
     <string name="scroll_to_latest">Rolar para o mais recente</string>
     <string name="search_chats">Pesquisar chats</string>
+    <string name="search_coins">Pesquisar moedas</string>
     <string name="secure_messaging_on_kaspa_blockdag">Mensagens seguras na Kaspa BlockDAG</string>
     <string name="security_warning">Aviso de segurança</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">Tentar novamente</string>
     <string name="unhide">Reexibir</string>
     <string name="unlink">Desvincular</string>
+    <string name="unread">Nao lida</string>
     <string name="use_default">Usar padrao</string>
     <string name="users_you_hide_from_a_broadcast">Usuarios que voce oculta de uma sala de transmissao (pelo menu do avatar deles) aparecem aqui, e nunca aparecem ou sao armazenados em cache em nenhuma sala.</string>
     <string name="valid_address">Endereco valido</string>
     <string name="view_on_changenow">Ver na ChangeNOW</string>
     <string name="waiting_for_camera">Aguardando a camera...</string>
+    <string name="waiting_on_opponent">Aguardando oponente</string>
     <string name="walk_through_setting_up_your_domain">Percorre passo a passo a configuracao do seu dominio, banner, avatar e detalhes.</string>
     <string name="when_you_message_someone_new_on">Quando voce envia mensagem para alguem novo no KaChat, essa pessoa nao recebe notificacao e sua mensagem fica oculta ate que ela responda ou tambem adicione voce. Isso protege contra spam e aumenta sua privacidade. Se quiser que ela seja notificada, toque no icone de mao para enviar uma solicitacao de comunicacao, que custara 0,2 KAS. (Nota: todos os apps de mensagens que nao sejam o KaChat exigirao uma solicitacao de comunicacao)</string>
     <string name="wipe_account">Apagar conta</string>

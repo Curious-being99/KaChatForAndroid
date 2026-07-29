@@ -39,6 +39,7 @@ class WalletManager @Inject constructor(
         private const val PREF_ACTIVE_ADDRESS = "active_address"
         private const val PREF_HIDDEN_SPENDING_ADDRESSES = "hidden_spending_addresses"
         private const val PREF_SPENDING_ADDRESS_LABELS = "spending_address_labels"
+        private const val PREF_SPENDING_UTXO_LABELS = "spending_utxo_labels"
 
         // bitcoinj's own `MnemonicCode.INSTANCE` static initializer loads its wordlist via
         // `Class.getResourceAsStream`, which is documented by bitcoinj itself as "Won't work on
@@ -177,6 +178,40 @@ class WalletManager @Inject constructor(
             if (!label.isNullOrBlank()) remaining + SpendingAddressLabel(walletAddress, index, label.trim()) else remaining
         )
     }
+
+    /**
+     * A user-given nickname for one specific UTXO at a spending address, keyed by address +
+     * "txId:index" outpoint key — mirrors [ColdStorageManager]'s identical per-UTXO label scheme
+     * (see that class's own copy of this pattern) so a spending address's UTXOs tab can be named
+     * the same way Cold Storage's already can. Keyed by address alone (no walletAddress), since
+     * a derived address string is already globally unique — same reasoning as
+     * [ColdStorageManager]'s version, which needs no account-scoping either.
+     */
+    private data class SpendingUtxoLabel(val address: String, val outpointKey: String, val label: String)
+
+    private fun getAllSpendingUtxoLabels(): List<SpendingUtxoLabel> {
+        val json = sharedPrefs.getString(PREF_SPENDING_UTXO_LABELS, null) ?: return emptyList()
+        val type = object : TypeToken<List<SpendingUtxoLabel>>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    private fun saveSpendingUtxoLabels(labels: List<SpendingUtxoLabel>) {
+        sharedPrefs.edit().putString(PREF_SPENDING_UTXO_LABELS, gson.toJson(labels)).apply()
+    }
+
+    fun getSpendingUtxoLabels(address: String): Map<String, String> =
+        getAllSpendingUtxoLabels().filter { it.address == address }.associate { it.outpointKey to it.label }
+
+    fun setSpendingUtxoLabel(address: String, outpointKey: String, label: String?) {
+        val remaining = getAllSpendingUtxoLabels().filterNot { it.address == address && it.outpointKey == outpointKey }
+        saveSpendingUtxoLabels(
+            if (!label.isNullOrBlank()) remaining + SpendingUtxoLabel(address, outpointKey, label.trim()) else remaining
+        )
+    }
+
+    /** Hex-encoded private key for one spending-chain address - see [getSpendingPrivateKeyBytes]. */
+    fun getSpendingPrivateKeyHex(index: Int): String =
+        getSpendingPrivateKeyBytes(index).joinToString("") { "%02x".format(it) }
 
     /**
      * Generate a new BIP39 mnemonic and store it securely.

@@ -30,6 +30,7 @@ class ColdStorageManager @Inject constructor(
         private const val PREF_ACCOUNTS = "cold_accounts"
         private const val PREF_ADDRESS_LABELS = "cold_address_labels"
         private const val PREF_HIDDEN_ADDRESSES = "cold_hidden_addresses"
+        private const val PREF_UTXO_LABELS = "cold_utxo_labels"
     }
 
     data class ColdAccount(
@@ -51,6 +52,10 @@ class ColdStorageManager @Inject constructor(
 
     /** One address a user chose to hide from the main list — same flat (accountId, index) keying as [AddressLabel]. Hiding never deletes anything; it's purely a display preference. */
     private data class HiddenAddress(val accountId: String, val index: Int)
+
+    /** A user-given label for one specific UTXO — keyed by address (the UTXOs tab is per-address,
+     *  not per-account) + `"txId:index"` outpoint key, mirroring [AddressLabel]'s flat-list shape. */
+    private data class UtxoLabel(val address: String, val outpointKey: String, val label: String)
 
     private val gson = Gson()
 
@@ -146,6 +151,27 @@ class ColdStorageManager @Inject constructor(
         val remaining = getAllAddressLabels().filterNot { it.accountId == accountId && it.index == index }
         val trimmed = label.trim()
         saveAddressLabels(if (trimmed.isNotEmpty()) remaining + AddressLabel(accountId, index, trimmed) else remaining)
+    }
+
+    private fun getAllUtxoLabels(): List<UtxoLabel> {
+        val json = sharedPrefs.getString(PREF_UTXO_LABELS, null) ?: return emptyList()
+        val type = object : TypeToken<List<UtxoLabel>>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    private fun saveUtxoLabels(labels: List<UtxoLabel>) {
+        sharedPrefs.edit().putString(PREF_UTXO_LABELS, gson.toJson(labels)).apply()
+    }
+
+    /** outpointKey ("txId:index") -> label, for every labeled UTXO at [address]. Unlabeled UTXOs just aren't present in the map. */
+    fun getUtxoLabels(address: String): Map<String, String> =
+        getAllUtxoLabels().filter { it.address == address }.associate { it.outpointKey to it.label }
+
+    /** A blank [label] clears any existing label for this UTXO rather than storing an empty string. */
+    fun setUtxoLabel(address: String, outpointKey: String, label: String) {
+        val remaining = getAllUtxoLabels().filterNot { it.address == address && it.outpointKey == outpointKey }
+        val trimmed = label.trim()
+        saveUtxoLabels(if (trimmed.isNotEmpty()) remaining + UtxoLabel(address, outpointKey, trimmed) else remaining)
     }
 
     private fun getAllHiddenAddresses(): List<HiddenAddress> {

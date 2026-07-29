@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Drive ব্যাকআপের আকার পরীক্ষা করুন</string>
     <string name="checking_availability">উপলব্ধতা পরীক্ষা করা হচ্ছে...</string>
     <string name="checking_your_chatting_address_balance">আপনার চ্যাট ঠিকানার ব্যালেন্স পরীক্ষা করা হচ্ছে...</string>
+    <string name="chess_stats">দাবা পরিসংখ্যান</string>
     <string name="choose_avatar">অবতার চয়ন করুন</string>
     <string name="choose_banner">ব্যানার নির্বাচন করুন</string>
+    <string name="choose_coin">কয়েন বেছে নিন</string>
     <string name="choose_photo">ছবি বেছে নিন</string>
     <string name="choose_which_tabs_appear_in_your">আপনার নিচের মেনুতে কোন ট্যাবগুলো দেখাবে তা বেছে নিন।</string>
     <string name="clear">মুছুন</string>
@@ -90,6 +92,8 @@
     <string name="delete">মুছে ফেলুন</string>
     <string name="delete_account">অ্যাকাউন্ট মুছে ফেলুন</string>
     <string name="delete_group">গ্রুপ মুছুন</string>
+    <string name="delete_swap_history_message">এটি শুধুমাত্র আপনার স্থানীয় ইতিহাস থেকে সরিয়ে দেয় - এটি প্রকৃত এক্সচেঞ্জকে প্রভাবিত করে না।</string>
+    <string name="delete_this_swap">এই সোয়াপটি মুছবেন?</string>
     <string name="delete_transaction">লেনদেন মুছুন</string>
     <string name="deposit_address">জমার ঠিকানা</string>
     <string name="domain_name">ডোমেইন নাম</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">QR কোড</string>
     <string name="quantity">পরিমাণ</string>
     <string name="rate">হার</string>
+    <string name="read">পঠিত</string>
     <string name="receiving_kas_at">KAS গ্রহণ করা হচ্ছে</string>
     <string name="recipient_address">প্রাপকের ঠিকানা</string>
     <string name="recipient_address_or_kas_name">প্রাপকের ঠিকানা বা .kas নাম</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">ডোমেইন সমাধান হচ্ছে…</string>
     <string name="resolving">সমাধান হচ্ছে...</string>
     <string name="retention">ধারণ</string>
+    <string name="retry">পুনরায় চেষ্টা করুন</string>
     <string name="retry_inscription_reveal">ইনস্ক্রিপশন রিভিল আবার চেষ্টা করুন</string>
     <string name="save">সংরক্ষণ করুন</string>
     <string name="saved_accounts">সংরক্ষিত অ্যাকাউন্ট</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">আপনার KasSigner ডিভাইস দিয়ে এটি স্ক্যান করুন, সেখানে পর্যালোচনা করুন, তারপর স্বাক্ষর করুন।</string>
     <string name="scroll_to_latest">সর্বশেষে স্ক্রল করুন</string>
     <string name="search_chats">চ্যাট খুঁজুন</string>
+    <string name="search_coins">কয়েন অনুসন্ধান করুন</string>
     <string name="secure_messaging_on_kaspa_blockdag">Kaspa BlockDAG-এ নিরাপদ মেসেজিং</string>
     <string name="security_warning">নিরাপত্তা সতর্কতা</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">আবার চেষ্টা করুন</string>
     <string name="unhide">আনহাইড করুন</string>
     <string name="unlink">আনলিংক করুন</string>
+    <string name="unread">অপঠিত</string>
     <string name="use_default">ডিফল্ট ব্যবহার করুন</string>
     <string name="users_you_hide_from_a_broadcast">আপনি যে ব্যবহারকারীদের একটি সম্প্রচার রুম থেকে লুকান (তাদের অ্যাভাটার মেনুর মাধ্যমে) তারা এখানে দেখা যায়, এবং কোনো রুমে কখনো প্রদর্শিত হয় না বা ক্যাশে হয় না।</string>
     <string name="valid_address">বৈধ ঠিকানা</string>
     <string name="view_on_changenow">ChangeNOW-এ দেখুন</string>
     <string name="waiting_for_camera">ক্যামেরার জন্য অপেক্ষা করা হচ্ছে...</string>
+    <string name="waiting_on_opponent">প্রতিপক্ষের জন্য অপেক্ষা করা হচ্ছে</string>
     <string name="walk_through_setting_up_your_domain">আপনার ডোমেইন, ব্যানার, অ্যাভাটার এবং বিবরণ সেট আপ করার মধ্য দিয়ে ধাপে ধাপে নিয়ে যায়।</string>
     <string name="when_you_message_someone_new_on">আপনি যখন KaChat-এ কাউকে নতুন বার্তা পাঠান, তারা কোনো বিজ্ঞপ্তি পাবে না এবং আপনার বার্তা লুকানো থাকবে যতক্ষণ না তারা আপনাকে উত্তর দেয় বা আপনাকেও যোগ করে। এটি স্প্যাম থেকে রক্ষা করে এবং আপনার গোপনীয়তা বাড়ায়। আপনি চাইলে তাদের জানানো হোক, হাতের আইকনে ট্যাপ করে একটি যোগাযোগের অনুরোধ পাঠান যার খরচ হবে 0.2 KAS। (দ্রষ্টব্য: KaChat ছাড়া সব মেসেজিং অ্যাপের জন্য একটি যোগাযোগের অনুরোধ প্রয়োজন হবে)</string>
     <string name="wipe_account">অ্যাকাউন্ট মুছুন</string>

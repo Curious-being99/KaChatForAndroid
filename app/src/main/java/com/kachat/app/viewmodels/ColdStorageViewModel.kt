@@ -6,6 +6,8 @@ import com.kachat.app.repository.AppSettingsRepository
 import com.kachat.app.services.ColdStorageAddressDiscovery
 import com.kachat.app.services.ColdStorageManager
 import com.kachat.app.services.ColdStorageSendEngine
+import com.kachat.app.services.KnsService
+import com.kachat.app.services.UtxoEntry
 import com.kachat.app.util.KaspaExtendedPublicKey
 import com.kachat.app.util.KsptCodec
 import com.kachat.app.util.QrFrameChunker
@@ -28,8 +30,13 @@ class ColdStorageViewModel @Inject constructor(
     private val coldStorageManager: ColdStorageManager,
     private val addressDiscovery: ColdStorageAddressDiscovery,
     private val sendEngine: ColdStorageSendEngine,
-    private val settings: AppSettingsRepository
+    private val settings: AppSettingsRepository,
+    private val knsService: KnsService
 ) : ViewModel() {
+
+    /** Forward KNS domain resolution for the send form's recipient field - lets typing "name.kas"
+     *  resolve to a Kaspa address the same way Create Chat's own address field already does. */
+    suspend fun resolveKnsDomain(domain: String): String? = knsService.resolve(domain)
 
     private val _accounts = MutableStateFlow(coldStorageManager.getAccounts())
     val accounts: StateFlow<List<ColdStorageManager.ColdAccount>> = _accounts.asStateFlow()
@@ -108,21 +115,28 @@ class ColdStorageViewModel @Inject constructor(
             try {
                 val parsed = KaspaExtendedPublicKey.parse(account.kpub).getOrThrow()
                 val rootKey = KaspaExtendedPublicKey.toDeterministicKey(parsed)
-                val byIndex = addressDiscovery.discoverAddresses(rootKey).associateBy { it.index }.toMutableMap()
+                val labels = coldStorageManager.getAddressLabels(accountId)
+                val hiddenIndices = coldStorageManager.getHiddenIndices(accountId)
+                val byIndex = mutableMapOf<Int, ColdStorageAddressDiscovery.DiscoveredAddress>()
+
+                addressDiscovery.discoverAddresses(rootKey).forEach { byIndex[it.index] = it }
 
                 for (index in 0..account.maxDerivedIndex) {
                     if (index !in byIndex) {
-                        addressDiscovery.checkAddress(rootKey, chain = 0, index = index)?.let { byIndex[index] = it }
+                        addressDiscovery.checkAddress(rootKey, chain = 0, index = index)?.let {
+                            byIndex[it.index] = it
+                        }
                     }
                 }
 
                 val maxIndex = maxOf(account.maxDerivedIndex, byIndex.keys.maxOrNull() ?: 0)
                 coldStorageManager.ensureMaxDerivedIndexAtLeast(accountId, maxIndex)
 
-                val labels = coldStorageManager.getAddressLabels(accountId)
-                val hiddenIndices = coldStorageManager.getHiddenIndices(accountId)
-                // Newest (highest index) first — a just-generated address should be immediately
-                // visible at the top, not require scrolling past every earlier one to find it.
+                // Single commit once everything's ready, not one per address as each REST check
+                // resolved — that made rows visibly trickle in one at a time instead of the whole
+                // list appearing together like iOS (whose balance fetch is one batched gRPC call,
+                // so it has nothing to trickle). Newest (highest index) first — a just-generated
+                // address should be immediately visible at the top.
                 _addresses.value = byIndex.values.sortedByDescending { it.index }.map {
                     AddressRow(it.index, it.address, it.balanceSompi, it.hasHistory, labels[it.index], it.index in hiddenIndices)
                 }
@@ -185,6 +199,12 @@ class ColdStorageViewModel @Inject constructor(
         }
     }
 
+    fun getUtxoLabels(address: String): Map<String, String> = coldStorageManager.getUtxoLabels(address)
+
+    fun setUtxoLabel(address: String, outpointKey: String, label: String) {
+        coldStorageManager.setUtxoLabel(address, outpointKey, label)
+    }
+
     /**
      * Hiding is purely a display preference — the address and its label are untouched, and it
      * always shows back up under "Hidden Addresses" to be unhidden. Unhiding is always allowed,
@@ -221,6 +241,23 @@ class ColdStorageViewModel @Inject constructor(
         }
     }
 
+    private val _utxos = MutableStateFlow<List<ColdStorageAddressDiscovery.AddressUtxo>>(emptyList())
+    val utxos: StateFlow<List<ColdStorageAddressDiscovery.AddressUtxo>> = _utxos.asStateFlow()
+
+    private val _isLoadingUtxos = MutableStateFlow(false)
+    val isLoadingUtxos: StateFlow<Boolean> = _isLoadingUtxos.asStateFlow()
+
+    fun loadUtxos(address: String) {
+        viewModelScope.launch {
+            _isLoadingUtxos.value = true
+            try {
+                _utxos.value = addressDiscovery.getUtxos(address)
+            } finally {
+                _isLoadingUtxos.value = false
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Send flow — build an unsigned tx from one address, show it as an animated KSPT QR, scan
     // the signed response back, and broadcast it. [ColdStorageSendEngine] does the actual tx
@@ -244,13 +281,19 @@ class ColdStorageViewModel @Inject constructor(
     // the original tx to verify the signed response's outputs/inputs weren't tampered with.
     private var pendingUnsignedTx: ColdStorageSendEngine.UnsignedColdTx? = null
 
-    fun startColdSend(fromAddress: String, toAddress: String, amountSompi: Long, feeRateOverride: Long? = null) {
+    fun startColdSend(
+        fromAddress: String,
+        toAddress: String,
+        amountSompi: Long,
+        feeRateOverride: Long? = null,
+        manualUtxos: List<UtxoEntry>? = null
+    ) {
         val step = _sendState.value.step
         if (step != ColdSendStep.IDLE && step != ColdSendStep.SUCCESS && step != ColdSendStep.FAILED) return
 
         _sendState.value = ColdSendUiState(step = ColdSendStep.BUILDING)
         viewModelScope.launch {
-            sendEngine.buildUnsignedTransaction(fromAddress, toAddress, amountSompi, feeRateOverride).fold(
+            sendEngine.buildUnsignedTransaction(fromAddress, toAddress, amountSompi, feeRateOverride, manualUtxos).fold(
                 onSuccess = { unsigned ->
                     pendingUnsignedTx = unsigned
                     val kspt = sendEngine.toKspt(unsigned)
@@ -295,6 +338,16 @@ class ColdStorageViewModel @Inject constructor(
         pendingUnsignedTx = null
         _sendState.value = ColdSendUiState()
     }
+
+    suspend fun estimateMaxAmount(fromAddress: String, feeRateOverride: Long? = null, manualUtxos: List<UtxoEntry>? = null): Long =
+        sendEngine.estimateMaxAmount(fromAddress, feeRateOverride, manualUtxos)
+
+    suspend fun fetchUtxosForCoinControl(fromAddress: String): List<UtxoEntry> = sendEngine.fetchUtxos(fromAddress)
+
+    suspend fun previewAutomaticSelection(fromAddress: String, amountSompi: Long, feeRateSompiPerGram: Long): ColdStorageSendEngine.AutomaticSelectionPreview? =
+        sendEngine.previewAutomaticSelection(fromAddress, amountSompi, feeRateSompiPerGram)
+
+    suspend fun fetchQuotedFeeRateSompiPerGram(): Long = sendEngine.fetchQuotedFeeRateSompiPerGram()
 
     /**
      * Refreshes immediately, then again after a short delay — a just-broadcast transaction's

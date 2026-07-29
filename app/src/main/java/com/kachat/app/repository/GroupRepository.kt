@@ -10,6 +10,7 @@ import com.kachat.app.models.GroupEntity
 import com.kachat.app.models.GroupMember
 import com.kachat.app.models.GroupMessageEntity
 import com.kachat.app.models.GroupSyncCursorEntity
+import com.kachat.app.models.ReactionEntity
 import com.kachat.app.services.GroupBag
 import com.kachat.app.services.GroupControlIndexerResponse
 import com.kachat.app.services.GroupMessageIndexerResponse
@@ -24,6 +25,7 @@ import com.kachat.app.util.GroupCipher
 import com.kachat.app.util.ImageMessage
 import com.kachat.app.util.KasiaCipher
 import com.kachat.app.util.KaspaAddress
+import com.kachat.app.util.MessageReaction
 import com.kachat.app.util.MessageReply
 import com.kachat.app.util.Schnorr
 import com.kachat.app.util.VoiceMessage
@@ -136,6 +138,13 @@ class GroupRepository @Inject constructor(
                 val groupIdBytes = groupId.hexToByteArray()
                 entities.mapNotNull { decryptEntity(it, bag, groupIdBytes) }
             }
+        }
+    }
+
+    fun getReactions(groupId: String): Flow<List<ReactionEntity>> {
+        return walletManager.activeAddressFlow.flatMapLatest { address ->
+            if (address == null) flowOf(emptyList())
+            else database.reactionDao().getReactionsForGroup(groupId, address)
         }
     }
 
@@ -309,6 +318,7 @@ class GroupRepository @Inject constructor(
         val walletAddress = walletManager.getAddress()
         groupSecretStore.deleteBag(walletAddress, groupId)
         database.groupDao().deleteMessagesForGroup(groupId, walletAddress)
+        database.reactionDao().deleteAllForGroup(groupId, walletAddress)
         database.groupDao().deleteGroup(groupId, walletAddress)
     }
 
@@ -383,6 +393,62 @@ class GroupRepository @Inject constructor(
         } catch (e: Exception) {
             database.groupDao().updateMessageStatus(pendingId, walletAddress, "failed")
             throw e
+        }
+    }
+
+    /**
+     * Reacts to [targetTxId] with [emoji] ("add"), or removes this wallet's existing reaction on
+     * it ("remove"). Unlike [sendGroupMessage], this never creates a visible pending bubble - the
+     * reaction is applied to the local reactions table immediately (optimistic UI) and the actual
+     * send reuses the exact same single self-stash broadcast [sendGroupMessage] uses, which
+     * already reaches every member via the shared group root key - no per-member fan-out needed.
+     */
+    suspend fun sendGroupReaction(targetTxId: String, groupId: String, emoji: String, action: String) {
+        val walletAddress = walletManager.getAddress()
+        database.groupDao().getGroup(groupId, walletAddress) ?: throw IllegalStateException("Unknown group.")
+        val bag = groupSecretStore.loadBag(walletAddress, groupId) ?: throw IllegalStateException("Missing group secrets - try rejoining this group.")
+
+        val groupIdBytes = groupId.hexToByteArray()
+        val groupRootEpoch = bag.groupRootEpoch.hexToByteArray()
+        val blindingKey = bag.blindingKey.hexToByteArray()
+        val deviceId = bag.deviceId.hexToByteArray()
+        val privateKey = walletManager.getPrivateKeyBytes()
+        val senderXOnlyPub = Schnorr.publicKeyXOnly(privateKey)
+        val senderId = GroupCipher.deriveSenderId(walletAddress)
+        val payload = MessageReaction.encode(targetTxId, emoji, action)
+
+        if (action == "add") {
+            database.reactionDao().upsertReaction(
+                ReactionEntity(
+                    targetTxId = targetTxId, walletAddress = walletAddress, reactorAddress = walletAddress,
+                    emoji = emoji, reactionTxId = null, blockTimestamp = System.currentTimeMillis(), groupId = groupId
+                )
+            )
+        } else {
+            database.reactionDao().deleteReaction(targetTxId, walletAddress, walletAddress)
+        }
+
+        // Persist the incremented counter BEFORE building/sending - a msg_id must never be
+        // reused even if the send itself later fails.
+        val counter = bag.msgCounter + 1
+        groupSecretStore.saveBag(walletAddress, bag.copy(msgCounter = counter))
+
+        val msgId = GroupCipher.buildMsgId(deviceId, counter)
+        val ciphertext = GroupCipher.encryptMessage(payload, groupRootEpoch, groupIdBytes, bag.currentEpoch, senderId, msgId)
+        val aad = GroupCipher.buildMessageAAD(groupIdBytes, bag.currentEpoch, senderId, msgId)
+        val signature = GroupCipher.sign(GroupCipher.buildMessageSigningPayload(aad, ciphertext), privateKey)
+        val blindedGroupId = GroupCipher.deriveBlindedGroupId(blindingKey, senderXOnlyPub)
+        val payloadString = GroupCipher.buildGroupMessagePayload(blindedGroupId, bag.currentEpoch, senderId, senderXOnlyPub, msgId, ciphertext, signature)
+
+        val txId = walletService.sendKaspa(toAddress = walletAddress, amountSompi = 0, payloadBytes = payloadString.toByteArray(Charsets.UTF_8))
+
+        if (action == "add") {
+            database.reactionDao().upsertReaction(
+                ReactionEntity(
+                    targetTxId = targetTxId, walletAddress = walletAddress, reactorAddress = walletAddress,
+                    emoji = emoji, reactionTxId = txId, blockTimestamp = System.currentTimeMillis(), groupId = groupId
+                )
+            )
         }
     }
 
@@ -466,6 +532,25 @@ class GroupRepository @Inject constructor(
             val plaintext = GroupCipher.decryptMessage(parsed.ciphertext, root, groupIdBytes, parsed.epoch, parsed.senderId, parsed.msgId)
             if (plaintext == null) {
                 Log.w("GroupRepository", "Rejected gcomm for group ${group.groupId.take(12)}: decrypt failed from $senderAddress")
+                return
+            }
+
+            // Reactions are never shown as their own chat bubble - just attached to the message
+            // they target - so intercept and route to the reactions table before this ever
+            // becomes a GroupMessageEntity row. Our own outgoing reactions already apply their
+            // local update at send time (sendGroupReaction), so this mainly covers incoming ones.
+            val reaction = MessageReaction.parseOrNull(plaintext)
+            if (reaction != null) {
+                if (reaction.action == "add") {
+                    database.reactionDao().upsertReaction(
+                        ReactionEntity(
+                            targetTxId = reaction.targetTxId, walletAddress = walletAddress, reactorAddress = senderAddress,
+                            emoji = reaction.emoji, reactionTxId = txId, blockTimestamp = blockTimestamp, groupId = group.groupId
+                        )
+                    )
+                } else {
+                    database.reactionDao().deleteReaction(reaction.targetTxId, walletAddress, senderAddress)
+                }
                 return
             }
 

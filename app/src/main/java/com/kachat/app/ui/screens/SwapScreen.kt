@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +26,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.AlertDialog
@@ -56,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -67,8 +74,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kachat.app.R
+import com.kachat.app.models.CURATED_SWAP_COINS
 import com.kachat.app.models.SwapCoin
 import com.kachat.app.models.SwapTransactionEntity
 import com.kachat.app.ui.theme.KaspaTeal
@@ -92,10 +102,7 @@ fun SwapScreen(
     val payoutAddressText by swapViewModel.payoutAddressText.collectAsState()
     val estimateState by swapViewModel.estimateState.collectAsState()
     val createSwapState by swapViewModel.createSwapState.collectAsState()
-    val spendingBalanceSompi by swapViewModel.spendingBalanceSompi.collectAsState()
-    val selectedFromAddress by swapViewModel.selectedFromAddress.collectAsState()
     val toAddress by swapViewModel.toAddress.collectAsState()
-    val feeRateOverrideSompi by swapViewModel.feeRateOverrideSompi.collectAsState()
     val swapHistory by swapViewModel.swapHistory.collectAsState()
     val swapDisclaimerAgreed by swapViewModel.swapDisclaimerAgreed.collectAsState()
 
@@ -104,27 +111,11 @@ fun SwapScreen(
     val pagerState = rememberPagerState(pageCount = { 2 })
     val pagerScope = rememberCoroutineScope()
     var selectedSwapId by remember { mutableStateOf<String?>(null) }
-    var showFeeEditor by remember { mutableStateOf(false) }
-    var feeEditorInput by remember { mutableStateOf("") }
+    var showCoinPicker by remember { mutableStateOf(false) }
+    var pendingDeleteSwapId by remember { mutableStateOf<String?>(null) }
     val selectedSwap = swapHistory.find { it.id == selectedSwapId }
 
-    // Same simplified single-input, two-output shape Manage Addresses' withdraw dialog estimates
-    // against — the swap's KAS leg is a plain send to ChangeNOW's deposit address, same shape.
-    val estimatedMass = remember {
-        com.kachat.app.util.KaspaMass.calculateMass(numInputs = 1, outputScriptLens = listOf(34, 34), payloadSize = 0)
-    }
-    val defaultFeeSompi = com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
-    val effectiveFeeSompi = feeRateOverrideSompi?.let { com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, it) } ?: defaultFeeSompi
-
     val savedStateHandle = navController?.currentBackStackEntry?.savedStateHandle
-    val pickedFromIndex = savedStateHandle?.getStateFlow<Int?>("picked_from_index", null)?.collectAsState()
-    LaunchedEffect(pickedFromIndex?.value) {
-        val index = pickedFromIndex?.value ?: return@LaunchedEffect
-        val balance = savedStateHandle?.get<Long>("picked_from_balance") ?: 0L
-        swapViewModel.selectFromSpendingAddress(index, balance)
-        savedStateHandle?.remove<Int>("picked_from_index")
-        savedStateHandle?.remove<Long>("picked_from_balance")
-    }
     val pickedToIndex = savedStateHandle?.getStateFlow<Int?>("picked_to_index", null)?.collectAsState()
     LaunchedEffect(pickedToIndex?.value) {
         val index = pickedToIndex?.value ?: return@LaunchedEffect
@@ -179,7 +170,7 @@ fun SwapScreen(
             SwapHistoryPage(
                 swapHistory = swapHistory,
                 onSwapClick = { selectedSwapId = it },
-                onSwapDelete = { swapViewModel.deleteSwap(it) }
+                onSwapDelete = { pendingDeleteSwapId = it }
             )
             return@HorizontalPager
         }
@@ -196,68 +187,14 @@ fun SwapScreen(
                 amountText = amountText,
                 onAmountChange = { swapViewModel.setAmountText(it) },
                 editable = true,
-                onMaxClick = if (kasIsSendSide) {
-                    {
-                        val maxSompi = (spendingBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                        swapViewModel.setAmountText("%.8f".format(Locale.US, maxSompi / 100_000_000.0))
-                    }
-                } else null
+                onMaxClick = null,
+                onCoinClick = if (!kasIsSendSide) { { showCoinPicker = true } } else null
             )
-
-            if (kasIsSendSide) {
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(LocalAppColors.current.surface)
-                        .clickable(enabled = navController != null) {
-                            navController?.navigate("manage_addresses_pick/from")
-                        }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.available), color = LocalAppColors.current.textSecondary, fontSize = 11.sp)
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "%.8f KAS (${if (selectedFromAddress != null) "Address #${selectedFromAddress?.index}" else "Primary"})"
-                                .format(Locale.US, spendingBalanceSompi / 100_000_000.0),
-                            color = LocalAppColors.current.textPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "Fee: %.8f KAS".format(Locale.US, effectiveFeeSompi / 100_000_000.0),
-                            color = KaspaTeal,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                            modifier = Modifier.clickable {
-                                feeEditorInput = "%.8f".format(Locale.US, effectiveFeeSompi / 100_000_000.0)
-                                showFeeEditor = true
-                            }
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        stringResource(R.string.change),
-                        color = KaspaTeal,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
-                    )
-                }
-            }
 
             // Flip control and the primary CTA share a row instead of the CTA sitting in its own
             // full-width button further down — keeps the whole form on screen without scrolling.
-            val isBusy = createSwapState.status == SwapViewModel.CreateSwapStatus.SENDING_KAS ||
-                createSwapState.status == SwapViewModel.CreateSwapStatus.CREATING
-            val amountSompi = amountText.toDoubleOrNull()?.let { Math.round(it * 100_000_000.0) } ?: 0L
-            val insufficientFunds = kasIsSendSide && amountSompi > spendingBalanceSompi
-            val canSwap = estimateState.status == SwapViewModel.EstimateStatus.SUCCESS && !isBusy && !insufficientFunds
+            val isBusy = createSwapState.status == SwapViewModel.CreateSwapStatus.CREATING
+            val canSwap = estimateState.status == SwapViewModel.EstimateStatus.SUCCESS && !isBusy
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -282,11 +219,7 @@ fun SwapScreen(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
                     } else {
                         Text(
-                            when {
-                                insufficientFunds -> "Insufficient Funds"
-                                kasIsSendSide -> "Swap"
-                                else -> "Get Deposit Address"
-                            },
+                            "Get Deposit Address",
                             color = if (canSwap) Color.Black else LocalAppColors.current.textSecondary,
                             fontWeight = FontWeight.Bold
                         )
@@ -305,7 +238,8 @@ fun SwapScreen(
                 coinLabel = if (kasIsSendSide) otherCoin.displayName else "KAS",
                 amountText = estimatedAmountText,
                 onAmountChange = {},
-                editable = false
+                editable = false,
+                onCoinClick = if (kasIsSendSide) { { showCoinPicker = true } } else null
             )
 
             if (needsPayoutAddress) {
@@ -399,30 +333,55 @@ fun SwapScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        val fromCoinDisplayName = if (kasIsSendSide) com.kachat.app.models.KAS_SWAP_COIN.displayName else otherCoin.displayName
+                        if (kasIsSendSide) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = navController != null) {
+                                        navController?.navigate("manage_addresses")
+                                    }
+                                    .padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Go to Spending Addresses",
+                                    color = KaspaTeal,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = KaspaTeal)
+                            }
+                        }
                         Text(
-                            if (kasIsSendSide) "KAS sent, exchange in progress" else "Send ${otherCoin.displayName} to this address",
+                            "Send $fromCoinDisplayName to this address",
                             color = LocalAppColors.current.textPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(8.dp))
-                        if (!kasIsSendSide) {
-                            // Other coin -> KAS: this device can't send that coin itself, so the
-                            // user needs to pay into the deposit address from wherever they hold it.
-                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                val qrPainter = rememberQrBitmapPainter(result.payinAddress ?: "")
-                                Box(
-                                    modifier = Modifier
-                                        .size(180.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.White)
-                                        .padding(12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    androidx.compose.foundation.Image(qrPainter, "Deposit address QR", modifier = Modifier.fillMaxSize())
-                                }
+                        // Neither side of a swap is something this app sends automatically - the
+                        // user always pays into the deposit address themselves, from wherever they
+                        // hold whichever coin they're giving up (including KAS).
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            val qrPainter = rememberQrBitmapPainter(result.payinAddress ?: "")
+                            Box(
+                                modifier = Modifier
+                                    .size(180.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White)
+                                    .clickable {
+                                        result.payinAddress?.let {
+                                            clipboardManager.setText(AnnotatedString(it))
+                                            Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                androidx.compose.foundation.Image(qrPainter, "Deposit address QR", modifier = Modifier.fillMaxSize())
                             }
-                            Spacer(Modifier.height(12.dp))
                         }
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -533,73 +492,13 @@ fun SwapScreen(
         )
     }
 
-    if (showFeeEditor) {
-        AlertDialog(
-            onDismissRequest = { showFeeEditor = false },
-            containerColor = LocalAppColors.current.surface,
-            title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
-            text = {
-                Column {
-                    Text(
-                        stringResource(R.string.if_the_network_is_busy_a),
-                        color = LocalAppColors.current.textSecondary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = feeEditorInput,
-                        onValueChange = { feeEditorInput = it },
-                        label = { Text(stringResource(R.string.fee_kas)) },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LocalAppColors.current.textPrimary,
-                            unfocusedTextColor = LocalAppColors.current.textPrimary,
-                            focusedBorderColor = KaspaTeal,
-                            unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                            focusedLabelColor = KaspaTeal,
-                            unfocusedLabelColor = LocalAppColors.current.textSecondary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Default: %.8f KAS".format(Locale.US, defaultFeeSompi / 100_000_000.0),
-                        color = LocalAppColors.current.textSecondary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val kas = feeEditorInput.toDoubleOrNull()
-                    swapViewModel.setFeeRateOverride(
-                        if (kas != null && kas > 0) {
-                            val desiredFeeSompi = Math.round(kas * 100_000_000.0)
-                            kotlin.math.ceil(desiredFeeSompi.toDouble() / estimatedMass).toLong()
-                        } else {
-                            null
-                        }
-                    )
-                    showFeeEditor = false
-                }) {
-                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        swapViewModel.setFeeRateOverride(null)
-                        showFeeEditor = false
-                    }) {
-                        Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
-                    }
-                    TextButton(onClick = { showFeeEditor = false }) {
-                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
-                    }
-                }
+    if (showCoinPicker) {
+        SwapCoinPickerDialog(
+            currentCoin = otherCoin,
+            onDismiss = { showCoinPicker = false },
+            onPick = {
+                swapViewModel.setOtherCoin(it)
+                showCoinPicker = false
             }
         )
     }
@@ -624,6 +523,34 @@ fun SwapScreen(
             dismissButton = {
                 TextButton(onClick = { navController?.popBackStack() }) {
                     Text(stringResource(R.string.not_now), color = LocalAppColors.current.textSecondary)
+                }
+            }
+        )
+    }
+
+    pendingDeleteSwapId?.let { swapId ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSwapId = null },
+            containerColor = LocalAppColors.current.surface,
+            title = { Text(stringResource(R.string.delete_this_swap), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    stringResource(R.string.delete_swap_history_message),
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    swapViewModel.deleteSwap(swapId)
+                    pendingDeleteSwapId = null
+                }) {
+                    Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSwapId = null }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -760,31 +687,79 @@ private fun SwapDetailDialog(
     }
 }
 
-/** KAS gets the real brand mark; anything else is shown as its coin icon with a small network badge in the corner. */
+/** Ticker -> drawable resource for coins with real brand art (sourced from the Tangem wallet
+ * app's bundled network logos). Tickers not listed here (xmr, zec, usdt) have no available art
+ * and fall back to the plain ticker-text circle. */
+private val coinLogoDrawables: Map<String, Int> = mapOf(
+    "btc" to R.drawable.ic_coin_btc,
+    "eth" to R.drawable.ic_coin_eth,
+    "sol" to R.drawable.ic_coin_sol,
+    "xrp" to R.drawable.ic_coin_xrp,
+    "bnb" to R.drawable.ic_coin_bnb,
+    "trx" to R.drawable.ic_coin_trx,
+    "hype" to R.drawable.ic_coin_hype,
+    "doge" to R.drawable.ic_coin_doge,
+    "ltc" to R.drawable.ic_coin_ltc,
+    "ada" to R.drawable.ic_coin_ada,
+    "bch" to R.drawable.ic_coin_bch,
+    "etc" to R.drawable.ic_coin_etc,
+    "usdc" to R.drawable.ic_coin_usdc
+)
+
+/**
+ * KAS and the tickers in `coinLogoDrawables` get their real brand marks; USDC-on-Polygon
+ * additionally gets a small network badge in the corner; everything else falls back to a plain
+ * ticker-text circle, since no art exists for them. Matches iOS's identical fallback
+ * (`swapCoinIcon` in SwapView.swift).
+ */
 @Composable
 private fun CoinIcon(coin: SwapCoin, size: Dp = 28.dp) {
-    if (coin.ticker == "kas") {
-        Image(
-            painterResource(R.drawable.ic_kaspa_logo),
-            contentDescription = coin.displayName,
-            modifier = Modifier.size(size).clip(CircleShape)
-        )
-    } else {
-        Box(modifier = Modifier.size(size)) {
+    when {
+        coin.ticker == "kas" -> {
             Image(
-                painterResource(R.drawable.ic_usdc_coin),
+                painterResource(R.drawable.ic_kaspa_logo),
                 contentDescription = coin.displayName,
                 modifier = Modifier.size(size).clip(CircleShape)
             )
+        }
+        coin.ticker == "usdc" && coin.network == "matic" -> {
+            Box(modifier = Modifier.size(size)) {
+                Image(
+                    painterResource(R.drawable.ic_coin_usdc),
+                    contentDescription = coin.displayName,
+                    modifier = Modifier.size(size).clip(CircleShape)
+                )
+                Image(
+                    painterResource(R.drawable.ic_polygon_network),
+                    contentDescription = stringResource(R.string.polygon_network),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(size * 0.5f)
+                        .clip(CircleShape)
+                        .border(1.dp, LocalAppColors.current.surface, CircleShape)
+                )
+            }
+        }
+        coinLogoDrawables.containsKey(coin.ticker) -> {
             Image(
-                painterResource(R.drawable.ic_polygon_network),
-                contentDescription = stringResource(R.string.polygon_network),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(size * 0.5f)
-                    .clip(CircleShape)
-                    .border(1.dp, LocalAppColors.current.surface, CircleShape)
+                painterResource(coinLogoDrawables.getValue(coin.ticker)),
+                contentDescription = coin.displayName,
+                modifier = Modifier.size(size).clip(CircleShape)
             )
+        }
+        else -> {
+            Box(
+                modifier = Modifier.size(size).clip(CircleShape).background(KaspaTeal.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    coin.ticker.uppercase(),
+                    color = LocalAppColors.current.textPrimary,
+                    fontSize = (size.value * 0.28f).sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -824,7 +799,11 @@ private fun SwapHistoryPage(swapHistory: List<SwapTransactionEntity>, onSwapClic
 @Composable
 private fun SwapHistoryRow(swap: SwapTransactionEntity, onClick: () -> Unit, onDelete: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LocalAppColors.current.surface)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -853,9 +832,13 @@ private fun SwapHistoryRow(swap: SwapTransactionEntity, onClick: () -> Unit, onD
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall
         )
-        Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onDelete, modifier = Modifier.size(20.dp)) {
-            Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
+        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = stringResource(R.string.delete),
+                tint = Color(0xFFFF3B30),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
@@ -868,7 +851,10 @@ private fun SwapAmountCard(
     amountText: String,
     onAmountChange: (String) -> Unit,
     editable: Boolean,
-    onMaxClick: (() -> Unit)? = null
+    onMaxClick: (() -> Unit)? = null,
+    // Only the non-KAS side of the pair is actually pickable - KAS is always the fixed side, so
+    // callers only ever pass this for the card showing `otherCoin`.
+    onCoinClick: (() -> Unit)? = null
 ) {
     Surface(
         color = LocalAppColors.current.surface,
@@ -913,12 +899,153 @@ private fun SwapAmountCard(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(LocalAppColors.current.surfaceVariant)
+                        .then(if (onCoinClick != null) Modifier.clickable(onClick = onCoinClick) else Modifier)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CoinIcon(coin, size = 20.dp)
                     Spacer(Modifier.width(6.dp))
                     Text(coinLabel, color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    if (onCoinClick != null) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = LocalAppColors.current.textSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Reached by tapping either amount card's coin badge (the non-KAS side only - KAS is always the
+ * fixed side of the pair). Searchable since [CURATED_SWAP_COINS] now has ~50 entries across many
+ * networks, not just the one hardcoded USDC-Polygon pair this originally shipped with. Mirrors
+ * iOS's SwapCoinPickerView.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwapCoinPickerDialog(currentCoin: SwapCoin, onDismiss: () -> Unit, onPick: (SwapCoin) -> Unit) {
+    // Tickers with more than one network - collapsed to a single row on the root list that
+    // expands in place to show its networks (rather than listing all ~7-9 networks inline
+    // unconditionally, or navigating to a second screen), since that's most of what made the flat
+    // list unwieldy.
+    val groupedTickers = remember { mapOf("usdt" to "Tether", "usdc" to "USD Coin") }
+    var expandedGroups by remember { mutableStateOf(setOf<String>()) }
+    var searchText by remember { mutableStateOf("") }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        // Root list: USDC and USDT are pinned as the first two rows (in that order) since they're
+        // the most commonly swapped stablecoins, each a collapsed/expandable row that shows one
+        // indented network row per its coins while expanded; everything else follows in
+        // CURATED_SWAP_COINS's order.
+        data class RootRow(val key: String, val ticker: String, val displayName: String, val icon: SwapCoin, val coin: SwapCoin?, val isGroup: Boolean, val isNetwork: Boolean)
+        val rootRows = remember(expandedGroups) {
+            val rows = mutableListOf<RootRow>()
+            for (ticker in listOf("usdc", "usdt")) {
+                val groupName = groupedTickers[ticker] ?: continue
+                val representative = CURATED_SWAP_COINS.first { it.ticker == ticker }
+                rows.add(RootRow("group-$ticker", ticker, groupName, representative, null, isGroup = true, isNetwork = false))
+                if (expandedGroups.contains(ticker)) {
+                    for (coin in CURATED_SWAP_COINS) {
+                        if (coin.ticker == ticker) {
+                            rows.add(RootRow("network-${coin.ticker}-${coin.network}", coin.ticker, coin.displayName, coin, coin, isGroup = false, isNetwork = true))
+                        }
+                    }
+                }
+            }
+            for (coin in CURATED_SWAP_COINS) {
+                if (groupedTickers[coin.ticker] == null) {
+                    rows.add(RootRow("${coin.ticker}-${coin.network}", coin.ticker, coin.displayName, coin, coin, isGroup = false, isNetwork = false))
+                }
+            }
+            rows
+        }
+        val filteredRows = remember(searchText, rootRows) {
+            val query = searchText.trim().lowercase()
+            if (query.isEmpty()) {
+                rootRows
+            } else {
+                rootRows.filter { it.displayName.lowercase().contains(query) || it.ticker.lowercase().contains(query) }
+            }
+        }
+
+        Scaffold(
+            containerColor = LocalAppColors.current.background,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text(stringResource(R.string.choose_coin), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel), tint = LocalAppColors.current.textPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+                )
+            }
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    placeholder = { Text(stringResource(R.string.search_coins), color = LocalAppColors.current.textSecondary) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LocalAppColors.current.textPrimary,
+                        unfocusedTextColor = LocalAppColors.current.textPrimary,
+                        focusedBorderColor = KaspaTeal,
+                        unfocusedBorderColor = LocalAppColors.current.textSecondary
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(filteredRows, key = { it.key }) { row ->
+                        val isExpanded = expandedGroups.contains(row.ticker)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    when {
+                                        row.isGroup -> {
+                                            expandedGroups = if (isExpanded) expandedGroups - row.ticker else expandedGroups + row.ticker
+                                        }
+                                        row.coin != null -> onPick(row.coin)
+                                    }
+                                }
+                                .padding(
+                                    start = if (row.isNetwork) 40.dp else 16.dp,
+                                    end = 16.dp,
+                                    top = 12.dp,
+                                    bottom = 12.dp
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CoinIcon(row.icon, size = 28.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(row.displayName, color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
+                            if (row.isGroup) {
+                                if (currentCoin.ticker == row.ticker) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = KaspaTeal, modifier = Modifier.padding(end = 4.dp))
+                                }
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = LocalAppColors.current.textSecondary,
+                                    modifier = Modifier.rotate(if (isExpanded) 180f else 0f)
+                                )
+                            } else if (row.coin == currentCoin) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = KaspaTeal)
+                            }
+                        }
+                        HorizontalDivider(color = LocalAppColors.current.divider)
+                    }
                 }
             }
         }

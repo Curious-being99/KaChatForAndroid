@@ -93,6 +93,11 @@ fun MenuVisibilityScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column {
+                    // Always-shown (locked) rows first, then everything toggleable.
+                    MenuVisibilityRow(icon = Icons.Default.Forum, label = "Chats", checked = true, locked = true)
+                    HorizontalDivider(color = LocalAppColors.current.divider)
+                    MenuVisibilityRow(icon = Icons.Default.AccountCircle, label = "Profile", checked = true, locked = true)
+                    HorizontalDivider(color = LocalAppColors.current.divider)
                     MenuVisibilityRow(
                         icon = Icons.Default.PieChart,
                         label = "Portfolio",
@@ -109,8 +114,6 @@ fun MenuVisibilityScreen(
                         onToggle = { checked -> walletViewModel.setTabHidden("cold_storage", !checked) }
                     )
                     HorizontalDivider(color = LocalAppColors.current.divider)
-                    MenuVisibilityRow(icon = Icons.Default.Forum, label = "Chats", checked = true, locked = true)
-                    HorizontalDivider(color = LocalAppColors.current.divider)
                     MenuVisibilityRow(
                         icon = Icons.Default.SwapHoriz,
                         label = "Swap",
@@ -118,8 +121,6 @@ fun MenuVisibilityScreen(
                         locked = false,
                         onToggle = { checked -> walletViewModel.setTabHidden("swap", !checked) }
                     )
-                    HorizontalDivider(color = LocalAppColors.current.divider)
-                    MenuVisibilityRow(icon = Icons.Default.AccountCircle, label = "Profile", checked = true, locked = true)
                     HorizontalDivider(color = LocalAppColors.current.divider)
                     MenuVisibilityRow(
                         icon = Icons.Default.RssFeed,

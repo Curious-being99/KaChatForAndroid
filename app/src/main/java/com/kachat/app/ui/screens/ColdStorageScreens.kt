@@ -3,7 +3,6 @@ package com.kachat.app.ui.screens
 import com.kachat.app.R
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,16 +15,24 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.CallMerge
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -36,10 +43,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -52,17 +62,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.kachat.app.services.ColdStorageAddressDiscovery
 import com.kachat.app.services.ColdStorageManager
+import com.kachat.app.services.ColdStorageSendEngine
+import com.kachat.app.services.KnsService
+import com.kachat.app.services.UtxoEntry
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.KaspaAddress
 import com.kachat.app.util.KsptCodec
 import com.kachat.app.viewmodels.ColdStorageViewModel
 import com.kachat.app.viewmodels.WalletViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -139,16 +154,17 @@ fun ColdStorageListScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
             ) {
-                OutlinedButton(
+                Button(
                     onClick = {
                         manualKpubInput = ""
                         showManualEntry = true
                     },
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    border = BorderStroke(1.5.dp, KaspaTeal),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KaspaTeal)
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
                 ) {
+                    Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.paste_kpub), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Button(
@@ -158,6 +174,8 @@ fun ColdStorageListScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
                 ) {
                     val scanContentDescription = stringResource(R.string.scan_kpub_from_kassigner)
+                    Icon(Icons.Default.QrCodeScanner, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         stringResource(R.string.scan),
                         fontSize = 16.sp,
@@ -189,6 +207,9 @@ fun ColdStorageListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(accounts) { account ->
+                    var showMenu by remember { mutableStateOf(false) }
+                    var menuAnchor by remember { mutableStateOf(Offset.Zero) }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -211,20 +232,29 @@ fun ColdStorageListScreen(
                             )
                         }
                         IconButton(
-                            onClick = { clipboardManager.setText(AnnotatedString(account.kpub)) },
-                            modifier = Modifier.size(32.dp)
+                            onClick = { showMenu = true },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .onGloballyPositioned { coords ->
+                                    menuAnchor = coords.positionInWindow() + Offset(0f, coords.size.height.toFloat())
+                                }
                         ) {
-                            Icon(Icons.Default.ContentCopy, "Copy kpub", tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.MoreVert, stringResource(R.string.account_actions), tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
                         }
-                        Spacer(Modifier.width(4.dp))
-                        IconButton(
-                            onClick = {
+                    }
+
+                    if (showMenu) {
+                        CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
+                            PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_kpub)) {
+                                showMenu = false
+                                clipboardManager.setText(AnnotatedString(account.kpub))
+                            }
+                            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename)) {
+                                showMenu = false
                                 renamingAccount = account
                                 renameInput = account.name
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(Icons.Default.Edit, "Rename", tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 }
@@ -944,7 +974,7 @@ private fun ColdAddressRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = row.label?.takeIf { it.isNotBlank() } ?: "Address #${row.index}",
-                    color = LocalAppColors.current.textSecondary,
+                    color = KaspaTeal,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -984,6 +1014,11 @@ private fun ColdAddressRow(
 
     if (showMenu) {
         CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
+            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename_address)) {
+                showMenu = false
+                onLabelClick()
+            }
+            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
             PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_address)) {
                 showMenu = false
                 onCopyClick()
@@ -993,20 +1028,16 @@ private fun ColdAddressRow(
                 showMenu = false
                 onShowQrClick()
             }
-            if (row.balanceSompi > 0) {
-                HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                PopupMenuRow(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_from_this_address)) {
-                    showMenu = false
-                    onSendClick()
-                }
-            }
-            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename_address)) {
-                showMenu = false
-                onLabelClick()
-            }
         }
     }
+}
+
+/** Normal/Fast/Priority multiplier system, matching iOS's `WithdrawFeeTier` exactly - shared by
+ *  [ColdSendFlow] and the spending-address send flow (`SpendingAddressSendFlow` in Screens.kt). */
+enum class ColdFeeTier(val label: String, val multiplier: Long) {
+    NORMAL("Normal", 1),
+    FAST("Fast", 2),
+    PRIORITY("Priority", 5)
 }
 
 /**
@@ -1022,6 +1053,11 @@ private fun ColdSendFlow(
     availableBalanceSompi: Long,
     viewModel: ColdStorageViewModel,
     onDone: () -> Unit,
+    // Pre-fills the recipient with fromAddress itself (a self-send) and auto-fills Max, for the
+    // "Compound UTXOs" entry point — merges every UTXO at this address into one. Locks the
+    // recipient field instead of just pre-filling it, since editing it away from fromAddress
+    // would defeat the point of a compound send.
+    isCompoundMode: Boolean = false,
     portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()
 ) {
     val sendState by viewModel.sendState.collectAsState()
@@ -1033,11 +1069,50 @@ private fun ColdSendFlow(
     val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(onKasTextChange = { amountText = it })
     var showSignedScanner by remember { mutableStateOf(false) }
     var showRecipientScanner by remember { mutableStateOf(false) }
-    var feeRateOverrideSompi by remember { mutableStateOf<Long?>(null) }
+    var isEstimatingMax by remember { mutableStateOf(false) }
+    // Coin control — null means automatic (greedy, largest-first) selection; non-null fixes the
+    // exact input set the user picked instead.
+    var manualUtxos by remember { mutableStateOf<List<UtxoEntry>?>(null) }
+    var showCoinControl by remember { mutableStateOf(false) }
+    var feeTier by remember { mutableStateOf(ColdFeeTier.NORMAL) }
+    var customExtraFeeSompi by remember { mutableStateOf<Long?>(null) }
     var showFeeEditor by remember { mutableStateOf(false) }
     var feeEditorInput by remember { mutableStateOf("") }
+    val feeEditorFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val clipboardManager = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
+    val coroutineScope = rememberCoroutineScope()
+    // Fetched once and reused for both the preview below and the actual build/estimate calls
+    // (via feeRateOverrideSompi) — letting each of those independently fetch their own quote was
+    // exactly why the fee shown before Build didn't match what the real transaction ended up
+    // costing, whenever the live quote drifted between two separate fetches.
+    var liveFeeRateSompiPerGram by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(Unit) {
+        liveFeeRateSompiPerGram = viewModel.fetchQuotedFeeRateSompiPerGram()
+        if (isCompoundMode) {
+            toAddress = fromAddress
+            isEstimatingMax = true
+            try {
+                val maxSompi = viewModel.estimateMaxAmount(fromAddress, liveFeeRateSompiPerGram, manualUtxos)
+                fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+            } catch (e: Exception) {
+                // Leave the field untouched on failure — same as the Max button itself.
+            } finally {
+                isEstimatingMax = false
+            }
+        }
+    }
+
+    // Keyboard pops up the moment the fee editor opens, instead of requiring a second tap into
+    // the field after the dialog appears.
+    LaunchedEffect(showFeeEditor) {
+        if (showFeeEditor) {
+            feeEditorFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.resetColdSendState() }
@@ -1051,14 +1126,97 @@ private fun ColdSendFlow(
     val amountSompi = amountText.toDoubleOrNull()?.let { Math.round(it * 100_000_000.0) }
     val isValidRecipient = remember(toAddress) { KaspaAddress.isValid(toAddress) }
 
-    // Same simplified single-input, two-output estimate the regular Withdraw dialog's fee
-    // adjuster uses — real UTXO selection can differ slightly, but it's close enough to preview
-    // and to translate a user-entered KAS fee back into a sompi-per-gram rate.
-    val estimatedMass = remember {
+    // Debounced live preview of what automatic selection would pick for the current amount/fee —
+    // see the LaunchedEffect below. Non-null only while still fresh for the current amount/fee;
+    // cleared immediately on any relevant change so a stale preview is never shown or built with.
+    var previewSelection by remember { mutableStateOf<ColdStorageSendEngine.AutomaticSelectionPreview?>(null) }
+
+    val referenceMass1Input = remember {
         com.kachat.app.util.KaspaMass.calculateMass(numInputs = 1, outputScriptLens = listOf(34, 34), payloadSize = 0)
     }
-    val defaultFeeSompi = com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
-    val effectiveFeeSompi = feeRateOverrideSompi?.let { com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, it) } ?: defaultFeeSompi
+    // Same live-or-minimum rate the engine's own nil-override default falls back to — using it
+    // here too (instead of always assuming the bare protocol minimum) means the "Normal" preview
+    // matches what a nil-override build would actually charge whenever the network's live quote
+    // is currently above the minimum.
+    val baseFeeRateSompiPerGram = liveFeeRateSompiPerGram ?: com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+
+    // Per-gram rate for the chosen tier/custom fee — deliberately derived only from the fixed
+    // 1-input reference mass, never from `previewSelection` or the real input count below. Both
+    // the real build and the live preview fetch need this exact rate to ask "how many inputs will
+    // this take"; if it depended on the preview's own result, fetching a preview and computing the
+    // rate to fetch it with would be circular.
+    val feeRateOverrideSompi: Long = if (feeTier == ColdFeeTier.NORMAL && customExtraFeeSompi == null) {
+        baseFeeRateSompiPerGram
+    } else {
+        val referenceFeeSompi = com.kachat.app.util.KaspaMass.calculateFee(referenceMass1Input, baseFeeRateSompiPerGram)
+        val extra = customExtraFeeSompi ?: (referenceFeeSompi * (feeTier.multiplier - 1))
+        kotlin.math.ceil((referenceFeeSompi + extra).toDouble() / referenceMass1Input).toLong()
+    }
+
+    // Real input count when known (coin control, or a fresh automatic-selection preview) instead
+    // of always guessing 1 — otherwise the fee shown here could understate what a multi-UTXO send
+    // actually costs, only becoming visible after tapping Build.
+    val estimatedMass = when {
+        !manualUtxos.isNullOrEmpty() ->
+            com.kachat.app.util.KaspaMass.calculateMass(numInputs = manualUtxos!!.size, outputScriptLens = listOf(34, 34), payloadSize = 0)
+        previewSelection != null ->
+            com.kachat.app.util.KaspaMass.calculateMass(numInputs = previewSelection!!.utxos.size, outputScriptLens = listOf(34, 34), payloadSize = 0)
+        else -> referenceMass1Input
+    }
+    val defaultFeeSompi = com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, baseFeeRateSompiPerGram)
+    // Normal/Fast/Priority multiplier system, same inline (no separate screen) pattern as iOS's
+    // ColdSendFlowView and this app's own chatting-address withdraw flow's WithdrawFeeTier.
+    val extraFeeSompi = customExtraFeeSompi ?: (defaultFeeSompi * (feeTier.multiplier - 1))
+    // The live preview (when fresh and automatic selection is in play — coin control already
+    // knows its exact count another way) wins over the mass-derived number for display: it's the
+    // actual result of running the real selector at feeRateOverrideSompi, not a recomputation.
+    val effectiveFeeSompi = if (manualUtxos == null && previewSelection != null) {
+        previewSelection!!.feeSompi
+    } else {
+        defaultFeeSompi + extraFeeSompi
+    }
+
+    // Debounced (400ms) — cancels and restarts automatically whenever any key changes, so a
+    // burst of typing doesn't fire a network call per keystroke. No-ops entirely once coin
+    // control is active (manualUtxos != null) since that already knows its exact count.
+    LaunchedEffect(amountSompi, feeTier, customExtraFeeSompi, liveFeeRateSompiPerGram, manualUtxos) {
+        previewSelection = null
+        if (manualUtxos == null && amountSompi != null && amountSompi > 0) {
+            kotlinx.coroutines.delay(400)
+            previewSelection = viewModel.previewAutomaticSelection(fromAddress, amountSompi, feeRateOverrideSompi)
+        }
+    }
+
+    var isResolvingKns by remember { mutableStateOf(false) }
+    var knsResolvedAddress by remember { mutableStateOf<String?>(null) }
+    var knsError by remember { mutableStateOf<String?>(null) }
+    // Debounced KNS domain resolution - lets typing "name.kas" here resolve the same way Create
+    // Chat's own address field already does. Skipped entirely in compound mode, where the
+    // recipient is always the locked self-address, never user-typed.
+    LaunchedEffect(toAddress) {
+        knsResolvedAddress = null
+        knsError = null
+        if (isCompoundMode) {
+            isResolvingKns = false
+            return@LaunchedEffect
+        }
+        val trimmed = toAddress.trim()
+        if (trimmed.isEmpty() || trimmed.startsWith("kaspa:", ignoreCase = true) ||
+            trimmed.startsWith("kaspatest:", ignoreCase = true) || !KnsService.looksLikeDomain(trimmed)
+        ) {
+            isResolvingKns = false
+            return@LaunchedEffect
+        }
+        isResolvingKns = true
+        kotlinx.coroutines.delay(500)
+        val resolved = viewModel.resolveKnsDomain(trimmed)
+        isResolvingKns = false
+        if (resolved != null) knsResolvedAddress = resolved else knsError = "KNS domain not found"
+    }
+    // The actual address to use (resolved from a KNS domain, or the direct input) - same
+    // precedence as Create Chat's own address field.
+    val effectiveAddress = knsResolvedAddress ?: toAddress
+    val hasValidRecipient = if (knsResolvedAddress != null) true else (isValidRecipient && !isResolvingKns)
 
     BackHandler(enabled = !inFlight) { onDone() }
 
@@ -1067,6 +1225,18 @@ private fun ColdSendFlow(
         QrScannerOverlay(
             onScanned = { scanned -> toAddress = scanned.trim(); showRecipientScanner = false },
             onDismiss = { showRecipientScanner = false }
+        )
+        return
+    }
+
+    if (showCoinControl) {
+        BackHandler { showCoinControl = false }
+        CoinControlScreen(
+            fromAddress = fromAddress,
+            fetchUtxos = { addr -> viewModel.fetchUtxosForCoinControl(addr) },
+            initialSelection = manualUtxos,
+            onDone = { selection -> manualUtxos = selection; showCoinControl = false },
+            onCancel = { showCoinControl = false }
         )
         return
     }
@@ -1108,37 +1278,128 @@ private fun ColdSendFlow(
 
             when (sendState.step) {
                 ColdStorageViewModel.ColdSendStep.IDLE, ColdStorageViewModel.ColdSendStep.FAILED -> {
-                    OutlinedTextField(
-                        value = toAddress,
-                        onValueChange = { toAddress = it },
-                        label = { Text(stringResource(R.string.recipient_address)) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LocalAppColors.current.textPrimary,
-                            unfocusedTextColor = LocalAppColors.current.textPrimary,
-                            focusedBorderColor = KaspaTeal,
-                            unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                            focusedLabelColor = KaspaTeal,
-                            unfocusedLabelColor = LocalAppColors.current.textSecondary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                    // Section order/grouping below mirrors iOS's ColdSendFlowView Form exactly:
+                    // Recipient Address (field, validity indicator, Paste/Scan) -> Amount (field,
+                    // fiat toggle, Max) -> Network Fee (tappable row + footer note).
+                    Text(
+                        (if (isCompoundMode) stringResource(R.string.consolidating_this_address) else stringResource(R.string.recipient_address)).uppercase(),
+                        color = LocalAppColors.current.textSecondary,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { clipboardManager.getText()?.text?.let { toAddress = it.trim() } }) {
-                            Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                    if (isCompoundMode) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CallMerge, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                fromAddress,
+                                color = LocalAppColors.current.textPrimary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                        TextButton(onClick = { showRecipientScanner = true }) {
-                            Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        OutlinedTextField(
+                            value = toAddress,
+                            onValueChange = { toAddress = it },
+                            placeholder = { Text("kaspa:qr... or name.kas") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = LocalAppColors.current.textPrimary,
+                                unfocusedTextColor = LocalAppColors.current.textPrimary,
+                                focusedBorderColor = KaspaTeal,
+                                unfocusedBorderColor = LocalAppColors.current.textSecondary,
+                                focusedLabelColor = KaspaTeal,
+                                unfocusedLabelColor = LocalAppColors.current.textSecondary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (toAddress.isNotEmpty()) {
+                            if (isResolvingKns) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = KaspaTeal, strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.resolving_domain), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                                }
+                            } else if (knsError != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(knsError ?: "", color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
+                                }
+                            } else if (knsResolvedAddress != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CD964), modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Resolved to ${knsResolvedAddress?.takeLast(12)}", color = Color(0xFF4CD964), style = MaterialTheme.typography.bodySmall)
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (isValidRecipient) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                        null,
+                                        tint = if (isValidRecipient) Color(0xFF4CD964) else Color(0xFFFF3B30),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        stringResource(if (isValidRecipient) R.string.valid_address else R.string.invalid_address_format),
+                                        color = if (isValidRecipient) Color(0xFF4CD964) else Color(0xFFFF3B30),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { clipboardManager.getText()?.text?.let { toAddress = it.trim() } }) {
+                                Icon(Icons.Default.ContentPaste, null, tint = KaspaTeal, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { showRecipientScanner = true }) {
+                                Icon(Icons.Default.QrCodeScanner, null, tint = KaspaTeal, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.amount_kas).uppercase(),
+                        color = LocalAppColors.current.textSecondary,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
                     OutlinedTextField(
                         value = fiatAmountState.displayText,
                         onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
-                        label = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
+                        placeholder = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
                         ),
+                        leadingIcon = {
+                            IconButton(onClick = { fiatAmountState.toggleMode(fiatPriceInCurrency) }) {
+                                if (fiatAmountState.isFiatMode) {
+                                    Text(
+                                        com.kachat.app.util.currencySymbolFor(fiatCurrencyCode),
+                                        color = KaspaTeal,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                } else {
+                                    Icon(
+                                        painterResource(R.drawable.ic_kaspa_logo),
+                                        stringResource(R.string.switch_between_kas_and_fiat),
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        },
                         trailingIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
@@ -1146,18 +1407,33 @@ private fun ColdSendFlow(
                                         label,
                                         color = LocalAppColors.current.textSecondary,
                                         fontSize = 12.sp,
-                                        modifier = Modifier
-                                            .clickable { fiatAmountState.toggleMode(fiatPriceInCurrency) }
-                                            .padding(end = 8.dp)
+                                        modifier = Modifier.padding(end = 8.dp)
                                     )
                                 }
-                                TextButton(
-                                    onClick = {
-                                        val maxSompi = (availableBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                                        fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                if (isEstimatingMax) {
+                                    CircularProgressIndicator(
+                                        color = KaspaTeal,
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    TextButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                isEstimatingMax = true
+                                                try {
+                                                    val maxSompi = viewModel.estimateMaxAmount(fromAddress, feeRateOverrideSompi, manualUtxos)
+                                                    fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                                } catch (e: Exception) {
+                                                    // Leave the field untouched on failure — same as iOS.
+                                                } finally {
+                                                    isEstimatingMax = false
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Text(stringResource(R.string.max), color = KaspaTeal)
                                     }
-                                ) {
-                                    Text(stringResource(R.string.max), color = KaspaTeal)
                                 }
                             }
                         },
@@ -1171,30 +1447,100 @@ private fun ColdSendFlow(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Fee: %.8f KAS".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0),
-                        color = KaspaTeal,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodySmall,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                        modifier = Modifier.clickable {
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { showCoinControl = true },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(stringResource(R.string.coin_control), color = LocalAppColors.current.textPrimary)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                manualUtxos?.let { "${it.size} ${if (it.size == 1) stringResource(R.string.utxo) else stringResource(R.string.utxos)}" }
+                                    ?: stringResource(R.string.automatic),
+                                color = LocalAppColors.current.textSecondary
+                            )
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                null,
+                                tint = LocalAppColors.current.textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    // Inline Normal/Fast/Priority picker, right here on the send form — matching
+                    // SpendingAddressWithdrawView's WithdrawFeeTier segmented control, not a
+                    // separate screen/dialog.
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        ColdFeeTier.entries.forEachIndexed { index, tier ->
+                            SegmentedButton(
+                                selected = feeTier == tier,
+                                onClick = {
+                                    feeTier = tier
+                                    customExtraFeeSompi = null
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = ColdFeeTier.entries.size),
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = LocalAppColors.current.surfaceVariant,
+                                    activeContentColor = LocalAppColors.current.textPrimary,
+                                    inactiveContainerColor = LocalAppColors.current.surface,
+                                    inactiveContentColor = LocalAppColors.current.textSecondary
+                                )
+                            ) {
+                                Text(tier.label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
                             feeEditorInput = "%.8f".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0)
                             showFeeEditor = true
-                        }
+                        },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(stringResource(R.string.network_fee), color = LocalAppColors.current.textPrimary)
+                        Text(
+                            "%.8f KAS".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0),
+                            color = KaspaTeal,
+                            fontWeight = FontWeight.Bold,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.if_the_network_is_busy_a),
+                        color = LocalAppColors.current.textSecondary,
+                        style = MaterialTheme.typography.bodySmall
                     )
                     if (sendState.step == ColdStorageViewModel.ColdSendStep.FAILED) {
                         Text(sendState.errorMessage ?: "Something went wrong", color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
                     }
+                    Spacer(Modifier.height(8.dp))
                     Button(
-                        onClick = { amountSompi?.let { viewModel.startColdSend(fromAddress, toAddress.trim(), it, feeRateOverrideSompi) } },
-                        enabled = isValidRecipient && (amountSompi ?: 0) > 0,
+                        onClick = {
+                            amountSompi?.let {
+                                // Real coin control (explicit user selection) wins if set;
+                                // otherwise, if a fresh automatic-selection preview is available,
+                                // pass its exact UTXO set through too — guaranteeing the fee just
+                                // shown on this screen and the fee the real build produces are
+                                // the same number, not just close. Re-resolved against a fresh
+                                // fetch inside buildUnsignedTransaction either way, so this is
+                                // never stale-unsafe.
+                                val utxosForBuild = manualUtxos ?: previewSelection?.utxos
+                                viewModel.startColdSend(fromAddress, effectiveAddress.trim(), it, feeRateOverrideSompi, utxosForBuild)
+                            }
+                        },
+                        enabled = hasValidRecipient && (amountSompi ?: 0) > 0,
                         colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surfaceVariant),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text(
                             stringResource(R.string.build_unsigned_transaction),
-                            color = if (isValidRecipient && (amountSompi ?: 0) > 0) Color.Black else Color.Gray,
+                            color = if (hasValidRecipient && (amountSompi ?: 0) > 0) Color.Black else Color.Gray,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -1276,7 +1622,7 @@ private fun ColdSendFlow(
                                 .padding(16.dp)
                         ) {
                             Text(stringResource(R.string.to), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-                            Text(toAddress, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
+                            Text(effectiveAddress, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
                         }
                         Spacer(Modifier.height(12.dp))
                         Column(
@@ -1335,7 +1681,7 @@ private fun ColdSendFlow(
                             focusedLabelColor = KaspaTeal,
                             unfocusedLabelColor = LocalAppColors.current.textSecondary
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().focusRequester(feeEditorFocusRequester)
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -1348,9 +1694,9 @@ private fun ColdSendFlow(
             confirmButton = {
                 TextButton(onClick = {
                     val kas = feeEditorInput.toDoubleOrNull()
-                    feeRateOverrideSompi = if (kas != null && kas > 0) {
-                        val desiredFeeSompi = Math.round(kas * 100_000_000.0)
-                        kotlin.math.ceil(desiredFeeSompi.toDouble() / estimatedMass).toLong()
+                    customExtraFeeSompi = if (kas != null && kas >= 0) {
+                        val totalSompi = Math.round(kas * 100_000_000.0)
+                        (totalSompi - defaultFeeSompi).coerceAtLeast(0L)
                     } else {
                         null
                     }
@@ -1361,7 +1707,11 @@ private fun ColdSendFlow(
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { feeRateOverrideSompi = null; showFeeEditor = false }) {
+                    TextButton(onClick = {
+                        feeTier = ColdFeeTier.NORMAL
+                        customExtraFeeSompi = null
+                        showFeeEditor = false
+                    }) {
                         Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
@@ -1373,70 +1723,478 @@ private fun ColdSendFlow(
     }
 }
 
+/**
+ * Coin control — lets the user fix the exact UTXO set a send spends from instead of the
+ * automatic largest-first selector. Shared by [ColdSendFlow] and the spending-address send flow
+ * (`SpendingAddressSendFlow` in Screens.kt) — not Cold-Storage-specific: parameterized by
+ * [fetchUtxos] rather than a concrete ViewModel, since the only thing this screen needs is a way
+ * to fetch UTXOs for an address. Passes the selection back as a plain `List<UtxoEntry>?` (null =
+ * automatic) rather than owning any state itself, since the actual spendable set needs
+ * re-resolving against a fresh fetch at build time anyway (see [ColdStorageSendEngine]'s/
+ * [KaspaWalletEngine]'s `manualUtxos` handling).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CoinControlScreen(
+    fromAddress: String,
+    fetchUtxos: suspend (String) -> List<UtxoEntry>,
+    initialSelection: List<UtxoEntry>?,
+    onDone: (List<UtxoEntry>?) -> Unit,
+    onCancel: () -> Unit
+) {
+    var utxos by remember { mutableStateOf<List<UtxoEntry>>(emptyList()) }
+    var selectedKeys by remember { mutableStateOf<Set<com.kachat.app.services.Outpoint>>(emptySet()) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(fromAddress) {
+        isLoading = true
+        utxos = fetchUtxos(fromAddress)
+        if (!initialSelection.isNullOrEmpty()) {
+            selectedKeys = initialSelection.map { it.outpoint }.toSet()
+        }
+        isLoading = false
+    }
+
+    val selectedTotalSompi = utxos.filter { selectedKeys.contains(it.outpoint) }.sumOf { it.utxoEntry.amount }
+
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(R.string.coin_control), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                    }
+                },
+                actions = {
+                    var showMenu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, null, tint = KaspaTeal)
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.select_all)) },
+                            onClick = { selectedKeys = utxos.map { it.outpoint }.toSet(); showMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.automatic_clear_selection)) },
+                            onClick = { selectedKeys = emptySet(); showMenu = false }
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        },
+        bottomBar = {
+            Button(
+                onClick = {
+                    val selected = utxos.filter { selectedKeys.contains(it.outpoint) }
+                    onDone(selected.ifEmpty { null })
+                },
+                modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal)
+            ) {
+                Text(
+                    if (selectedKeys.isEmpty()) stringResource(R.string.use_automatic_selection) else stringResource(R.string.confirm_selection),
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    ) { padding ->
+        when {
+            isLoading && utxos.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = KaspaTeal)
+                }
+            }
+            utxos.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(stringResource(R.string.no_utxos), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (selectedKeys.isNotEmpty()) {
+                        item {
+                            Text(
+                                "%s: %.8f KAS (%d)".format(
+                                    Locale.US,
+                                    stringResource(R.string.selected),
+                                    selectedTotalSompi / 100_000_000.0,
+                                    selectedKeys.size
+                                ),
+                                color = LocalAppColors.current.textSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    items(utxos, key = { "${it.outpoint.transactionId}:${it.outpoint.index}" }) { utxo ->
+                        val isSelected = selectedKeys.contains(utxo.outpoint)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(LocalAppColors.current.surface)
+                                .clickable {
+                                    selectedKeys = if (isSelected) selectedKeys - utxo.outpoint else selectedKeys + utxo.outpoint
+                                }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (isSelected) Icons.Default.CheckCircle else Icons.Default.Circle,
+                                null,
+                                tint = if (isSelected) KaspaTeal else LocalAppColors.current.textSecondary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "%.8f KAS".format(Locale.US, utxo.utxoEntry.amount / 100_000_000.0),
+                                    color = LocalAppColors.current.textPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "${utxo.outpoint.transactionId.take(10)}...:${utxo.outpoint.index}",
+                                    color = LocalAppColors.current.textSecondary,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** On-chain transaction history for one Cold Storage address — reached by tapping an address row in [ColdStorageDetailScreen]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ColdStorageTxHistoryScreen(address: String, onBack: () -> Unit, viewModel: ColdStorageViewModel = hiltViewModel()) {
     val txHistory by viewModel.txHistory.collectAsState()
     val isLoading by viewModel.isLoadingTxHistory.collectAsState()
+    val utxos by viewModel.utxos.collectAsState()
+    val isLoadingUtxos by viewModel.isLoadingUtxos.collectAsState()
     val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
-    val clipboardManager = LocalClipboardManager.current
+    val addresses by viewModel.addresses.collectAsState()
     val uriHandler = LocalUriHandler.current
+
+    // Looked up from the already-loaded address list (shared with the account detail screen)
+    // rather than a new route param — avoids widening the nav route just for a display name.
+    val addressRow = remember(addresses, address) { addresses.firstOrNull { it.address == address } }
+    val displayName = addressRow?.label?.takeIf { it.isNotBlank() }
+        ?: addressRow?.let { "Address #${it.index}" }
+        ?: address
+
+    var selectedTab by remember { mutableStateOf(0) }
+    var showQr by remember { mutableStateOf(false) }
+    var showSendFlow by remember { mutableStateOf(false) }
+    var showCompoundFlow by remember { mutableStateOf(false) }
+    var utxoLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var labelingUtxoKey by remember { mutableStateOf<String?>(null) }
+    var labelInput by remember { mutableStateOf("") }
 
     LaunchedEffect(address) {
         viewModel.loadTxHistory(address)
+        viewModel.loadUtxos(address)
+        utxoLabels = viewModel.getUtxoLabels(address)
+    }
+
+    if (showSendFlow) {
+        ColdSendFlow(
+            fromAddress = address,
+            availableBalanceSompi = addressRow?.balanceSompi ?: 0L,
+            viewModel = viewModel,
+            onDone = {
+                showSendFlow = false
+                viewModel.loadTxHistory(address)
+                viewModel.loadUtxos(address)
+            }
+        )
+        return
+    }
+
+    if (showCompoundFlow) {
+        ColdSendFlow(
+            fromAddress = address,
+            availableBalanceSompi = addressRow?.balanceSompi ?: 0L,
+            viewModel = viewModel,
+            isCompoundMode = true,
+            onDone = {
+                showCompoundFlow = false
+                viewModel.loadTxHistory(address)
+                viewModel.loadUtxos(address)
+            }
+        )
+        return
     }
 
     Scaffold(
         containerColor = LocalAppColors.current.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.transaction_history), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(displayName, color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
                     }
                 },
+                actions = {
+                    IconButton(onClick = { uriHandler.openUri(kaspaExplorer.addressUrl(address)) }) {
+                        Icon(Icons.Default.Public, stringResource(R.string.view_in_explorer), tint = KaspaTeal)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
             )
+        },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { showQr = true },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.Default.QrCode, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.receive), fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = { showSendFlow = true },
+                    enabled = (addressRow?.balanceSompi ?: 0L) > 0L,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.send), fontWeight = FontWeight.Bold)
+                }
+            }
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Text(
-                address,
-                color = LocalAppColors.current.textSecondary,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { clipboardManager.setText(AnnotatedString(address)) }
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            )
-            when {
-                isLoading && txHistory.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = KaspaTeal)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    stringResource(R.string.balance),
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    "%.8f KAS".format(Locale.US, (addressRow?.balanceSompi ?: 0L) / 100_000_000.0),
+                    color = LocalAppColors.current.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = LocalAppColors.current.background,
+                contentColor = KaspaTeal
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text(stringResource(R.string.transaction_history)) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("${stringResource(R.string.utxos)} (${utxos.size})") }
+                )
+            }
+            when (selectedTab) {
+                0 -> when {
+                    isLoading && txHistory.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = KaspaTeal)
+                        }
+                    }
+                    txHistory.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.no_transactions_yet), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(txHistory, key = { it.txId }) { tx ->
+                                ColdTxHistoryRow(
+                                    tx = tx,
+                                    onClick = { uriHandler.openUri(kaspaExplorer.txUrl(tx.txId)) }
+                                )
+                            }
+                        }
                     }
                 }
-                txHistory.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.no_transactions_yet), color = LocalAppColors.current.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                else -> when {
+                    isLoadingUtxos && utxos.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = KaspaTeal)
+                        }
                     }
-                }
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(txHistory, key = { it.txId }) { tx ->
-                            ColdTxHistoryRow(
-                                tx = tx,
-                                onClick = { uriHandler.openUri(kaspaExplorer.txUrl(tx.txId)) }
-                            )
+                    utxos.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.no_utxos), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (utxos.size > 1) {
+                                item {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(LocalAppColors.current.surface)
+                                            .clickable { showCompoundFlow = true }
+                                            .padding(16.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.CallMerge, null, tint = KaspaTeal)
+                                            Spacer(Modifier.width(12.dp))
+                                            Text(
+                                                stringResource(R.string.compound_utxos),
+                                                color = LocalAppColors.current.textPrimary,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            stringResource(R.string.compound_utxos_description),
+                                            color = LocalAppColors.current.textSecondary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                            items(utxos, key = { "${it.transactionId}:${it.index}" }) { utxo ->
+                                val key = "${utxo.transactionId}:${utxo.index}"
+                                ColdUtxoRow(
+                                    utxo = utxo,
+                                    label = utxoLabels[key],
+                                    onRenameClick = {
+                                        labelingUtxoKey = key
+                                        labelInput = utxoLabels[key] ?: ""
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    labelingUtxoKey?.let { key ->
+        AlertDialog(
+            onDismissRequest = { labelingUtxoKey = null },
+            containerColor = LocalAppColors.current.surface,
+            title = { Text(stringResource(R.string.rename_utxo), color = LocalAppColors.current.textPrimary) },
+            text = {
+                OutlinedTextField(
+                    value = labelInput,
+                    onValueChange = { labelInput = it },
+                    label = { Text(stringResource(R.string.name)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LocalAppColors.current.textPrimary,
+                        unfocusedTextColor = LocalAppColors.current.textPrimary,
+                        focusedBorderColor = KaspaTeal,
+                        unfocusedBorderColor = LocalAppColors.current.textSecondary,
+                        focusedLabelColor = KaspaTeal,
+                        unfocusedLabelColor = LocalAppColors.current.textSecondary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setUtxoLabel(address, key, labelInput)
+                    utxoLabels = viewModel.getUtxoLabels(address)
+                    labelingUtxoKey = null
+                }) {
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { labelingUtxoKey = null }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                }
+            }
+        )
+    }
+
+    if (showQr) {
+        QrCodeOverlay(value = address, onDismiss = { showQr = false })
+    }
+}
+
+@Composable
+private fun ColdUtxoRow(utxo: ColdStorageAddressDiscovery.AddressUtxo, label: String? = null, onRenameClick: () -> Unit = {}) {
+    val kas = utxo.amountSompi / 100_000_000.0
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(LocalAppColors.current.surface)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            if (!label.isNullOrBlank()) {
+                Text(
+                    label,
+                    color = KaspaTeal,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                "%.8f KAS".format(Locale.US, kas),
+                color = LocalAppColors.current.textPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "${utxo.transactionId}:${utxo.index}",
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (utxo.isCoinbase) {
+            Text(
+                stringResource(R.string.coinbase),
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        IconButton(onClick = onRenameClick, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Edit, stringResource(R.string.rename), tint = KaspaTeal, modifier = Modifier.size(18.dp))
         }
     }
 }

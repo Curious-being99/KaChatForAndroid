@@ -119,40 +119,6 @@ class WalletService @Inject constructor(
         }
     }
 
-    /**
-     * Sends exactly [amountSompi] from the current "Pay in Kaspa" spending address to [toAddress],
-     * leaving any change at that same address — used for swaps, where only part of the spending
-     * balance should move (unlike [payInKaspa], which sweeps the whole balance and rotates to a
-     * fresh address). Mirrors [WalletViewModel.withdrawFromSpendingAddress]'s by-index send, just
-     * always targeting whichever index is currently active rather than a user-picked one.
-     * @return The transaction ID if successful.
-     */
-    suspend fun sendFromCurrentSpendingAddress(toAddress: String, amountSompi: Long, feeRateOverride: Long? = null): String {
-        val index = walletManager.getActiveAccount()?.spendingAddressIndex
-            ?: throw IllegalStateException("No active account")
-        return sendFromSpendingAddress(index, toAddress, amountSompi, feeRateOverride)
-    }
-
-    /** Same as [sendFromCurrentSpendingAddress] but for an explicit, caller-chosen index — e.g. swapping from a non-primary address without switching what "Pay in Kaspa" sources from. */
-    suspend fun sendFromSpendingAddress(index: Int, toAddress: String, amountSompi: Long, feeRateOverride: Long? = null): String {
-        val fromAddress = walletManager.deriveSpendingAddress(index)
-        val result = walletEngine.sendKaspa(
-            toAddress = toAddress,
-            amountSompi = amountSompi,
-            fromAddress = fromAddress,
-            signingPrivateKey = walletManager.getSpendingPrivateKeyBytes(index),
-            changeAddress = fromAddress,
-            feeRateOverride = feeRateOverride
-        )
-
-        if (result.isSuccess) {
-            refreshSpendingBalance()
-            return result.getOrThrow()
-        } else {
-            throw result.exceptionOrNull() ?: Exception("Unknown error during Kaspa send")
-        }
-    }
-
     data class SpendingAddressEntry(
         val index: Int,
         val address: String,
@@ -526,7 +492,7 @@ class WalletService @Inject constructor(
      * as a backend safety net: rejects sending to your own address, a different network's
      * address, or a domain you no longer actually own.
      */
-    suspend fun transferDomain(fullDomain: String, assetId: String, toAddress: String, onStep: (KnsInscribeStep) -> Unit = {}): TransferDomainResult {
+    suspend fun transferDomain(fullDomain: String, assetId: String, toAddress: String, priorityFeeSompi: Long = KnsInscriptionEngine.REVEAL_PRIORITY_FEE_SOMPI, onStep: (KnsInscribeStep) -> Unit = {}): TransferDomainResult {
         val trimmedAssetId = assetId.trim()
         require(trimmedAssetId.isNotEmpty()) { "Missing KNS asset id" }
         val myAddress = walletManager.getAddress()
@@ -540,26 +506,24 @@ class WalletService @Inject constructor(
 
         val payloadJson = Gson().toJson(KnsTransferDomainPayload(op = "transfer", p = "domain", id = trimmedAssetId, to = toAddress)).toByteArray()
 
-        // Ownership moves via the payload's "to" field, authorized by the current owner's
-        // (identity) signature — the commit/reveal fee itself is just paid from spending, same as
-        // inscribeDomain/updateKnsProfileField.
+        // KNS activity is funded and settled entirely on the identity/chatting address chain -
+        // no spending-address split, same as inscribeDomain/updateKnsProfileField. Ownership
+        // itself moves via the payload's "to" field, authorized by the current owner's signature.
         val identityPrivateKey = walletManager.getPrivateKeyBytes()
-        val spendingAddress = walletManager.currentSpendingAddress()
-        val spendingPrivateKey = walletManager.currentSpendingPrivateKeyBytes()
 
         onStep(KnsInscribeStep.SUBMITTING_COMMIT)
         val commit = knsInscriptionEngine.buildAndSubmitCommit(
             payloadJson = payloadJson,
             commitAmountSompi = TRANSFER_COMMIT_SOMPI,
             revealAmountSompi = TRANSFER_REVEAL_SOMPI,
-            revealTargetAddress = spendingAddress,
+            revealTargetAddress = myAddress,
             operationType = "transfer",
-            fundingAddress = spendingAddress,
-            fundingPrivateKey = spendingPrivateKey,
+            fundingAddress = myAddress,
+            fundingPrivateKey = identityPrivateKey,
             ownerPrivateKey = identityPrivateKey
         )
         onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, spendingAddress, spendingAddress, identityPrivateKey)
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, myAddress, myAddress, identityPrivateKey, priorityFeeSompi)
 
         onStep(KnsInscribeStep.VERIFYING)
         val verified = verifyDomainOwnership(fullDomain, toAddress)

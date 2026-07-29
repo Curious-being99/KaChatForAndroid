@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Revisar tamano de la copia de seguridad de Drive</string>
     <string name="checking_availability">Comprobando disponibilidad...</string>
     <string name="checking_your_chatting_address_balance">Revisando el saldo de tu direccion de chat...</string>
+    <string name="chess_stats">Estadisticas de ajedrez</string>
     <string name="choose_avatar">Elige Avatar</string>
     <string name="choose_banner">Elija banner</string>
+    <string name="choose_coin">Elegir moneda</string>
     <string name="choose_photo">Elegir foto</string>
     <string name="choose_which_tabs_appear_in_your">Elige que pestanas aparecen en tu menu inferior.</string>
     <string name="clear">Borrar</string>
@@ -90,6 +92,8 @@
     <string name="delete">Eliminar</string>
     <string name="delete_account">Eliminar cuenta</string>
     <string name="delete_group">Eliminar grupo</string>
+    <string name="delete_swap_history_message">Esto solo lo elimina de tu historial local; no afecta al intercambio real.</string>
+    <string name="delete_this_swap">¿Eliminar este intercambio?</string>
     <string name="delete_transaction">Eliminar transaccion</string>
     <string name="deposit_address">Direccion de deposito</string>
     <string name="domain_name">Nombre de dominio</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">Codigo QR</string>
     <string name="quantity">Cantidad</string>
     <string name="rate">Tasa</string>
+    <string name="read">Leido</string>
     <string name="receiving_kas_at">Recibiendo KAS en</string>
     <string name="recipient_address">Direccion del destinatario</string>
     <string name="recipient_address_or_kas_name">Direccion del destinatario o nombre .kas</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">Resolviendo dominio…</string>
     <string name="resolving">Resolviendo...</string>
     <string name="retention">Retencion</string>
+    <string name="retry">Reintentar</string>
     <string name="retry_inscription_reveal">Reintentar revelacion de inscripcion</string>
     <string name="save">Guardar</string>
     <string name="saved_accounts">Cuentas guardadas</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">Escanea esto con tu dispositivo KasSigner, revisalo ahi y luego firma.</string>
     <string name="scroll_to_latest">Desplazarse a lo ultimo</string>
     <string name="search_chats">Buscar chats</string>
+    <string name="search_coins">Buscar monedas</string>
     <string name="secure_messaging_on_kaspa_blockdag">Mensajería segura en Kaspa BlockDAG</string>
     <string name="security_warning">Advertencia de seguridad</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">Intentar de nuevo</string>
     <string name="unhide">Dejar de ocultar</string>
     <string name="unlink">Desvincular</string>
+    <string name="unread">No leido</string>
     <string name="use_default">Usar predeterminado</string>
     <string name="users_you_hide_from_a_broadcast">Los usuarios que ocultas de una sala de difusion (a traves de su menu de avatar) aparecen aqui, y nunca aparecen ni se almacenan en cache en ninguna sala.</string>
     <string name="valid_address">Direccion valida</string>
     <string name="view_on_changenow">Ver en ChangeNOW</string>
     <string name="waiting_for_camera">Esperando la camara...</string>
+    <string name="waiting_on_opponent">Esperando al oponente</string>
     <string name="walk_through_setting_up_your_domain">Recorre paso a paso la configuracion de tu dominio, banner, avatar y detalles.</string>
     <string name="when_you_message_someone_new_on">Cuando le escribes a alguien nuevo en KaChat, no recibira una notificacion y tu mensaje permanecera oculto hasta que te responda o tambien te agregue. Esto protege contra el spam y aumenta tu privacidad. Si quieres que sea notificado, toca el icono de la mano para enviar una solicitud de comunicacion, que costara 0.2 KAS. (Nota: todas las apps de mensajeria que no son KaChat requeriran una solicitud de comunicacion)</string>
     <string name="wipe_account">Borrar cuenta</string>

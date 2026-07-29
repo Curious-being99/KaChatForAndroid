@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Drive yedekleme boyutunu kontrol et</string>
     <string name="checking_availability">Kullanılabilirlik kontrol ediliyor...</string>
     <string name="checking_your_chatting_address_balance">Sohbet adresinizin bakiyesi kontrol ediliyor...</string>
+    <string name="chess_stats">Satranc Istatistikleri</string>
     <string name="choose_avatar">Avatar\'ı seçin</string>
     <string name="choose_banner">Banner\'ı seçin</string>
+    <string name="choose_coin">Coin Sec</string>
     <string name="choose_photo">Fotograf Sec</string>
     <string name="choose_which_tabs_appear_in_your">Alt menunuzde hangi sekmelerin gorunecegini secin.</string>
     <string name="clear">Temizle</string>
@@ -90,6 +92,8 @@
     <string name="delete">Sil</string>
     <string name="delete_account">Hesabı Sil</string>
     <string name="delete_group">Grubu Sil</string>
+    <string name="delete_swap_history_message">Bu yalnızca yerel geçmişinizden kaldırır - gerçek takası etkilemez.</string>
+    <string name="delete_this_swap">Bu takas silinsin mi?</string>
     <string name="delete_transaction">Islemi Sil</string>
     <string name="deposit_address">Yatirma Adresi</string>
     <string name="domain_name">Alan adi</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">QR kodu</string>
     <string name="quantity">Miktar</string>
     <string name="rate">Kur</string>
+    <string name="read">Okundu</string>
     <string name="receiving_kas_at">KAS Alma Adresi</string>
     <string name="recipient_address">Alici adresi</string>
     <string name="recipient_address_or_kas_name">Alici adresi veya .kas adi</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">Alan adi cozumleniyor…</string>
     <string name="resolving">Cozumleniyor...</string>
     <string name="retention">Saklama</string>
+    <string name="retry">Tekrar Dene</string>
     <string name="retry_inscription_reveal">Yazit Acilmasini Tekrar Dene</string>
     <string name="save">Kaydet</string>
     <string name="saved_accounts">Kaydedilen Hesaplar</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">Bunu KasSigner cihazinizla tarayin, orada inceleyin, sonra imzalayin.</string>
     <string name="scroll_to_latest">En sona kaydir</string>
     <string name="search_chats">Sohbet ara</string>
+    <string name="search_coins">Coin ara</string>
     <string name="secure_messaging_on_kaspa_blockdag">Kaspa BlockDAG üzerinde güvenli mesajlaşma</string>
     <string name="security_warning">Güvenlik Uyarısı</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">Tekrar Dene</string>
     <string name="unhide">Gizlemeyi Kaldir</string>
     <string name="unlink">Bağlantıyı Kaldır</string>
+    <string name="unread">Okunmadi</string>
     <string name="use_default">Varsayilani Kullan</string>
     <string name="users_you_hide_from_a_broadcast">Bir yayin odasindan gizlediginiz kullanicilar (avatar menuleri araciligiyla) burada gorunur ve hicbir odada gorunmez veya onbellege alinmaz.</string>
     <string name="valid_address">Gecerli adres</string>
     <string name="view_on_changenow">ChangeNOW\'da goruntule</string>
     <string name="waiting_for_camera">Kamera bekleniyor...</string>
+    <string name="waiting_on_opponent">Rakip bekleniyor</string>
     <string name="walk_through_setting_up_your_domain">Alan adinizi, banner\'inizi, avatarinizi ve detaylarinizi adim adim kurmanizda yol gosterir.</string>
     <string name="when_you_message_someone_new_on">KaChat\'te yeni biriyle mesajlastiginizda, o kisi bildirim almaz ve mesajiniz o size yanit verene veya o da sizi eklemedigi surece gizli kalir. Bu, spam\'e karsi korur ve gizliliginizi artirir. Bildirim almasini istiyorsaniz, 0,2 KAS\'a mal olacak bir iletisim istegi gondermek icin el simgesine dokunun. (Not: KaChat disindaki tum mesajlasma uygulamalari iletisim istegi gerektirecektir)</string>
     <string name="wipe_account">Hesabi Sil</string>

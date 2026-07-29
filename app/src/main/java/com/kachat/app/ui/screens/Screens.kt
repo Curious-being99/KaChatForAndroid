@@ -60,8 +60,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.CallMerge
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -115,13 +117,19 @@ import com.kachat.app.R
 import com.kachat.app.models.BackupRetention
 import com.kachat.app.models.Conversation
 import com.kachat.app.models.MessageEntity
+import com.kachat.app.models.ReactionEntity
 import com.kachat.app.repository.ChatRepository
+import com.kachat.app.services.ColdStorageAddressDiscovery
+import com.kachat.app.services.KnsInscriptionEngine
+import com.kachat.app.services.KnsService
+import com.kachat.app.services.UtxoEntry
 import com.kachat.app.ui.theme.KaspaBlue
 import com.kachat.app.ui.theme.KaspaSubtext
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.util.ChatTimeFormat
 import com.kachat.app.util.KaspaAddress
+import com.kachat.app.util.KaspaMass
 import com.kachat.app.util.rememberCameraCaptureLauncher
 import com.kachat.app.util.authenticateWithDeviceCredential
 import com.kachat.app.util.ImageMessage
@@ -161,6 +169,8 @@ fun ChatThreadScreen(
     val conversations by chatViewModel.conversations.collectAsState()
     val conversation = conversations.find { it.contact.id == contactId }
     val messages by chatViewModel.getMessages(contactId).collectAsState(initial = emptyList())
+    val reactions by chatViewModel.getReactions(contactId).collectAsState(initial = emptyList())
+    val reactionsByTxId = remember(reactions) { reactions.groupBy { it.targetTxId } }
     val revealedPhotoTxIds by chatViewModel.revealedPhotoTxIds.collectAsState()
 
     val dotColorHex by connectionViewModel.dotColorHex.collectAsState()
@@ -193,7 +203,6 @@ fun ChatThreadScreen(
         feeEditorInput = "%.8f".format(java.util.Locale.US, currentFeeSompi / 100_000_000.0)
         showFeeEditor = true
     }
-    val clipboardManager = LocalClipboardManager.current
     val micContext = LocalContext.current
     val recordAudioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) chatViewModel.startVoiceRecording(contactId)
@@ -252,6 +261,23 @@ fun ChatThreadScreen(
         }
     }
 
+    // Drives the toolbar's quick-access chess icon - null hides it entirely. Computed up here
+    // (rather than reusing the content lambda's own `chessSourceMessages` below) since `topBar`
+    // is a sibling Composable lambda, not nested inside the content lambda, so that one isn't in
+    // scope here.
+    val activeChessGame = remember(messages, myAddress) {
+        val address = myAddress ?: return@remember null
+        val sourceMessages = messages.map {
+            com.kachat.app.util.ChessGameEngine.SimpleChessSourceMessage(
+                id = it.id,
+                plaintextBody = it.plaintextBody,
+                isOutgoing = it.direction == "sent",
+                blockTimestamp = it.blockTimestamp
+            )
+        }
+        com.kachat.app.util.ChessGameEngine.activeGame(sourceMessages, address, contactId)
+    }
+
     Scaffold(
         modifier = Modifier.imePadding(),
         containerColor = LocalAppColors.current.background,
@@ -261,8 +287,7 @@ fun ChatThreadScreen(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.clickable {
-                            clipboardManager.setText(AnnotatedString(contactId))
-                            Toast.makeText(micContext, micContext.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
+                            navController.navigate("chat_info/$contactId")
                         }
                     ) {
                         ContactAvatar(
@@ -280,24 +305,34 @@ fun ChatThreadScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                        }
+                        val statusColor = Color(dotColorHex)
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(LocalAppColors.current.surface, CircleShape)
+                                .clickable { navController.navigate("connection_status") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(modifier = Modifier.size(10.dp).background(statusColor, CircleShape))
+                        }
                     }
                 },
                 actions = {
-                    val statusColor = Color(dotColorHex)
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(LocalAppColors.current.surface, CircleShape)
-                            .clickable { navController.navigate("connection_status") },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(modifier = Modifier.size(10.dp).background(statusColor, CircleShape))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(onClick = { navController.navigate("chat_info/$contactId") }) {
-                        Icon(Icons.Default.Info, "Chat Info", tint = KaspaTeal, modifier = Modifier.size(20.dp))
+                    if (activeChessGame != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(LocalAppColors.current.surface, CircleShape)
+                                .clickable { navController.navigate("chess_game/$contactId/${activeChessGame.gameId}") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Apps, stringResource(R.string.play_chess), tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -382,8 +417,34 @@ fun ChatThreadScreen(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent
                                 ),
+                                // Toggles KAS/fiat entry mode, matching Cold Storage's send flow -
+                                // the leading icon is the toggle now, so the conversion label in
+                                // trailingIcon below is purely informational.
+                                leadingIcon = {
+                                    IconButton(onClick = { fiatAmountState.toggleMode(fiatPriceInCurrency) }) {
+                                        if (fiatAmountState.isFiatMode) {
+                                            Text(
+                                                com.kachat.app.util.currencySymbolFor(fiatCurrencyCode),
+                                                color = KaspaTeal,
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        } else {
+                                            Icon(
+                                                painterResource(R.drawable.ic_kaspa_logo),
+                                                stringResource(R.string.switch_between_kas_and_fiat),
+                                                tint = Color.Unspecified,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                },
                                 trailingIcon = {
-                                    val currentUtxos by chatViewModel.currentUtxos.collectAsState()
+                                    // Spending-chain UTXOs (what a payment actually spends from),
+                                    // not chatViewModel.currentUtxos (the identity address's) -
+                                    // using the wrong set here made "Max" compute against the
+                                    // wrong balance whenever the two addresses' UTXOs differed.
+                                    val spendingUtxos by chatViewModel.spendingUtxos.collectAsState()
                                     val networkFeeRate by chatViewModel.networkFeeRate.collectAsState()
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
@@ -391,9 +452,7 @@ fun ChatThreadScreen(
                                                 label,
                                                 color = LocalAppColors.current.textSecondary,
                                                 fontSize = 12.sp,
-                                                modifier = Modifier
-                                                    .clickable { fiatAmountState.toggleMode(fiatPriceInCurrency) }
-                                                    .padding(end = 8.dp)
+                                                modifier = Modifier.padding(end = 8.dp)
                                             )
                                         }
                                         TextButton(onClick = {
@@ -404,7 +463,7 @@ fun ChatThreadScreen(
                                             // didn't match the real fee, so "Max" sends kept failing
                                             // with "insufficient funds".
                                             val mass = com.kachat.app.util.KaspaMass.calculateMass(
-                                                numInputs = currentUtxos.size.coerceAtLeast(1),
+                                                numInputs = spendingUtxos.size.coerceAtLeast(1),
                                                 outputScriptLens = listOf(34, 34),
                                                 payloadSize = 0
                                             )
@@ -650,6 +709,18 @@ fun ChatThreadScreen(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent
                                 ),
+                                // Quick-access camera, replacing what used to be a "Camera" entry
+                                // in the "+" menu - living right in the message bubble instead
+                                // since it's the most common non-text action.
+                                trailingIcon = {
+                                    IconButton(onClick = { startCameraCapture() }) {
+                                        Icon(
+                                            Icons.Default.CameraAlt,
+                                            contentDescription = stringResource(R.string.camera),
+                                            tint = LocalAppColors.current.textSecondary
+                                        )
+                                    }
+                                },
                                 maxLines = 4
                             )
 
@@ -666,11 +737,6 @@ fun ChatThreadScreen(
                                 }
                                 if (showComposerMenu) {
                                     CenteredOptionsMenu(onDismissRequest = { showComposerMenu = false }, anchor = composerMenuAnchor) {
-                                        PopupMenuRow(Icons.Default.CameraAlt, stringResource(R.string.camera)) {
-                                            showComposerMenu = false
-                                            startCameraCapture()
-                                        }
-                                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
                                         PopupMenuRow(Icons.Default.Image, stringResource(R.string.send_photo_2)) {
                                             showComposerMenu = false
                                             photoPickerLauncher.launch("image/*")
@@ -740,10 +806,20 @@ fun ChatThreadScreen(
             }
         }
 
-        // Auto-scroll to bottom when new messages arrive
+        // Auto-scroll to bottom when new messages arrive. The very first population of the list
+        // (opening the chat) jumps instantly instead of animating - the LazyColumn otherwise
+        // renders at the top first, and animating from there visibly scrolls through the whole
+        // history before settling at the bottom. Only messages arriving while the chat is already
+        // open get the smooth animated scroll.
+        var hasScrolledToInitialPosition by remember { mutableStateOf(false) }
         LaunchedEffect(messages.size) {
             if (messages.isNotEmpty()) {
-                scrollState.animateScrollToItem(messages.size - 1)
+                if (!hasScrolledToInitialPosition) {
+                    scrollState.scrollToItem(messages.size - 1)
+                    hasScrolledToInitialPosition = true
+                } else {
+                    scrollState.animateScrollToItem(messages.size - 1)
+                }
             }
         }
 
@@ -888,6 +964,12 @@ fun ChatThreadScreen(
                             onDecline = { chatViewModel.declineHandshake(contactId) },
                             onRetry = { chatViewModel.retrySendMessage(msg) },
                             onReply = { chatViewModel.startReplyTo(msg) },
+                            reactions = reactionsByTxId[msg.id] ?: emptyList(),
+                            onReact = { emoji ->
+                                val existing = reactionsByTxId[msg.id]?.find { it.reactorAddress == myAddress }
+                                val action = if (existing?.emoji == emoji) "remove" else "add"
+                                chatViewModel.sendReaction(contactId, msg.id, emoji, action)
+                            },
                             onSavePhoto = savePhotoIfPermitted,
                             revealOffsetPx = revealOffsetPx,
                             maxRevealOffsetPx = maxRevealOffsetPx,
@@ -1034,6 +1116,11 @@ fun MessageBubble(
     onDecline: () -> Unit = {},
     onRetry: () -> Unit = {},
     onReply: () -> Unit = {},
+    /** This message's current reactions (one per reactor - see [ReactionEntity]), for the pill
+     *  rendered on its corner and to know whether tapping an emoji in the quick-reaction bar
+     *  should add/replace or remove the caller's own reaction. */
+    reactions: List<ReactionEntity> = emptyList(),
+    onReact: (String) -> Unit = {},
     onSavePhoto: (ByteArray, String) -> Unit = { _, _ -> },
     revealOffsetPx: Animatable<Float, AnimationVector1D> = remember { Animatable(0f) },
     maxRevealOffsetPx: Float = 1f,
@@ -1055,6 +1142,7 @@ fun MessageBubble(
 ) {
     val isSent = message.direction == "sent"
     var showMenu by remember { mutableStateOf(false) }
+    var showQuickReactionBar by remember { mutableStateOf(false) }
     var menuAnchor by remember { mutableStateOf(Offset.Zero) }
     val clipboardManager = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
@@ -1062,6 +1150,25 @@ fun MessageBubble(
     val displayBody = replyContent?.text ?: message.plaintextBody
     val imageContent = remember(displayBody) { ImageMessage.parseOrNull(displayBody) }
     val chessEnvelope = remember(displayBody) { com.kachat.app.util.ChessMessage.parseOrNull(displayBody) }
+    // Only the plain, non-truncated text bubble ever shows a link preview - hoisted up here
+    // (rather than computed inline where it's used) so `separateLinkPreviewUrl`'s card can be
+    // placed as a sibling *after* the whole message-content Box below, matching iOS's structure:
+    // otherwise Box (which stacks children at the same top-left origin, not a Column) would draw
+    // the raw-link text bubble and the preview card on top of each other, and the reaction pill's
+    // corner-anchor would end up sized against that overlapping mess instead of one clean shape.
+    val bodyText = displayBody ?: ""
+    val isPlainTextMessage = message.type != "pay" &&
+        message.type != MessageProtocol.TYPE_HANDSHAKE &&
+        chessEnvelope == null &&
+        VoiceMessage.parseOrNull(displayBody) == null &&
+        imageContent == null &&
+        bodyText.length <= MESSAGE_TEXT_TRUNCATION_THRESHOLD
+    val isEntirelyLinkMessage = remember(bodyText, isPlainTextMessage) {
+        isPlainTextMessage && TextLinkify.isEntirelyLink(bodyText)
+    }
+    val separateLinkPreviewUrl = remember(bodyText, isPlainTextMessage, isEntirelyLinkMessage) {
+        if (isPlainTextMessage && !isEntirelyLinkMessage) TextLinkify.findUrls(bodyText).firstOrNull()?.uri else null
+    }
 
     if (isPendingRequest) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
@@ -1253,22 +1360,20 @@ fun MessageBubble(
                     voiceContent = VoiceMessage.parseOrNull(displayBody)!!,
                     isSent = isSent,
                     onLongPress = { showMenu = true },
-                    onDoubleClick = onReply
+                    onDoubleClick = { showQuickReactionBar = true }
                 )
             } else if (ImageMessage.parseOrNull(displayBody) != null) {
                 ImageBubble(
                     imageContent = ImageMessage.parseOrNull(displayBody)!!,
                     isSent = isSent,
                     onLongPress = { showMenu = true },
-                    onDoubleClick = onReply,
+                    onDoubleClick = { showQuickReactionBar = true },
                     photosBlocked = !isSent && photosBlocked,
                     senderDisplayName = contactAvatarFallback,
                     isRevealed = isPhotoRevealed,
                     onReveal = onRevealPhoto
                 )
             } else {
-                val bodyText = displayBody ?: ""
-
                 // Above this, render a truncated tap-to-expand preview instead of laying out the
                 // full text inline - matches iMessage's behavior for very long messages, and
                 // specifically guards against a huge wall of text (e.g. raw base64 that ended up
@@ -1285,7 +1390,7 @@ fun MessageBubble(
                             .combinedClickable(
                                 onClick = { showFullText = true },
                                 onLongClick = { showMenu = true },
-                                onDoubleClick = onReply
+                                onDoubleClick = { showQuickReactionBar = true }
                             )
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -1309,6 +1414,17 @@ fun MessageBubble(
                             onCopy = { clipboardManager.setText(AnnotatedString(bodyText)) }
                         )
                     }
+                } else if (isEntirelyLinkMessage) {
+                    // Message is nothing but a link - the preview card replaces the plain-text
+                    // bubble entirely (matches iMessage/iOS's `MessageBubbleView`) instead of
+                    // showing both. `fallbackText` keeps the raw link visible/tappable if no
+                    // preview data is ever found, rather than the message rendering as nothing.
+                    LinkPreviewCard(
+                        url = TextLinkify.findUrls(bodyText).first().uri,
+                        txId = message.id,
+                        kaspaExplorer = kaspaExplorer,
+                        fallbackText = bodyText
+                    )
                 } else {
                     var textLayoutResult by remember(bodyText) { mutableStateOf<TextLayoutResult?>(null) }
                     // Sent bubbles are teal (matching broadcast rooms' sent-message color) with black
@@ -1338,7 +1454,7 @@ fun MessageBubble(
                                 .pointerInput(annotatedBody) {
                                     detectTapGestures(
                                         onLongPress = { showMenu = true },
-                                        onDoubleTap = { onReply() },
+                                        onDoubleTap = { showQuickReactionBar = true },
                                         onTap = { offset ->
                                             val layout = textLayoutResult ?: return@detectTapGestures
                                             val charOffset = layout.getOffsetForPosition(offset)
@@ -1351,9 +1467,6 @@ fun MessageBubble(
                             color = if (isSent) Color.Black else LocalAppColors.current.textPrimary
                         )
                     }
-                    TextLinkify.findUrls(bodyText).firstOrNull()?.let { match ->
-                        LinkPreviewCard(url = match.uri, txId = message.id, kaspaExplorer = kaspaExplorer)
-                    }
                 }
             }
 
@@ -1361,6 +1474,11 @@ fun MessageBubble(
                 CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
                     PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_message)) {
                         clipboardManager.setText(AnnotatedString(displayBody ?: ""))
+                        showMenu = false
+                    }
+                    HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                    PopupMenuRow(Icons.AutoMirrored.Filled.Reply, stringResource(R.string.reply)) {
+                        onReply()
                         showMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
@@ -1389,6 +1507,32 @@ fun MessageBubble(
                     }
                 }
             }
+
+            if (showQuickReactionBar) {
+                QuickReactionBar(
+                    onDismissRequest = { showQuickReactionBar = false },
+                    anchor = menuAnchor,
+                    onReact = onReact,
+                    onReply = onReply
+                )
+            }
+
+            if (reactions.isNotEmpty()) {
+                ReactionPill(
+                    reactions = reactions,
+                    modifier = Modifier
+                        .align(if (isSent) Alignment.BottomStart else Alignment.BottomEnd)
+                        .offset(y = 10.dp)
+                )
+            }
+        }
+
+        // Placed as its own sibling (not inside the Box above) so it stacks cleanly below the
+        // text bubble instead of overlapping it, and so the reaction pill's corner-anchor (which
+        // attaches to that Box) sizes against just the text bubble, not this taller card too -
+        // matches iOS's identical placement outside its equivalent `Group`.
+        separateLinkPreviewUrl?.let { url ->
+            LinkPreviewCard(url = url, txId = message.id, kaspaExplorer = kaspaExplorer)
         }
 
         if (isSent) {
@@ -1989,6 +2133,7 @@ fun ProfileScreen(
     val address by viewModel.address.collectAsState()
     val accountName by viewModel.accountName.collectAsState()
     val balance by viewModel.fullBalance.collectAsState()
+    val identityBalanceSompi by viewModel.balanceSompi.collectAsState()
     val showSetupGuides by viewModel.showSetupGuides.collectAsState()
     val dotColorHex by connectionViewModel.dotColorHex.collectAsState()
     val scrollState = rememberScrollState()
@@ -2042,6 +2187,36 @@ fun ProfileScreen(
             showAcceptPaymentQr = false
             showWithdrawDialog = false
         }
+    }
+
+    // In-place full-screen swap - not a nav route, not a dialog popup - mirroring
+    // SpendingAddressTxHistoryScreen's own `if (showSendFlow) { ...; return }` idiom, so both of
+    // Profile's quick-send entry points (Chatting Address, Spending Address) open the exact same
+    // full-featured send screen (coin control, fee tier, KNS resolution) as everywhere else,
+    // rather than the old bare-bones AlertDialog each used to show.
+    if (showWithdrawDialog) {
+        SpendingAddressSendFlow(
+            fromAddress = address ?: "",
+            balanceSompi = identityBalanceSompi,
+            title = "Send Kaspa",
+            viewModel = viewModel,
+            portfolioViewModel = portfolioViewModel,
+            onDone = { showWithdrawDialog = false }
+        )
+        return
+    }
+
+    if (showSpendingWithdrawDialog && primarySpendingEntry != null) {
+        SpendingAddressSendFlow(
+            fromAddress = primarySpendingEntry.address,
+            balanceSompi = primarySpendingEntry.balanceSompi,
+            title = "Send Kaspa",
+            spendingIndex = primarySpendingEntry.index,
+            viewModel = viewModel,
+            portfolioViewModel = portfolioViewModel,
+            onDone = { showSpendingWithdrawDialog = false }
+        )
+        return
     }
 
     Scaffold(
@@ -2114,6 +2289,14 @@ fun ProfileScreen(
                 }
             }
 
+            if (showSetupGuides) {
+                SettingsSection(title = stringResource(R.string.welcome_guide)) {
+                    SettingsNavigationItem(stringResource(R.string.welcome_guide), Icons.Default.WavingHand, onClick = {
+                        navController.navigate("welcome_guide")
+                    })
+                }
+            }
+
             SettingsSection(title = stringResource(R.string.kns_profile)) {
                 if (profileAssetId == null || activeProfileDomainName == null) {
                     // No domain yet - nothing to show an avatar/chevron-row for (there's no
@@ -2135,7 +2318,6 @@ fun ProfileScreen(
                         )
                     }
                 } else {
-                    val clipboardManager = LocalClipboardManager.current
                     Column(
                         modifier = Modifier.clickable { navController.navigate("edit_kns_profile") }
                     ) {
@@ -2167,7 +2349,7 @@ fun ProfileScreen(
                                         text = bio,
                                         color = LocalAppColors.current.textPrimary,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.clickable { clipboardManager.setText(AnnotatedString(bio)) }
+                                        maxLines = 5
                                     )
                                 } else {
                                     Text(
@@ -2244,14 +2426,6 @@ fun ProfileScreen(
                 }
             }
 
-            if (showSetupGuides) {
-                SettingsSection(title = stringResource(R.string.welcome_guide)) {
-                    SettingsNavigationItem(stringResource(R.string.welcome_guide), Icons.Default.WavingHand, onClick = {
-                        navController.navigate("welcome_guide")
-                    })
-                }
-            }
-
             run {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2301,20 +2475,20 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.withdraw_kaspa), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.send_kaspa), color = KaspaTeal, fontWeight = FontWeight.Bold)
                     }
                     if (address != null) {
                         HorizontalDivider(color = LocalAppColors.current.divider)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { navController.navigate("cold_storage_tx_history/$address") }
+                                .clickable { navController.navigate("identity_address_detail") }
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Default.Receipt, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.transaction_history), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.manage_address), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -2476,253 +2650,6 @@ fun ProfileScreen(
             }
         )
     }
-
-    if (showWithdrawDialog) {
-        var recipientInput by remember { mutableStateOf("") }
-        var amountInput by remember { mutableStateOf("") }
-        var showScanner by remember { mutableStateOf(false) }
-        var feeRateOverrideSompi by remember { mutableStateOf<Long?>(null) }
-        var showFeeEditor by remember { mutableStateOf(false) }
-        var feeEditorInput by remember { mutableStateOf("") }
-        val isSending by viewModel.isSending.collectAsState()
-        val sendResult by viewModel.sendResult.collectAsState()
-        val identityBalanceSompi by viewModel.balanceSompi.collectAsState()
-        val fiatPriceInCurrency by portfolioViewModel.currentPriceUsd.collectAsState()
-        val fiatCurrencyCode by portfolioViewModel.currency.collectAsState()
-        val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(onKasTextChange = { amountInput = it })
-        val context = LocalContext.current
-        val clipboardManager = LocalClipboardManager.current
-
-        val estimatedMass = remember {
-            com.kachat.app.util.KaspaMass.calculateMass(numInputs = 1, outputScriptLens = listOf(34, 34), payloadSize = 0)
-        }
-        val defaultFeeSompi = com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
-        val effectiveFeeSompi = feeRateOverrideSompi?.let { com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, it) } ?: defaultFeeSompi
-
-        LaunchedEffect(sendResult) {
-            val result = sendResult ?: return@LaunchedEffect
-            if (result.isSuccess) {
-                Toast.makeText(context, context.getString(R.string.withdrawal_sent), Toast.LENGTH_SHORT).show()
-                showWithdrawDialog = false
-            } else {
-                Toast.makeText(context, result.exceptionOrNull()?.message ?: context.getString(R.string.withdrawal_failed), Toast.LENGTH_SHORT).show()
-            }
-            viewModel.clearSendResult()
-        }
-
-        if (showScanner) {
-            BackHandler { showScanner = false }
-            QrScannerOverlay(
-                onScanned = { scanned -> recipientInput = scanned.trim(); showScanner = false },
-                onDismiss = { showScanner = false }
-            )
-            return
-        }
-
-        val amountSompi = amountInput.toDoubleOrNull()?.let { Math.round(it * 100_000_000.0) }
-        val isValidAddress = remember(recipientInput) { KaspaAddress.isValid(recipientInput) }
-
-        AlertDialog(
-            onDismissRequest = { if (!isSending) showWithdrawDialog = false },
-            containerColor = LocalAppColors.current.surface,
-            title = { Text(stringResource(R.string.withdraw_kaspa), color = LocalAppColors.current.textPrimary) },
-            text = {
-                Column {
-                    Text(
-                        stringResource(R.string.sends_kas_out_of_your_identity),
-                        color = LocalAppColors.current.textSecondary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = recipientInput,
-                        onValueChange = { recipientInput = it },
-                        label = { Text(stringResource(R.string.recipient_address)) },
-                        singleLine = true,
-                        enabled = !isSending,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LocalAppColors.current.textPrimary,
-                            unfocusedTextColor = LocalAppColors.current.textPrimary,
-                            focusedBorderColor = KaspaTeal,
-                            unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                            focusedLabelColor = KaspaTeal,
-                            unfocusedLabelColor = LocalAppColors.current.textSecondary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = { clipboardManager.getText()?.text?.let { recipientInput = it.trim() } },
-                            enabled = !isSending
-                        ) {
-                            Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
-                        }
-                        TextButton(
-                            onClick = { showScanner = true },
-                            enabled = !isSending
-                        ) {
-                            Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = fiatAmountState.displayText,
-                        onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
-                        label = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
-                        singleLine = true,
-                        enabled = !isSending,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
-                        ),
-                        trailingIcon = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
-                                    Text(
-                                        label,
-                                        color = LocalAppColors.current.textSecondary,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier
-                                            .clickable(enabled = !isSending) { fiatAmountState.toggleMode(fiatPriceInCurrency) }
-                                            .padding(end = 8.dp)
-                                    )
-                                }
-                                TextButton(
-                                    onClick = {
-                                        val maxSompi = (identityBalanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                                        fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
-                                    },
-                                    enabled = !isSending
-                                ) {
-                                    Text(stringResource(R.string.max), color = KaspaTeal)
-                                }
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LocalAppColors.current.textPrimary,
-                            unfocusedTextColor = LocalAppColors.current.textPrimary,
-                            focusedBorderColor = KaspaTeal,
-                            unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                            focusedLabelColor = KaspaTeal,
-                            unfocusedLabelColor = LocalAppColors.current.textSecondary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Available: $balance", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "·  Fee: %.8f KAS".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0),
-                            color = KaspaTeal,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodySmall,
-                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                            modifier = Modifier.clickable(enabled = !isSending) {
-                                feeEditorInput = "%.8f".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0)
-                                showFeeEditor = true
-                            }
-                        )
-                    }
-                    if (isSending) {
-                        Spacer(Modifier.height(12.dp))
-                        InscribeProgressRow(stringResource(R.string.sending_2))
-                    }
-                }
-            },
-            confirmButton = {
-                val canSend = !isSending && isValidAddress && (amountSompi ?: 0) > 0
-                TextButton(
-                    onClick = { amountSompi?.let { viewModel.onSendClicked(recipientInput.trim(), it, feeRateOverrideSompi) } },
-                    enabled = canSend
-                ) {
-                    Text(stringResource(R.string.withdraw), color = if (canSend) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                if (!isSending) {
-                    TextButton(onClick = { showWithdrawDialog = false }) {
-                        Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
-                    }
-                }
-            }
-        )
-
-        if (showFeeEditor) {
-            AlertDialog(
-                onDismissRequest = { showFeeEditor = false },
-                containerColor = LocalAppColors.current.surface,
-                title = { Text(stringResource(R.string.adjust_network_fee), color = LocalAppColors.current.textPrimary) },
-                text = {
-                    Column {
-                        Text(
-                            stringResource(R.string.if_the_network_is_busy_a),
-                            color = LocalAppColors.current.textSecondary,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = feeEditorInput,
-                            onValueChange = { feeEditorInput = it },
-                            label = { Text(stringResource(R.string.fee_kas)) },
-                            singleLine = true,
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
-                            ),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = LocalAppColors.current.textPrimary,
-                                unfocusedTextColor = LocalAppColors.current.textPrimary,
-                                focusedBorderColor = KaspaTeal,
-                                unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                                focusedLabelColor = KaspaTeal,
-                                unfocusedLabelColor = LocalAppColors.current.textSecondary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Default: %.8f KAS".format(java.util.Locale.US, defaultFeeSompi / 100_000_000.0),
-                            color = LocalAppColors.current.textSecondary,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val kas = feeEditorInput.toDoubleOrNull()
-                        feeRateOverrideSompi = if (kas != null && kas > 0) {
-                            val desiredFeeSompi = Math.round(kas * 100_000_000.0)
-                            kotlin.math.ceil(desiredFeeSompi.toDouble() / estimatedMass).toLong()
-                        } else {
-                            null
-                        }
-                        showFeeEditor = false
-                    }) {
-                        Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
-                    }
-                },
-                dismissButton = {
-                    Row {
-                        TextButton(onClick = { feeRateOverrideSompi = null; showFeeEditor = false }) {
-                            Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
-                        }
-                        TextButton(onClick = { showFeeEditor = false }) {
-                            Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
-                        }
-                    }
-                }
-            )
-        }
-    }
-
-    if (showSpendingWithdrawDialog) {
-        primarySpendingEntry?.let { entry ->
-            WithdrawFromAddressDialog(
-                viewModel = viewModel,
-                entry = entry,
-                onDismiss = { showSpendingWithdrawDialog = false }
-            )
-        }
-    }
 }
 
 /**
@@ -2741,10 +2668,53 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
     val knsInscribeState by viewModel.knsInscribeState.collectAsState()
     var showInscribeDialog by remember { mutableStateOf(false) }
     var domainLabelInput by remember { mutableStateOf("") }
-    var transferDialogDomain by remember { mutableStateOf<com.kachat.app.services.KnsAsset?>(null) }
+    var selectedDomain by remember { mutableStateOf<com.kachat.app.services.KnsAsset?>(null) }
+    var showSendScreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        viewModel.refreshOwnedDomains()
+        viewModel.refreshOwnedDomainsAndAwait()
+    }
+
+    val pullRefreshState = rememberPullToRefreshState()
+    LaunchedEffect(pullRefreshState.isRefreshing) {
+        if (pullRefreshState.isRefreshing) {
+            viewModel.refreshOwnedDomainsAndAwait()
+            pullRefreshState.endRefresh()
+        }
+    }
+
+    // Full-screen swap: domain detail (card, primary status, Send entry point) - reached by
+    // tapping a card in the list below. No transfer-history section: KNS only exposes a
+    // "currently owned assets" endpoint, and this app's own KNS-transfer tracking is a one-shot
+    // chat notification, not a persisted per-domain log, so there's no reliable data source yet.
+    selectedDomain?.let { domain ->
+        if (!showSendScreen) {
+            val isPrimary = domain.asset != null && domain.asset == primaryDomainName
+            val settingThisOne = setPrimaryState.inFlight && setPrimaryState.assetId == domain.assetId
+            KnsDomainDetailScreen(
+                domain = domain,
+                isPrimary = isPrimary,
+                settingInFlight = settingThisOne,
+                onSetPrimary = { domain.assetId?.let { viewModel.setPrimaryDomain(it) } },
+                onSend = {
+                    viewModel.resetTransferDomainState()
+                    showSendScreen = true
+                },
+                onBack = { selectedDomain = null }
+            )
+            return
+        } else {
+            KnsDomainSendScreen(
+                domain = domain,
+                viewModel = viewModel,
+                onDone = {
+                    showSendScreen = false
+                    selectedDomain = null
+                },
+                onBack = { showSendScreen = false }
+            )
+            return
+        }
     }
 
     Scaffold(
@@ -2786,70 +2756,40 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
             }
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
-            Spacer(Modifier.height(16.dp))
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item { Spacer(Modifier.height(16.dp)) }
             if (ownedDomainAssets.isEmpty()) {
-                Text(text = stringResource(R.string.no_domains_yet), color = LocalAppColors.current.textSecondary, modifier = Modifier.padding(16.dp))
+                item {
+                    Text(text = stringResource(R.string.no_domains_yet), color = LocalAppColors.current.textSecondary, modifier = Modifier.padding(16.dp))
+                }
             } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(LocalAppColors.current.surface)
-                        .padding(16.dp)
-                ) {
-                    ownedDomainAssets.forEachIndexed { index, domainAsset ->
-                        val name = domainAsset.asset ?: return@forEachIndexed
-                        val assetId = domainAsset.assetId
-                        val isPrimary = name == primaryDomainName
-                        val settingThisOne = setPrimaryState.inFlight && setPrimaryState.assetId == assetId
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            if (settingThisOne) {
-                                CircularProgressIndicator(color = KaspaTeal, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(
-                                    if (isPrimary) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = if (isPrimary) "Primary domain" else "Set as primary",
-                                    tint = if (isPrimary) KaspaTeal else Color.Gray,
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .then(
-                                            if (!isPrimary && assetId != null) Modifier.clickable { viewModel.setPrimaryDomain(assetId) }
-                                            else Modifier
-                                        )
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Text(name, color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            if (assetId != null) {
-                                Icon(
-                                    Icons.Default.SwapHoriz,
-                                    contentDescription = stringResource(R.string.transfer_domain),
-                                    tint = LocalAppColors.current.textSecondary,
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .clickable {
-                                            viewModel.resetTransferDomainState()
-                                            transferDialogDomain = domainAsset
-                                        }
-                                )
-                            }
-                        }
-                        val setPrimaryError = setPrimaryState.errorMessage
-                        if (setPrimaryState.assetId == assetId && setPrimaryError != null) {
-                            Text(setPrimaryError, color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (index < ownedDomainAssets.lastIndex) Spacer(Modifier.height(8.dp))
-                    }
+                items(ownedDomainAssets.filter { it.asset != null }, key = { it.assetId ?: it.asset ?: it.hashCode().toString() }) { domainAsset ->
+                    val isPrimary = domainAsset.asset == primaryDomainName
+                    KnsDomainCard(
+                        domain = domainAsset,
+                        isPrimary = isPrimary,
+                        modifier = Modifier.clickable { selectedDomain = domainAsset }
+                    )
                 }
             }
-            Spacer(modifier = Modifier.height(100.dp))
+            item { Spacer(modifier = Modifier.height(100.dp)) }
+        }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
         }
     }
 
@@ -2976,141 +2916,379 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
         )
     }
 
-    transferDialogDomain?.let { domain ->
-        val recipientPreview by viewModel.transferRecipientPreview.collectAsState()
-        val transferState by viewModel.transferDomainState.collectAsState()
-        var recipientInput by remember(domain) { mutableStateOf("") }
-        var confirmStep by remember(domain) { mutableStateOf(false) }
-        val inFlight = transferState.status !in listOf(
-            WalletViewModel.KnsInscribeUiStatus.IDLE,
-            WalletViewModel.KnsInscribeUiStatus.SUCCESS,
-            WalletViewModel.KnsInscribeUiStatus.FAILED
-        )
-        val domainName = domain.asset ?: ""
-        val assetId = domain.assetId ?: ""
+}
 
-        AlertDialog(
-            onDismissRequest = { if (!inFlight) transferDialogDomain = null },
-            title = {
-                Text(
-                    when {
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUCCESS -> "Domain Transferred"
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.FAILED -> "Transfer Failed"
-                        confirmStep -> "Confirm Transfer"
-                        else -> "Transfer $domainName"
-                    },
-                    color = LocalAppColors.current.textPrimary
-                )
-            },
-            containerColor = LocalAppColors.current.surface,
-            text = {
-                Column {
-                    when {
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUBMITTING_COMMIT -> InscribeProgressRow(stringResource(R.string.submitting_commit_transaction))
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL -> InscribeProgressRow(stringResource(R.string.submitting_reveal_transaction))
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.VERIFYING -> InscribeProgressRow(stringResource(R.string.verifying_new_ownership_on_chain_this))
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.SUCCESS -> {
-                            val result = transferState.result
-                            Text("$domainName now belongs to ${result?.toAddress}.", color = Color(0xFF4CD964), fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(8.dp))
-                            Text("Commit tx: ${result?.commitTxId}", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                            Text("Reveal tx: ${result?.revealTxId}", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                            if (result?.verified == false) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(stringResource(R.string.still_indexing_ownership_will_update_shortly), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        transferState.status == WalletViewModel.KnsInscribeUiStatus.FAILED -> {
-                            Text(transferState.errorMessage ?: "Something went wrong", color = Color(0xFFFF3B30))
-                        }
-                        confirmStep -> {
-                            Text("This will permanently transfer ownership of $domainName to:", color = LocalAppColors.current.textPrimary)
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                recipientPreview?.resolvedAddress ?: "",
-                                color = KaspaTeal,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                stringResource(R.string.this_action_cannot_be_undone_double),
-                                color = Color(0xFFFF3B30),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        else -> {
-                            Text("Inscription: $assetId", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedTextField(
-                                value = recipientInput,
-                                onValueChange = {
-                                    recipientInput = it
-                                    viewModel.checkTransferRecipient(it)
-                                },
-                                label = { Text(stringResource(R.string.recipient_address_or_kas_name)) },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = LocalAppColors.current.textPrimary,
-                                    unfocusedTextColor = LocalAppColors.current.textPrimary,
-                                    focusedBorderColor = KaspaTeal,
-                                    unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                                    focusedLabelColor = KaspaTeal,
-                                    unfocusedLabelColor = LocalAppColors.current.textSecondary
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            recipientPreview?.let { preview ->
-                                when {
-                                    preview.checking -> Text(stringResource(R.string.resolving), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                                    preview.errorMessage != null -> Text(preview.errorMessage, color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
-                                    preview.resolvedAddress != null -> Text("Resolves to: ${preview.resolvedAddress}", color = Color(0xFF4CD964), style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
+/** Teal card matching the app's KNS domain branding - used both as the row style in [KnsDomainsScreen] and as the header of [KnsDomainDetailScreen]. */
+@Composable
+fun KnsDomainCard(domain: com.kachat.app.services.KnsAsset, isPrimary: Boolean = false, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(KaspaTeal),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            domain.asset ?: "",
+            color = Color.Black,
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 20.dp)
+        )
+        if (isPrimary) {
+            Text(
+                stringResource(R.string.primary),
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Detail screen for a single owned domain - the card itself, primary/status info, and a
+ * dedicated Send entry point. Reached by tapping a card in [KnsDomainsScreen]. No transfer
+ * history section: KNS only exposes a "currently owned assets" endpoint, and this app's own
+ * KNS-transfer tracking isn't a persisted per-domain log, so there's no reliable data source yet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KnsDomainDetailScreen(
+    domain: com.kachat.app.services.KnsAsset,
+    isPrimary: Boolean,
+    settingInFlight: Boolean,
+    onSetPrimary: () -> Unit,
+    onSend: () -> Unit,
+    onBack: () -> Unit
+) {
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(domain.asset ?: "", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        },
+        bottomBar = {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Button(
+                    onClick = onSend,
+                    enabled = domain.assetId != null,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = KaspaTeal.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().height(52.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.send), color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            KnsDomainCard(domain = domain, isPrimary = isPrimary)
+            Spacer(Modifier.height(20.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(LocalAppColors.current.surface)
+            ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.asset_id), color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
+                    Text(
+                        domain.assetId ?: "",
+                        color = LocalAppColors.current.textSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1
+                    )
+                }
+                HorizontalDivider(color = LocalAppColors.current.background)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (!isPrimary && domain.assetId != null) Modifier.clickable(enabled = !settingInFlight) { onSetPrimary() }
+                            else Modifier
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (isPrimary) stringResource(R.string.primary_domain) else stringResource(R.string.set_as_primary),
+                        color = LocalAppColors.current.textPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (settingInFlight) {
+                        CircularProgressIndicator(color = KaspaTeal, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            if (isPrimary) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = null,
+                            tint = KaspaTeal
+                        )
                     }
                 }
-            },
-            confirmButton = {
-                when {
-                    transferState.status == WalletViewModel.KnsInscribeUiStatus.SUCCESS || transferState.status == WalletViewModel.KnsInscribeUiStatus.FAILED -> {
-                        TextButton(onClick = { transferDialogDomain = null }) {
-                            Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
-                        }
+            }
+        }
+    }
+}
+
+/**
+ * Sends (transfers) a single KNS domain inscription to a recipient address or KNS domain - same
+ * UX conventions as the app's KAS send flows (KNS-domain-aware recipient, editable network fee)
+ * but with no amount field or coin control, since a domain transfer moves the whole inscription
+ * rather than a chosen KAS amount.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KnsDomainSendScreen(
+    domain: com.kachat.app.services.KnsAsset,
+    viewModel: WalletViewModel,
+    onDone: () -> Unit,
+    onBack: () -> Unit
+) {
+    val recipientPreview by viewModel.transferRecipientPreview.collectAsState()
+    val transferState by viewModel.transferDomainState.collectAsState()
+    val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
+    val uriHandler = LocalUriHandler.current
+
+    var recipientInput by remember { mutableStateOf("") }
+    var feeTier by remember { mutableStateOf(ColdFeeTier.NORMAL) }
+    var customFeeSompi by remember { mutableStateOf<Long?>(null) }
+    var isEditingFee by remember { mutableStateOf(false) }
+    var customFeeText by remember { mutableStateOf("") }
+
+    val domainName = domain.asset ?: ""
+    val assetId = domain.assetId ?: ""
+    val baseFeeSompi = KnsInscriptionEngine.REVEAL_PRIORITY_FEE_SOMPI
+    val priorityFeeSompi = customFeeSompi ?: (baseFeeSompi * feeTier.multiplier)
+    val inFlight = transferState.status !in listOf(
+        WalletViewModel.KnsInscribeUiStatus.IDLE,
+        WalletViewModel.KnsInscribeUiStatus.SUCCESS,
+        WalletViewModel.KnsInscribeUiStatus.FAILED
+    )
+    val canSend = !inFlight && recipientPreview?.resolvedAddress != null
+
+    fun trimmedKas(sompi: Long): String {
+        var text = "%.8f".format(sompi / 100_000_000.0)
+        while (text.endsWith("0")) text = text.dropLast(1)
+        if (text.endsWith(".")) text = text.dropLast(1)
+        return text
+    }
+
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(R.string.send_domain), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack, enabled = !inFlight) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
                     }
-                    confirmStep -> {
-                        TextButton(onClick = { viewModel.transferDomain(domainName, assetId) }) {
-                            Text(stringResource(R.string.confirm_transfer), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    transferState.status == WalletViewModel.KnsInscribeUiStatus.IDLE -> {
-                        TextButton(
-                            onClick = { confirmStep = true },
-                            enabled = recipientPreview?.resolvedAddress != null
-                        ) {
-                            Text(stringResource(R.string.next), color = if (recipientPreview?.resolvedAddress != null) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    else -> {}
-                }
-            },
-            dismissButton = {
-                when {
-                    confirmStep && !inFlight -> {
-                        TextButton(onClick = { confirmStep = false }) {
-                            Text(stringResource(R.string.back), color = LocalAppColors.current.textSecondary)
-                        }
-                    }
-                    !inFlight && transferState.status == WalletViewModel.KnsInscribeUiStatus.IDLE -> {
-                        TextButton(onClick = { transferDialogDomain = null }) {
-                            Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        },
+        bottomBar = {
+            if (transferState.status != WalletViewModel.KnsInscribeUiStatus.SUCCESS) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Button(
+                        onClick = { viewModel.transferDomain(domainName, assetId, priorityFeeSompi) },
+                        enabled = canSend,
+                        colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = KaspaTeal.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        if (inFlight) {
+                            CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text(stringResource(R.string.send), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
-        )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (transferState.status == WalletViewModel.KnsInscribeUiStatus.SUCCESS) {
+                val result = transferState.result
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CD964), modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.sent), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(Modifier.height(20.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(LocalAppColors.current.surface)
+                            .padding(16.dp)
+                    ) {
+                        Text(stringResource(R.string.to), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                        Text(result?.toAddress ?: "", color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(LocalAppColors.current.surface)
+                            .clickable { result?.revealTxId?.let { uriHandler.openUri(kaspaExplorer.txUrl(it)) } }
+                            .padding(16.dp)
+                    ) {
+                        Text("Transaction ID · tap to view in ${kaspaExplorer.displayName}", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                        Text(result?.revealTxId ?: "", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Button(
+                        onClick = onDone,
+                        colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text(stringResource(R.string.done), color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+                return@Column
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(LocalAppColors.current.surface)
+                    .padding(16.dp)
+            ) {
+                Text(domainName, color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                Text(assetId, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            }
+
+            when (transferState.status) {
+                WalletViewModel.KnsInscribeUiStatus.SUBMITTING_COMMIT -> InscribeProgressRow(stringResource(R.string.submitting_commit_transaction))
+                WalletViewModel.KnsInscribeUiStatus.SUBMITTING_REVEAL -> InscribeProgressRow(stringResource(R.string.submitting_reveal_transaction))
+                WalletViewModel.KnsInscribeUiStatus.VERIFYING -> InscribeProgressRow(stringResource(R.string.verifying_new_ownership_on_chain_this))
+                WalletViewModel.KnsInscribeUiStatus.FAILED -> {
+                    Text(transferState.errorMessage ?: stringResource(R.string.something_went_wrong), color = Color(0xFFFF3B30))
+                }
+                else -> {
+                    Text(stringResource(R.string.recipient_address).uppercase(), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = recipientInput,
+                        onValueChange = {
+                            recipientInput = it
+                            viewModel.checkTransferRecipient(it)
+                        },
+                        placeholder = { Text(stringResource(R.string.recipient_address_or_kas_name)) },
+                        singleLine = true,
+                        enabled = !inFlight,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = LocalAppColors.current.textPrimary,
+                            unfocusedTextColor = LocalAppColors.current.textPrimary,
+                            focusedBorderColor = KaspaTeal,
+                            unfocusedBorderColor = LocalAppColors.current.textSecondary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    recipientPreview?.let { preview ->
+                        Spacer(Modifier.height(4.dp))
+                        when {
+                            preview.checking -> Text(stringResource(R.string.resolving), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                            preview.errorMessage != null -> Text(preview.errorMessage, color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
+                            preview.resolvedAddress != null -> Text("Resolves to: ${preview.resolvedAddress}", color = Color(0xFF4CD964), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text("FEE", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(LocalAppColors.current.surface)
+                    ) {
+                        ColdFeeTier.entries.forEach { tier ->
+                            val selected = feeTier == tier && customFeeSompi == null
+                            Text(
+                                tier.label,
+                                color = if (selected) Color.Black else LocalAppColors.current.textSecondary,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selected) KaspaTeal else Color.Transparent)
+                                    .clickable(enabled = !inFlight) {
+                                        feeTier = tier
+                                        customFeeSompi = null
+                                        isEditingFee = false
+                                    }
+                                    .padding(vertical = 10.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(stringResource(R.string.network_fee), color = LocalAppColors.current.textPrimary, modifier = Modifier.weight(1f))
+                        if (isEditingFee) {
+                            OutlinedTextField(
+                                value = customFeeText,
+                                onValueChange = { customFeeText = it },
+                                singleLine = true,
+                                modifier = Modifier.width(110.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = LocalAppColors.current.textPrimary,
+                                    unfocusedTextColor = LocalAppColors.current.textPrimary
+                                )
+                            )
+                            IconButton(onClick = {
+                                customFeeText.toDoubleOrNull()?.let { kas ->
+                                    customFeeSompi = (kas * 100_000_000).toLong().coerceAtLeast(0)
+                                }
+                                isEditingFee = false
+                            }) {
+                                Icon(Icons.Default.Check, null, tint = KaspaTeal)
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable(enabled = !inFlight) {
+                                    customFeeText = trimmedKas(priorityFeeSompi)
+                                    isEditingFee = true
+                                }
+                            ) {
+                                Text("${trimmedKas(priorityFeeSompi)} KAS", color = KaspaTeal, textDecoration = TextDecoration.Underline)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Default.Edit, null, tint = KaspaTeal, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
     }
 }
 
@@ -3124,7 +3302,7 @@ fun KnsDomainsScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
 fun ManageAddressesScreen(
     viewModel: WalletViewModel,
     onBack: () -> Unit,
-    onNavigateToTxHistory: (String) -> Unit = {},
+    onNavigateToTxHistory: (Int) -> Unit = {},
     onNavigateToHidden: () -> Unit = {},
     onAddressPicked: ((com.kachat.app.services.WalletService.SpendingAddressEntry) -> Unit)? = null
 ) {
@@ -3136,7 +3314,6 @@ fun ManageAddressesScreen(
     var showIdentityWarning by remember { mutableStateOf(false) }
     var activateIndex by remember { mutableStateOf<Int?>(null) }
     var qrAddress by remember { mutableStateOf<String?>(null) }
-    var withdrawEntry by remember { mutableStateOf<com.kachat.app.services.WalletService.SpendingAddressEntry?>(null) }
     var renamingEntry by remember { mutableStateOf<com.kachat.app.services.WalletService.SpendingAddressEntry?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var showActionsMenu by remember { mutableStateOf(false) }
@@ -3336,11 +3513,10 @@ fun ManageAddressesScreen(
                 items(visibleAddresses, key = { it.index }) { entry ->
                     ManageAddressRow(
                         entry = entry,
-                        onClick = { if (onAddressPicked != null) onAddressPicked(entry) else onNavigateToTxHistory(entry.address) },
+                        onClick = { if (onAddressPicked != null) onAddressPicked(entry) else onNavigateToTxHistory(entry.index) },
                         onCopyClick = { clipboardManager.setText(AnnotatedString(entry.address)) },
                         onQrClick = { qrAddress = entry.address },
                         onActivateClick = { if (!entry.isCurrent) activateIndex = entry.index },
-                        onWithdrawClick = { if (entry.balanceSompi > 0) withdrawEntry = entry },
                         onHideToggleClick = { viewModel.setManageAddressHidden(entry.index, true) },
                         onRenameClick = { renamingEntry = entry; renameInput = entry.label ?: "" }
                     )
@@ -3418,10 +3594,6 @@ fun ManageAddressesScreen(
         )
     }
 
-    withdrawEntry?.let { entry ->
-        WithdrawFromAddressDialog(viewModel = viewModel, entry = entry, onDismiss = { withdrawEntry = null })
-    }
-
     renamingEntry?.let { entry ->
         RenameAddressDialog(
             index = entry.index,
@@ -3494,14 +3666,13 @@ private fun RenameAddressDialog(
 fun ManageAddressesHiddenScreen(
     viewModel: WalletViewModel,
     onBack: () -> Unit,
-    onNavigateToTxHistory: (String) -> Unit = {},
+    onNavigateToTxHistory: (Int) -> Unit = {},
     onAddressPicked: ((com.kachat.app.services.WalletService.SpendingAddressEntry) -> Unit)? = null
 ) {
     val addresses by viewModel.manageAddresses.collectAsState()
     val clipboardManager = LocalClipboardManager.current
     var activateIndex by remember { mutableStateOf<Int?>(null) }
     var qrAddress by remember { mutableStateOf<String?>(null) }
-    var withdrawEntry by remember { mutableStateOf<com.kachat.app.services.WalletService.SpendingAddressEntry?>(null) }
     var renamingEntry by remember { mutableStateOf<com.kachat.app.services.WalletService.SpendingAddressEntry?>(null) }
     var renameInput by remember { mutableStateOf("") }
 
@@ -3555,11 +3726,10 @@ fun ManageAddressesHiddenScreen(
                     items(hiddenAddresses, key = { it.index }) { entry ->
                         ManageAddressRow(
                             entry = entry,
-                            onClick = { if (onAddressPicked != null) onAddressPicked(entry) else onNavigateToTxHistory(entry.address) },
+                            onClick = { if (onAddressPicked != null) onAddressPicked(entry) else onNavigateToTxHistory(entry.index) },
                             onCopyClick = { clipboardManager.setText(AnnotatedString(entry.address)) },
                             onQrClick = { qrAddress = entry.address },
                             onActivateClick = { if (!entry.isCurrent) activateIndex = entry.index },
-                            onWithdrawClick = { if (entry.balanceSompi > 0) withdrawEntry = entry },
                             onHideToggleClick = { viewModel.setManageAddressHidden(entry.index, false) },
                             onRenameClick = { renamingEntry = entry; renameInput = entry.label ?: "" }
                         )
@@ -3574,10 +3744,6 @@ fun ManageAddressesHiddenScreen(
 
     activateIndex?.let { index ->
         ActivateAddressDialog(viewModel = viewModel, index = index, onDismiss = { activateIndex = null })
-    }
-
-    withdrawEntry?.let { entry ->
-        WithdrawFromAddressDialog(viewModel = viewModel, entry = entry, onDismiss = { withdrawEntry = null })
     }
 
     renamingEntry?.let { entry ->
@@ -3623,12 +3789,38 @@ private fun ActivateAddressDialog(viewModel: WalletViewModel, index: Int, onDism
     )
 }
 
-/** Withdraw-from-this-address dialog — shared by [ManageAddressesScreen] and [ManageAddressesHiddenScreen]. */
+/**
+ * Full-screen send flow shared by every address this wallet can sign locally with: a specific
+ * spending-chain address (pass [spendingIndex]) or the identity/chatting address (leave
+ * [spendingIndex] null) — used from [SpendingAddressTxHistoryScreen]'s Send button and both of
+ * [ProfileScreen]'s quick-send entry points ("Chatting Address" and "Spending Address"), so all
+ * three open the exact same screen instead of each having their own bare-bones popup. Visually
+ * mirrors [ColdSendFlow]'s full-screen layout (scrollable form, in-column primary button,
+ * segmented [ColdFeeTier] picker, Coin Control row) and iOS's `SpendingAddressWithdrawView`/
+ * `WithdrawKaspaView` field-for-field — but signs and broadcasts directly via
+ * [WalletViewModel.withdrawFromSpendingAddress]/[WalletViewModel.onSendClicked] (this wallet
+ * already holds the private key for either address), never the external-QR-signer round trip
+ * [ColdSendFlow] uses for watch-only keys.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WithdrawFromAddressDialog(
+fun SpendingAddressSendFlow(
+    fromAddress: String,
+    balanceSompi: Long,
+    title: String,
     viewModel: WalletViewModel,
-    entry: com.kachat.app.services.WalletService.SpendingAddressEntry,
-    onDismiss: () -> Unit,
+    onDone: () -> Unit,
+    // Which spending-chain address index to sign with, or null for the identity address - the
+    // only two send paths this wallet can sign locally with (see WalletViewModel.onSendClicked/
+    // withdrawFromSpendingAddress). Everything else about this screen (coin control, fee tier,
+    // KNS resolution) is identical either way.
+    spendingIndex: Int? = null,
+    // Pre-fills the recipient with fromAddress itself (a self-send) and auto-fills Max, for the
+    // "Compound UTXOs" entry point - merges every UTXO at this address into one. Locks the
+    // recipient field instead of just pre-filling it, matching ColdSendFlow's identical
+    // isCompoundMode behavior, since editing it away from fromAddress would defeat the point of
+    // a compound send.
+    isCompoundMode: Boolean = false,
     portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -3637,25 +3829,79 @@ private fun WithdrawFromAddressDialog(
     val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
     val fiatPriceInCurrency by portfolioViewModel.currentPriceUsd.collectAsState()
     val fiatCurrencyCode by portfolioViewModel.currency.collectAsState()
-    var recipientInput by remember(entry) { mutableStateOf("") }
-    var amountInput by remember(entry) { mutableStateOf("") }
-    val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(resetKey = entry, onKasTextChange = { amountInput = it })
+    var recipientInput by remember(fromAddress) { mutableStateOf("") }
+    var amountInput by remember(fromAddress) { mutableStateOf("") }
+    val fiatAmountState = com.kachat.app.util.rememberKaspaFiatAmountState(resetKey = fromAddress, onKasTextChange = { amountInput = it })
     var showScanner by remember { mutableStateOf(false) }
-    var feeRateOverrideSompi by remember { mutableStateOf<Long?>(null) }
+    var manualUtxos by remember { mutableStateOf<List<UtxoEntry>?>(null) }
+    var showCoinControl by remember { mutableStateOf(false) }
+    var isEstimatingMax by remember { mutableStateOf(false) }
+    var feeTier by remember { mutableStateOf(ColdFeeTier.NORMAL) }
+    var customExtraFeeSompi by remember { mutableStateOf<Long?>(null) }
     var showFeeEditor by remember { mutableStateOf(false) }
     var feeEditorInput by remember { mutableStateOf("") }
     var sentTxId by remember { mutableStateOf<String?>(null) }
     val isSending by viewModel.isSending.collectAsState()
     val sendResult by viewModel.sendResult.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
-    // Same simplified single-input, two-output shape the "Max" button has always estimated
-    // against — real UTXO selection can differ slightly, but this is close enough to preview
-    // and to translate a user-entered KAS fee back into a sompi-per-gram rate.
-    val estimatedMass = remember {
-        com.kachat.app.util.KaspaMass.calculateMass(numInputs = 1, outputScriptLens = listOf(34, 34), payloadSize = 0)
+    // Real input count when known (coin control fixes it exactly) instead of always guessing 1 -
+    // same reasoning as ColdSendFlow's estimatedMass, just without a live automatic-selection
+    // preview (this path doesn't have one; the fee shown here is still exact once coin control
+    // is active, and a close estimate otherwise).
+    val estimatedMass = remember(manualUtxos) {
+        val inputCount = manualUtxos?.size?.takeIf { it > 0 } ?: 1
+        KaspaMass.calculateMass(numInputs = inputCount, outputScriptLens = listOf(34, 34), payloadSize = 0)
     }
-    val defaultFeeSompi = com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, com.kachat.app.util.KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
-    val effectiveFeeSompi = feeRateOverrideSompi?.let { com.kachat.app.util.KaspaMass.calculateFee(estimatedMass, it) } ?: defaultFeeSompi
+    val baseFeeRateSompiPerGram = KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM
+    val defaultFeeSompi = KaspaMass.calculateFee(estimatedMass, baseFeeRateSompiPerGram)
+    val extraFeeSompi = customExtraFeeSompi ?: (defaultFeeSompi * (feeTier.multiplier - 1))
+    val effectiveFeeSompi = defaultFeeSompi + extraFeeSompi
+    // Sompi-per-gram rate implied by effectiveFeeSompi/estimatedMass - what actually gets passed
+    // to the engine, since sendKaspa/withdrawFromSpendingAddress take a rate, not a flat fee.
+    val feeRateOverrideSompi = kotlin.math.ceil(effectiveFeeSompi.toDouble() / estimatedMass).toLong()
+
+    var isResolvingKns by remember { mutableStateOf(false) }
+    var knsResolvedAddress by remember { mutableStateOf<String?>(null) }
+    var knsError by remember { mutableStateOf<String?>(null) }
+    // Debounced KNS domain resolution - lets typing "name.kas" here resolve the same way Create
+    // Chat's own address field already does. Skipped entirely in compound mode, where the
+    // recipient is always the locked self-address, never user-typed.
+    LaunchedEffect(recipientInput) {
+        knsResolvedAddress = null
+        knsError = null
+        if (isCompoundMode) {
+            isResolvingKns = false
+            return@LaunchedEffect
+        }
+        val trimmed = recipientInput.trim()
+        if (trimmed.isEmpty() || trimmed.startsWith("kaspa:", ignoreCase = true) ||
+            trimmed.startsWith("kaspatest:", ignoreCase = true) || !KnsService.looksLikeDomain(trimmed)
+        ) {
+            isResolvingKns = false
+            return@LaunchedEffect
+        }
+        isResolvingKns = true
+        kotlinx.coroutines.delay(500)
+        val resolved = viewModel.resolveKnsDomain(trimmed)
+        isResolvingKns = false
+        if (resolved != null) knsResolvedAddress = resolved else knsError = "KNS domain not found"
+    }
+
+    LaunchedEffect(Unit) {
+        if (isCompoundMode) {
+            recipientInput = fromAddress
+            isEstimatingMax = true
+            try {
+                val maxSompi = viewModel.estimateMaxSendableAmount(fromAddress, feeRateOverrideSompi, manualUtxos)
+                fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+            } catch (e: Exception) {
+                // Leave the field untouched on failure - same as the Max button itself.
+            } finally {
+                isEstimatingMax = false
+            }
+        }
+    }
 
     LaunchedEffect(sendResult) {
         val result = sendResult ?: return@LaunchedEffect
@@ -3667,6 +3913,8 @@ private fun WithdrawFromAddressDialog(
         viewModel.clearSendResult()
     }
 
+    BackHandler(enabled = !isSending) { onDone() }
+
     if (showScanner) {
         BackHandler { showScanner = false }
         QrScannerOverlay(
@@ -3676,61 +3924,114 @@ private fun WithdrawFromAddressDialog(
         return
     }
 
-    sentTxId?.let { txId ->
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            containerColor = LocalAppColors.current.surface,
-            title = null,
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4CD964).copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Check, null, tint = Color(0xFF4CD964), modifier = Modifier.size(32.dp))
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(stringResource(R.string.sent), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Spacer(Modifier.height(16.dp))
-                    Text(stringResource(R.string.transaction_id), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
-                    Text(
-                        txId,
-                        color = KaspaTeal,
-                        style = MaterialTheme.typography.bodySmall,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .clickable { uriHandler.openUri(kaspaExplorer.txUrl(txId)) }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
-                }
-            }
+    if (showCoinControl) {
+        BackHandler { showCoinControl = false }
+        CoinControlScreen(
+            fromAddress = fromAddress,
+            fetchUtxos = { addr -> viewModel.fetchUtxosForCoinControl(addr) },
+            initialSelection = manualUtxos,
+            onDone = { selection -> manualUtxos = selection; showCoinControl = false },
+            onCancel = { showCoinControl = false }
         )
         return
     }
 
     val amountSompi = amountInput.toDoubleOrNull()?.let { Math.round(it * 100_000_000.0) }
     val isValidAddress = remember(recipientInput) { KaspaAddress.isValid(recipientInput) }
+    val effectiveAddress = knsResolvedAddress ?: recipientInput
+    val hasValidRecipient = if (knsResolvedAddress != null) true else (isValidAddress && !isResolvingKns)
 
-    AlertDialog(
-        onDismissRequest = { if (!isSending) onDismiss() },
-        containerColor = LocalAppColors.current.surface,
-        title = { Text(stringResource(R.string.withdraw_from_this_address), color = LocalAppColors.current.textPrimary) },
-        text = {
-            Column {
-                Text(entry.address, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(12.dp))
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        if (isCompoundMode) stringResource(R.string.compound_utxos) else title,
+                        color = LocalAppColors.current.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { if (!isSending) onDone() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = if (isSending) Color.Gray else KaspaTeal)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (sentTxId != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CD964), modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.sent), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(Modifier.height(20.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(LocalAppColors.current.surface)
+                            .padding(16.dp)
+                    ) {
+                        Text(stringResource(R.string.to), color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                        Text(recipientInput, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(LocalAppColors.current.surface)
+                            .clickable { sentTxId?.let { uriHandler.openUri(kaspaExplorer.txUrl(it)) } }
+                            .padding(16.dp)
+                    ) {
+                        Text("Transaction ID · tap to view in ${kaspaExplorer.displayName}", color = LocalAppColors.current.textSecondary, fontSize = 12.sp)
+                        Text(sentTxId ?: "", color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Button(
+                        onClick = onDone,
+                        colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text(stringResource(R.string.done), color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+                return@Column
+            }
+
+            Text(
+                (if (isCompoundMode) stringResource(R.string.consolidating_this_address) else stringResource(R.string.recipient_address)).uppercase(),
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+            if (isCompoundMode) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CallMerge, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        fromAddress,
+                        color = LocalAppColors.current.textPrimary,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
                 OutlinedTextField(
                     value = recipientInput,
                     onValueChange = { recipientInput = it },
-                    label = { Text(stringResource(R.string.recipient_address)) },
+                    placeholder = { Text("kaspa:qr... or name.kas") },
                     singleLine = true,
                     enabled = !isSending,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -3743,110 +4044,223 @@ private fun WithdrawFromAddressDialog(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (recipientInput.isNotEmpty()) {
+                    if (isResolvingKns) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = KaspaTeal, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.resolving_domain), color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (knsError != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(knsError ?: "", color = Color(0xFFFF3B30), style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (knsResolvedAddress != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CD964), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Resolved to ${knsResolvedAddress?.takeLast(12)}", color = Color(0xFF4CD964), style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (isValidAddress) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                null,
+                                tint = if (isValidAddress) Color(0xFF4CD964) else Color(0xFFFF3B30),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(if (isValidAddress) R.string.valid_address else R.string.invalid_address_format),
+                                color = if (isValidAddress) Color(0xFF4CD964) else Color(0xFFFF3B30),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = { clipboardManager.getText()?.text?.let { recipientInput = it.trim() } },
-                        enabled = !isSending
-                    ) {
+                    TextButton(onClick = { clipboardManager.getText()?.text?.let { recipientInput = it.trim() } }, enabled = !isSending) {
+                        Icon(Icons.Default.ContentPaste, null, tint = KaspaTeal, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(
-                        onClick = { showScanner = true },
-                        enabled = !isSending
-                    ) {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { showScanner = true }, enabled = !isSending) {
+                        Icon(Icons.Default.QrCodeScanner, null, tint = KaspaTeal, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.scan_qr_code), color = KaspaTeal, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = fiatAmountState.displayText,
-                    onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
-                    label = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
-                    singleLine = true,
-                    enabled = !isSending,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
-                    ),
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
-                                Text(
-                                    label,
-                                    color = LocalAppColors.current.textSecondary,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier
-                                        .clickable(enabled = !isSending) { fiatAmountState.toggleMode(fiatPriceInCurrency) }
-                                        .padding(end = 8.dp)
-                                )
-                            }
+            }
+
+            Text(
+                stringResource(R.string.amount_kas).uppercase(),
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+            OutlinedTextField(
+                value = fiatAmountState.displayText,
+                onValueChange = { fiatAmountState.onDisplayTextChange(it, fiatPriceInCurrency) },
+                placeholder = { Text(if (fiatAmountState.isFiatMode) fiatCurrencyCode.uppercase() else stringResource(R.string.amount_kas)) },
+                singleLine = true,
+                enabled = !isSending,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                ),
+                leadingIcon = {
+                    IconButton(onClick = { fiatAmountState.toggleMode(fiatPriceInCurrency) }, enabled = !isSending) {
+                        if (fiatAmountState.isFiatMode) {
+                            Text(
+                                com.kachat.app.util.currencySymbolFor(fiatCurrencyCode),
+                                color = KaspaTeal,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
+                            Icon(
+                                painterResource(R.drawable.ic_kaspa_logo),
+                                stringResource(R.string.switch_between_kas_and_fiat),
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                },
+                trailingIcon = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        fiatAmountState.conversionLabelText(fiatPriceInCurrency, fiatCurrencyCode)?.let { label ->
+                            Text(
+                                label,
+                                color = LocalAppColors.current.textSecondary,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+                        if (isEstimatingMax) {
+                            CircularProgressIndicator(color = KaspaTeal, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
                             TextButton(
                                 onClick = {
-                                    val maxSompi = (entry.balanceSompi - effectiveFeeSompi).coerceAtLeast(0L)
-                                    fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                    coroutineScope.launch {
+                                        isEstimatingMax = true
+                                        try {
+                                            val maxSompi = viewModel.estimateMaxSendableAmount(fromAddress, feeRateOverrideSompi, manualUtxos)
+                                            fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                        } catch (e: Exception) {
+                                            // Leave the field untouched on failure - same as Cold Storage/iOS.
+                                        } finally {
+                                            isEstimatingMax = false
+                                        }
+                                    }
                                 },
                                 enabled = !isSending
                             ) {
                                 Text(stringResource(R.string.max), color = KaspaTeal)
                             }
                         }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = LocalAppColors.current.textPrimary,
-                        unfocusedTextColor = LocalAppColors.current.textPrimary,
-                        focusedBorderColor = KaspaTeal,
-                        unfocusedBorderColor = LocalAppColors.current.textSecondary,
-                        focusedLabelColor = KaspaTeal,
-                        unfocusedLabelColor = LocalAppColors.current.textSecondary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Available: %.8f KAS".format(java.util.Locale.US, entry.balanceSompi / 100_000_000.0),
-                        color = LocalAppColors.current.textSecondary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "·  Fee: %.8f KAS".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0),
-                        color = KaspaTeal,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodySmall,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                        modifier = Modifier.clickable(enabled = !isSending) {
-                            feeEditorInput = "%.8f".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0)
-                            showFeeEditor = true
-                        }
-                    )
-                }
-                if (isSending) {
-                    Spacer(Modifier.height(12.dp))
-                    InscribeProgressRow(stringResource(R.string.sending_2))
-                }
-            }
-        },
-        confirmButton = {
-            val canSend = !isSending && isValidAddress && (amountSompi ?: 0) > 0
-            TextButton(
-                onClick = {
-                    amountSompi?.let {
-                        viewModel.withdrawFromSpendingAddress(entry.index, recipientInput.trim(), it, feeRateOverrideSompi)
                     }
                 },
-                enabled = canSend
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = LocalAppColors.current.textPrimary,
+                    unfocusedTextColor = LocalAppColors.current.textPrimary,
+                    focusedBorderColor = KaspaTeal,
+                    unfocusedBorderColor = LocalAppColors.current.textSecondary,
+                    focusedLabelColor = KaspaTeal,
+                    unfocusedLabelColor = LocalAppColors.current.textSecondary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "Available: %.8f KAS".format(java.util.Locale.US, balanceSompi / 100_000_000.0),
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(enabled = !isSending) { showCoinControl = true },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(stringResource(R.string.withdraw), color = if (canSend) KaspaTeal else Color.Gray, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            if (!isSending) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                Text(stringResource(R.string.coin_control), color = LocalAppColors.current.textPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        manualUtxos?.let { "${it.size} ${if (it.size == 1) stringResource(R.string.utxo) else stringResource(R.string.utxos)}" }
+                            ?: stringResource(R.string.automatic),
+                        color = LocalAppColors.current.textSecondary
+                    )
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(18.dp))
                 }
             }
+
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                ColdFeeTier.entries.forEachIndexed { index, tier ->
+                    SegmentedButton(
+                        selected = feeTier == tier,
+                        onClick = { feeTier = tier; customExtraFeeSompi = null },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = ColdFeeTier.entries.size),
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = LocalAppColors.current.surfaceVariant,
+                            activeContentColor = LocalAppColors.current.textPrimary,
+                            inactiveContainerColor = LocalAppColors.current.surface,
+                            inactiveContentColor = LocalAppColors.current.textSecondary
+                        ),
+                        enabled = !isSending
+                    ) {
+                        Text(tier.label, fontSize = 12.sp)
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(enabled = !isSending) {
+                    feeEditorInput = "%.8f".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0)
+                    showFeeEditor = true
+                },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.network_fee), color = LocalAppColors.current.textPrimary)
+                Text(
+                    "%.8f KAS".format(java.util.Locale.US, effectiveFeeSompi / 100_000_000.0),
+                    color = KaspaTeal,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                )
+            }
+            Text(
+                stringResource(R.string.if_the_network_is_busy_a),
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            if (isSending) {
+                InscribeProgressRow(stringResource(R.string.sending_2))
+            }
+
+            Button(
+                onClick = {
+                    amountSompi?.let {
+                        if (spendingIndex != null) {
+                            viewModel.withdrawFromSpendingAddress(spendingIndex, effectiveAddress.trim(), it, feeRateOverrideSompi, manualUtxos)
+                        } else {
+                            viewModel.onSendClicked(effectiveAddress.trim(), it, feeRateOverrideSompi, manualUtxos)
+                        }
+                    }
+                },
+                enabled = !isSending && hasValidRecipient && (amountSompi ?: 0) > 0,
+                colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surfaceVariant),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Text(
+                    stringResource(R.string.send),
+                    color = if (!isSending && hasValidRecipient && (amountSompi ?: 0) > 0) Color.Black else Color.Gray,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
-    )
+    }
 
     if (showFeeEditor) {
         AlertDialog(
@@ -3890,9 +4304,9 @@ private fun WithdrawFromAddressDialog(
             confirmButton = {
                 TextButton(onClick = {
                     val kas = feeEditorInput.toDoubleOrNull()
-                    feeRateOverrideSompi = if (kas != null && kas > 0) {
+                    customExtraFeeSompi = if (kas != null && kas > 0) {
                         val desiredFeeSompi = Math.round(kas * 100_000_000.0)
-                        kotlin.math.ceil(desiredFeeSompi.toDouble() / estimatedMass).toLong()
+                        (desiredFeeSompi - defaultFeeSompi).coerceAtLeast(0L)
                     } else {
                         null
                     }
@@ -3903,7 +4317,7 @@ private fun WithdrawFromAddressDialog(
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { feeRateOverrideSompi = null; showFeeEditor = false }) {
+                    TextButton(onClick = { customExtraFeeSompi = null; showFeeEditor = false }) {
                         Text(stringResource(R.string.use_default), color = LocalAppColors.current.textSecondary)
                     }
                     TextButton(onClick = { showFeeEditor = false }) {
@@ -3916,6 +4330,881 @@ private fun WithdrawFromAddressDialog(
 }
 
 /**
+ * On-chain transaction history + UTXOs for one spending address, with direct Send/Receive —
+ * reached by tapping an address row in [ManageAddressesScreen]/[ManageAddressesHiddenScreen].
+ * Visually mirrors [ColdStorageTxHistoryScreen], but Send goes through [SpendingAddressSendFlow]
+ * (direct signing with the address's own already-held private key via
+ * [WalletViewModel.withdrawFromSpendingAddress]) rather than Cold Storage's external-QR-signer
+ * flow, which only makes sense for a watch-only key with no private key on this device.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SpendingAddressTxHistoryScreen(
+    index: Int,
+    onBack: () -> Unit,
+    viewModel: WalletViewModel,
+    // Created here (not left to SpendingAddressSendFlow's own default) so its live-price fetch -
+    // KaspaFiatAmountState.toggleMode silently no-ops until a price has arrived - gets a head
+    // start of however long the user spends on this screen before ever tapping Send, instead of
+    // starting from zero the instant the send flow itself first composes.
+    portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()
+) {
+    val addresses by viewModel.manageAddresses.collectAsState()
+    // Looked up from the already-loaded address list (shared with ManageAddressesScreen) rather
+    // than threading label/balance through the route - keeps the nav arg down to just the index
+    // withdrawFromSpendingAddress actually signs with.
+    val entry = remember(addresses, index) { addresses.firstOrNull { it.index == index } }
+    val address = entry?.address.orEmpty()
+
+    val txHistory by viewModel.spendingAddressTxHistory.collectAsState()
+    val isLoadingTxHistory by viewModel.loadingSpendingAddressTxHistory.collectAsState()
+    val utxos by viewModel.spendingAddressUtxos.collectAsState()
+    val isLoadingUtxos by viewModel.loadingSpendingAddressUtxos.collectAsState()
+    val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
+    val biometricSpendingKeyEnabled by viewModel.biometricSpendingKeyEnabled.collectAsState()
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+
+    var selectedTab by remember { mutableStateOf(0) }
+    var showQr by remember { mutableStateOf(false) }
+    var showWithdraw by remember { mutableStateOf(false) }
+    var showCompoundFlow by remember { mutableStateOf(false) }
+    var showPrivateKey by remember { mutableStateOf(false) }
+    var utxoLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var labelingUtxoKey by remember { mutableStateOf<String?>(null) }
+    var labelInput by remember { mutableStateOf("") }
+
+    LaunchedEffect(address) {
+        if (address.isNotEmpty()) {
+            viewModel.loadSpendingAddressTxHistory(address)
+            viewModel.loadSpendingAddressUtxos(address)
+            utxoLabels = viewModel.getSpendingUtxoLabels(address)
+        }
+    }
+
+    // In-place full-screen swap - not a nav route, not an overlay dialog - mirroring
+    // ColdStorageTxHistoryScreen's own `if (showSendFlow) { ...; return }` idiom exactly, so Send
+    // takes over the whole screen the same way on both the spending and Cold Storage paths.
+    if (showWithdraw && entry != null) {
+        SpendingAddressSendFlow(
+            fromAddress = entry.address,
+            balanceSompi = entry.balanceSompi,
+            title = "Send from Address #${entry.index}",
+            spendingIndex = entry.index,
+            viewModel = viewModel,
+            portfolioViewModel = portfolioViewModel,
+            onDone = {
+                showWithdraw = false
+                viewModel.loadSpendingAddressTxHistory(address)
+                viewModel.loadSpendingAddressUtxos(address)
+            }
+        )
+        return
+    }
+
+    if (showCompoundFlow && entry != null) {
+        SpendingAddressSendFlow(
+            fromAddress = entry.address,
+            balanceSompi = entry.balanceSompi,
+            title = "Send from Address #${entry.index}",
+            spendingIndex = entry.index,
+            viewModel = viewModel,
+            portfolioViewModel = portfolioViewModel,
+            isCompoundMode = true,
+            onDone = {
+                showCompoundFlow = false
+                viewModel.loadSpendingAddressTxHistory(address)
+                viewModel.loadSpendingAddressUtxos(address)
+            }
+        )
+        return
+    }
+
+    val displayName = entry?.label?.takeIf { it.isNotBlank() } ?: "Address #$index"
+
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(displayName, color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        if (biometricSpendingKeyEnabled) {
+                            context.authenticateWithDeviceCredential(
+                                title = "Unlock to View Private Key",
+                                onSuccess = { showPrivateKey = true }
+                            )
+                        } else {
+                            showPrivateKey = true
+                        }
+                    }) {
+                        Icon(Icons.Default.IosShare, stringResource(R.string.export), tint = KaspaTeal)
+                    }
+                    IconButton(onClick = { uriHandler.openUri(kaspaExplorer.addressUrl(address)) }) {
+                        Icon(Icons.Default.Public, stringResource(R.string.view_in_explorer), tint = KaspaTeal)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { showQr = true },
+                    enabled = address.isNotEmpty(),
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.Default.QrCode, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.receive), fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = { showWithdraw = true },
+                    enabled = (entry?.balanceSompi ?: 0L) > 0L,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.send), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    stringResource(R.string.balance),
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    "%.8f KAS".format(java.util.Locale.US, (entry?.balanceSompi ?: 0L) / 100_000_000.0),
+                    color = LocalAppColors.current.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = LocalAppColors.current.background,
+                contentColor = KaspaTeal
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text(stringResource(R.string.transaction_history)) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("${stringResource(R.string.utxos)} (${utxos.size})") }
+                )
+            }
+            when (selectedTab) {
+                0 -> when {
+                    isLoadingTxHistory && txHistory.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = KaspaTeal)
+                        }
+                    }
+                    txHistory.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.no_transactions_yet), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(txHistory, key = { it.txId }) { tx ->
+                                SpendingAddressTxHistoryRow(
+                                    tx = tx,
+                                    onClick = { uriHandler.openUri(kaspaExplorer.txUrl(tx.txId)) }
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> when {
+                    isLoadingUtxos && utxos.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = KaspaTeal)
+                        }
+                    }
+                    utxos.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.no_utxos), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (utxos.size > 1) {
+                                item {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(LocalAppColors.current.surface)
+                                            .clickable { showCompoundFlow = true }
+                                            .padding(16.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.CallMerge, null, tint = KaspaTeal)
+                                            Spacer(Modifier.width(12.dp))
+                                            Text(
+                                                stringResource(R.string.compound_utxos),
+                                                color = LocalAppColors.current.textPrimary,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            stringResource(R.string.compound_utxos_description),
+                                            color = LocalAppColors.current.textSecondary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                            items(utxos, key = { "${it.transactionId}:${it.index}" }) { utxo ->
+                                val key = "${utxo.transactionId}:${utxo.index}"
+                                SpendingAddressUtxoRow(
+                                    utxo = utxo,
+                                    label = utxoLabels[key],
+                                    onRenameClick = {
+                                        labelingUtxoKey = key
+                                        labelInput = utxoLabels[key] ?: ""
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showQr && address.isNotEmpty()) {
+        QrCodeOverlay(value = address, onDismiss = { showQr = false })
+    }
+
+    if (showPrivateKey) {
+        SpendingAddressPrivateKeyOverlay(privateKeyHex = viewModel.getSpendingPrivateKeyHex(index), onDismiss = { showPrivateKey = false })
+    }
+
+    labelingUtxoKey?.let { key ->
+        AlertDialog(
+            onDismissRequest = { labelingUtxoKey = null },
+            containerColor = LocalAppColors.current.surface,
+            title = { Text(stringResource(R.string.rename_utxo), color = LocalAppColors.current.textPrimary) },
+            text = {
+                OutlinedTextField(
+                    value = labelInput,
+                    onValueChange = { labelInput = it },
+                    label = { Text(stringResource(R.string.name)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LocalAppColors.current.textPrimary,
+                        unfocusedTextColor = LocalAppColors.current.textPrimary,
+                        focusedBorderColor = KaspaTeal,
+                        unfocusedBorderColor = LocalAppColors.current.textSecondary,
+                        focusedLabelColor = KaspaTeal,
+                        unfocusedLabelColor = LocalAppColors.current.textSecondary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setSpendingUtxoLabel(address, key, labelInput)
+                    utxoLabels = viewModel.getSpendingUtxoLabels(address)
+                    labelingUtxoKey = null
+                }) {
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { labelingUtxoKey = null }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                }
+            }
+        )
+    }
+}
+
+/**
+ * On-chain transaction history + UTXOs for the wallet's identity/chatting address, with direct
+ * Send/Receive/Export - reached from the Profile screen's "Chatting Address" section's "Manage
+ * Address" row. Field-for-field the same screen as [SpendingAddressTxHistoryScreen] (balance
+ * header, Transaction History/UTXOs tabs, Compound UTXOs, Export, Explorer, Receive/Send), just
+ * for the single fixed identity address instead of one spending-chain index - reuses the same
+ * address-keyed StateFlows/functions on [WalletViewModel] (spendingAddressTxHistory/Utxos,
+ * getSpendingUtxoLabels, etc. - all keyed by address string, nothing spending-chain-specific
+ * about them) rather than duplicating a second copy of this state.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IdentityAddressDetailScreen(onBack: () -> Unit, viewModel: WalletViewModel, portfolioViewModel: com.kachat.app.viewmodels.PortfolioViewModel = hiltViewModel()) {
+    val address by viewModel.address.collectAsState()
+    val balanceSompi by viewModel.balanceSompi.collectAsState()
+
+    val txHistory by viewModel.spendingAddressTxHistory.collectAsState()
+    val isLoadingTxHistory by viewModel.loadingSpendingAddressTxHistory.collectAsState()
+    val utxos by viewModel.spendingAddressUtxos.collectAsState()
+    val isLoadingUtxos by viewModel.loadingSpendingAddressUtxos.collectAsState()
+    val kaspaExplorer by viewModel.kaspaExplorer.collectAsState()
+    // The identity key is at least as sensitive as the seed phrase itself (it IS the wallet's
+    // main spending key) - gated behind the same biometric flag Settings > View Seed Phrase
+    // uses, not the lower-stakes biometricSpendingKeyEnabled a derived spending address uses.
+    val biometricSeedPhraseEnabled by viewModel.biometricSeedPhraseEnabled.collectAsState()
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+
+    var selectedTab by remember { mutableStateOf(0) }
+    var showQr by remember { mutableStateOf(false) }
+    var showWithdraw by remember { mutableStateOf(false) }
+    var showCompoundFlow by remember { mutableStateOf(false) }
+    var showPrivateKey by remember { mutableStateOf(false) }
+    var utxoLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var labelingUtxoKey by remember { mutableStateOf<String?>(null) }
+    var labelInput by remember { mutableStateOf("") }
+
+    LaunchedEffect(address) {
+        val addr = address
+        if (!addr.isNullOrEmpty()) {
+            viewModel.loadSpendingAddressTxHistory(addr)
+            viewModel.loadSpendingAddressUtxos(addr)
+            utxoLabels = viewModel.getSpendingUtxoLabels(addr)
+        }
+    }
+
+    if (showWithdraw && address != null) {
+        SpendingAddressSendFlow(
+            fromAddress = address!!,
+            balanceSompi = balanceSompi,
+            title = "Send Kaspa",
+            viewModel = viewModel,
+            portfolioViewModel = portfolioViewModel,
+            onDone = {
+                showWithdraw = false
+                viewModel.loadSpendingAddressTxHistory(address!!)
+                viewModel.loadSpendingAddressUtxos(address!!)
+            }
+        )
+        return
+    }
+
+    if (showCompoundFlow && address != null) {
+        SpendingAddressSendFlow(
+            fromAddress = address!!,
+            balanceSompi = balanceSompi,
+            title = "Send Kaspa",
+            viewModel = viewModel,
+            portfolioViewModel = portfolioViewModel,
+            isCompoundMode = true,
+            onDone = {
+                showCompoundFlow = false
+                viewModel.loadSpendingAddressTxHistory(address!!)
+                viewModel.loadSpendingAddressUtxos(address!!)
+            }
+        )
+        return
+    }
+
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Chatting Address", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = KaspaTeal)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        if (biometricSeedPhraseEnabled) {
+                            context.authenticateWithDeviceCredential(
+                                title = "Unlock to View Private Key",
+                                onSuccess = { showPrivateKey = true }
+                            )
+                        } else {
+                            showPrivateKey = true
+                        }
+                    }) {
+                        Icon(Icons.Default.IosShare, stringResource(R.string.export), tint = KaspaTeal)
+                    }
+                    IconButton(onClick = { address?.let { uriHandler.openUri(kaspaExplorer.addressUrl(it)) } }) {
+                        Icon(Icons.Default.Public, stringResource(R.string.view_in_explorer), tint = KaspaTeal)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { showQr = true },
+                    enabled = !address.isNullOrEmpty(),
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.Default.QrCode, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.receive), fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = { showWithdraw = true },
+                    enabled = balanceSompi > 0L,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.send), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    stringResource(R.string.balance),
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    "%.8f KAS".format(java.util.Locale.US, balanceSompi / 100_000_000.0),
+                    color = LocalAppColors.current.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = LocalAppColors.current.background,
+                contentColor = KaspaTeal
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text(stringResource(R.string.transaction_history)) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("${stringResource(R.string.utxos)} (${utxos.size})") }
+                )
+            }
+            when (selectedTab) {
+                0 -> when {
+                    isLoadingTxHistory && txHistory.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = KaspaTeal)
+                        }
+                    }
+                    txHistory.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.no_transactions_yet), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(txHistory, key = { it.txId }) { tx ->
+                                SpendingAddressTxHistoryRow(
+                                    tx = tx,
+                                    onClick = { uriHandler.openUri(kaspaExplorer.txUrl(tx.txId)) }
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> when {
+                    isLoadingUtxos && utxos.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = KaspaTeal)
+                        }
+                    }
+                    utxos.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.no_utxos), color = LocalAppColors.current.textSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (utxos.size > 1) {
+                                item {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(LocalAppColors.current.surface)
+                                            .clickable { showCompoundFlow = true }
+                                            .padding(16.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.CallMerge, null, tint = KaspaTeal)
+                                            Spacer(Modifier.width(12.dp))
+                                            Text(
+                                                stringResource(R.string.compound_utxos),
+                                                color = LocalAppColors.current.textPrimary,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            stringResource(R.string.compound_utxos_description),
+                                            color = LocalAppColors.current.textSecondary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                            items(utxos, key = { "${it.transactionId}:${it.index}" }) { utxo ->
+                                val key = "${utxo.transactionId}:${utxo.index}"
+                                SpendingAddressUtxoRow(
+                                    utxo = utxo,
+                                    label = utxoLabels[key],
+                                    onRenameClick = {
+                                        labelingUtxoKey = key
+                                        labelInput = utxoLabels[key] ?: ""
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showQr && !address.isNullOrEmpty()) {
+        QrCodeOverlay(
+            value = address!!,
+            onDismiss = { showQr = false },
+            message = "Just send 5-10 KAS at a time, that's plenty to cover chat fees for a while (about 500 messages per KAS)",
+            borderColor = KaspaTeal,
+            borderWidth = 4.dp
+        )
+    }
+
+    if (showPrivateKey) {
+        SpendingAddressPrivateKeyOverlay(privateKeyHex = viewModel.getPrivateKeyHex(), onDismiss = { showPrivateKey = false })
+    }
+
+    labelingUtxoKey?.let { key ->
+        AlertDialog(
+            onDismissRequest = { labelingUtxoKey = null },
+            containerColor = LocalAppColors.current.surface,
+            title = { Text(stringResource(R.string.rename_utxo), color = LocalAppColors.current.textPrimary) },
+            text = {
+                OutlinedTextField(
+                    value = labelInput,
+                    onValueChange = { labelInput = it },
+                    label = { Text(stringResource(R.string.name)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LocalAppColors.current.textPrimary,
+                        unfocusedTextColor = LocalAppColors.current.textPrimary,
+                        focusedBorderColor = KaspaTeal,
+                        unfocusedBorderColor = LocalAppColors.current.textSecondary,
+                        focusedLabelColor = KaspaTeal,
+                        unfocusedLabelColor = LocalAppColors.current.textSecondary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val addr = address ?: return@TextButton
+                    viewModel.setSpendingUtxoLabel(addr, key, labelInput)
+                    utxoLabels = viewModel.getSpendingUtxoLabels(addr)
+                    labelingUtxoKey = null
+                }) {
+                    Text(stringResource(R.string.save), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { labelingUtxoKey = null }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Reveals a single spending address's own derived private key - not the wallet's seed phrase -
+ * so a specific address's spending capability can be exported/backed up without exposing the
+ * rest of the wallet. Mirrors SeedPhraseScreen's reveal flow at the same sensitivity level
+ * (FLAG_SECURE screenshot/recording block, tap-to-reveal with a 7s auto-hide timer) rather than
+ * inventing a lighter-weight pattern for equally sensitive key material. The caller already
+ * gates presentation behind biometrics, same as View Seed Phrase's own entry point.
+ */
+@Composable
+private fun SpendingAddressPrivateKeyOverlay(privateKeyHex: String, onDismiss: () -> Unit) {
+    var revealed by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    val window = (LocalContext.current as? Activity)?.window
+    DisposableEffect(window) {
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    LaunchedEffect(revealed) {
+        if (revealed) {
+            delay(7000)
+            revealed = false
+        }
+    }
+
+    BackHandler(onBack = onDismiss)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(LocalAppColors.current.background)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.done), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF2C1E1E))
+                    .padding(16.dp)
+            ) {
+                Icon(Icons.Default.Warning, null, tint = Color(0xFFF39C12), modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text(
+                        stringResource(R.string.security_warning),
+                        color = Color(0xFFF39C12),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Anyone with this address's private key can spend its funds. Never share it with anyone.",
+                        color = Color(0xFF948B8B),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            if (!revealed) {
+                Column(
+                    modifier = Modifier
+                        .clickable { revealed = true }
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.VisibilityOff,
+                        null,
+                        tint = LocalAppColors.current.textSecondary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Tap to reveal private key",
+                        color = LocalAppColors.current.textSecondary,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            } else {
+                Text(
+                    privateKeyHex,
+                    color = LocalAppColors.current.textPrimary,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(LocalAppColors.current.surface)
+                        .padding(16.dp)
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            if (revealed) {
+                TextButton(onClick = {
+                    clipboardManager.setText(AnnotatedString(privateKeyHex))
+                    Toast.makeText(context, "Private key copied", Toast.LENGTH_SHORT).show()
+                }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.copy_private_key_hex), color = KaspaTeal)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun SpendingAddressTxHistoryRow(tx: ColdStorageAddressDiscovery.AddressTransaction, onClick: () -> Unit) {
+    val kas = tx.amountSompi / 100_000_000.0
+    val dateStr = tx.blockTimeMillis?.let {
+        java.text.SimpleDateFormat("MMM d, yyyy, h:mm a", java.util.Locale.US).format(java.util.Date(it))
+    } ?: "Pending"
+    val directionColor = if (tx.sent) Color(0xFFFF3B30) else Color(0xFF4CD964)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(LocalAppColors.current.surface)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(directionColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (tx.sent) Icons.AutoMirrored.Filled.Send else Icons.AutoMirrored.Filled.CallReceived,
+                null,
+                tint = directionColor,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(if (tx.sent) "Sent" else "Received", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
+            Text(dateStr, color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
+            Text(
+                tx.txId,
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "${if (tx.sent) "-" else "+"}%.8f KAS".format(java.util.Locale.US, kas),
+            color = directionColor,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun SpendingAddressUtxoRow(utxo: ColdStorageAddressDiscovery.AddressUtxo, label: String? = null, onRenameClick: () -> Unit = {}) {
+    val kas = utxo.amountSompi / 100_000_000.0
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(LocalAppColors.current.surface)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            if (!label.isNullOrBlank()) {
+                Text(
+                    label,
+                    color = KaspaTeal,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                "%.8f KAS".format(java.util.Locale.US, kas),
+                color = LocalAppColors.current.textPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "${utxo.transactionId}:${utxo.index}",
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (utxo.isCoinbase) {
+            Text(
+                stringResource(R.string.coinbase),
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        IconButton(onClick = onRenameClick, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Edit, stringResource(R.string.rename), tint = KaspaTeal, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/**
  * One spending address row in [ManageAddressesScreen] — shared by the main and "Hidden" sections,
  * differing only in whether [WalletService.SpendingAddressEntry.hidden] shows a hide or an unhide
  * swipe action. Hiding is a swipe-left action (matching Chats' swipe-to-delete and Cold Storage's
@@ -3924,9 +5213,10 @@ private fun WithdrawFromAddressDialog(
  * it still holds a balance or is the primary ("Pay in Kaspa") spending address — see
  * [WalletViewModel.setManageAddressHidden], which enforces the same rule as a backstop.
  *
- * Everything besides hide/unhide (copy, QR, set primary, withdraw, rename) lives behind a single
- * overflow button's [CenteredOptionsMenu] rather than a row of icons, so the address itself has
- * room to sit on its own line instead of being squeezed by four icon buttons.
+ * Everything besides hide/unhide (copy, QR, set primary, rename) lives behind a single overflow
+ * button's [CenteredOptionsMenu] rather than a row of icons, so the address itself has room to sit
+ * on its own line instead of being squeezed by four icon buttons. Send/receive for a specific
+ * address live in [SpendingAddressTxHistoryScreen] instead (reached via `onClick`).
  */
 @Composable
 private fun ManageAddressRow(
@@ -3935,7 +5225,6 @@ private fun ManageAddressRow(
     onCopyClick: () -> Unit,
     onQrClick: () -> Unit,
     onActivateClick: () -> Unit,
-    onWithdrawClick: () -> Unit,
     onHideToggleClick: () -> Unit,
     onRenameClick: () -> Unit
 ) {
@@ -4010,6 +5299,11 @@ private fun ManageAddressRow(
 
     if (showMenu) {
         CenteredOptionsMenu(onDismissRequest = { showMenu = false }, anchor = menuAnchor) {
+            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename_address)) {
+                showMenu = false
+                onRenameClick()
+            }
+            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
             PopupMenuRow(Icons.Default.ContentCopy, stringResource(R.string.copy_address)) {
                 showMenu = false
                 onCopyClick()
@@ -4026,17 +5320,72 @@ private fun ManageAddressRow(
                     onActivateClick()
                 }
             }
-            if (entry.balanceSompi > 0) {
-                HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                PopupMenuRow(Icons.AutoMirrored.Filled.Send, stringResource(R.string.withdraw)) {
-                    showMenu = false
-                    onWithdrawClick()
+        }
+    }
+}
+
+/** Fixed tapback-style set, not a full emoji keyboard - keeps [QuickReactionBar] identical on iOS/Android. */
+val QUICK_REACTION_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+
+/**
+ * The popup shown when a message bubble is double-tapped: a row of common emoji to react with,
+ * plus a reply shortcut in the bottom-right corner - replaces the old behavior where double-tap
+ * jumped straight into reply mode, giving an explicit choice between reacting and replying
+ * instead. Reuses [CenteredOptionsMenu]'s anchor-positioned card shell with custom content rather
+ * than [PopupMenuRow]s.
+ */
+@Composable
+fun QuickReactionBar(onDismissRequest: () -> Unit, anchor: Offset, onReact: (String) -> Unit, onReply: () -> Unit) {
+    CenteredOptionsMenu(onDismissRequest = onDismissRequest, anchor = anchor) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QUICK_REACTION_EMOJIS.forEach { emoji ->
+                    Text(
+                        emoji,
+                        fontSize = 26.sp,
+                        modifier = Modifier.clickable {
+                            onReact(emoji)
+                            onDismissRequest()
+                        }
+                    )
                 }
             }
-            HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.Edit, stringResource(R.string.rename_address)) {
-                showMenu = false
-                onRenameClick()
+            Spacer(Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconButton(
+                    onClick = {
+                        onReply()
+                        onDismissRequest()
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = stringResource(R.string.reply), tint = KaspaTeal)
+                }
+            }
+        }
+    }
+}
+
+/** Small rounded pill overlapping a bubble's bottom outer corner, showing the distinct emoji reacted with (and a count when more than one person used the same one). */
+@Composable
+fun ReactionPill(reactions: List<ReactionEntity>, modifier: Modifier = Modifier) {
+    val counts = remember(reactions) { reactions.groupingBy { it.emoji }.eachCount() }
+    Surface(
+        color = LocalAppColors.current.surfaceVariant,
+        shape = RoundedCornerShape(50),
+        shadowElevation = 2.dp,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            counts.forEach { (emoji, count) ->
+                Text(emoji, fontSize = 13.sp)
+                if (count > 1) {
+                    Text(count.toString(), fontSize = 11.sp, color = LocalAppColors.current.textSecondary, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -4215,9 +5564,11 @@ fun EditKnsProfileScreen(
 ) {
     val knsProfile by viewModel.knsProfile.collectAsState()
     val activeProfileDomainName by viewModel.activeProfileDomainName.collectAsState()
-    val profileAssetId by viewModel.profileDomainAssetId.collectAsState()
+    val ownedDomainAssets by viewModel.ownedDomainAssets.collectAsState()
     val pendingAvatarUri by viewModel.pendingAvatarUri.collectAsState()
     val pendingBannerUri by viewModel.pendingBannerUri.collectAsState()
+    val avatarCleared by viewModel.avatarCleared.collectAsState()
+    val bannerCleared by viewModel.bannerCleared.collectAsState()
     val editState by viewModel.editProfileState.collectAsState()
     val showSetupGuides by viewModel.showSetupGuides.collectAsState()
 
@@ -4256,10 +5607,12 @@ fun EditKnsProfileScreen(
 
     // What "Save" is actually about to submit — each entry becomes its own on-chain commit/reveal
     // transaction, so this doubles as both the confirm dialog's change list and its cost count.
-    val pendingChanges = remember(bio, x, website, telegram, discord, email, github, redirect, pendingAvatarUri, pendingBannerUri, knsProfile) {
+    val pendingChanges = remember(bio, x, website, telegram, discord, email, github, redirect, pendingAvatarUri, pendingBannerUri, avatarCleared, bannerCleared, knsProfile) {
         buildList {
             if (pendingAvatarUri != null) add("Avatar")
+            else if (avatarCleared && !knsProfile?.avatarUrl.isNullOrEmpty()) add("Avatar (removed)")
             if (pendingBannerUri != null) add("Banner")
+            else if (bannerCleared && !knsProfile?.bannerUrl.isNullOrEmpty()) add("Banner (removed)")
             if (bio.trim() != (knsProfile?.bio ?: "")) add("Bio")
             if (x.trim() != (knsProfile?.x ?: "")) add("X")
             if (website.trim() != (knsProfile?.website ?: "")) add("Website")
@@ -4327,9 +5680,9 @@ fun EditKnsProfileScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            stringResource(R.string.walk_through_setting_up_your_domain),
-                            color = LocalAppColors.current.textSecondary,
-                            style = MaterialTheme.typography.bodySmall,
+                            stringResource(R.string.setup_guide),
+                            color = LocalAppColors.current.textPrimary,
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier.weight(1f)
                         )
                         Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
@@ -4337,10 +5690,25 @@ fun EditKnsProfileScreen(
                 }
             }
 
+            SettingsSection(title = stringResource(R.string.domains)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToDomains() }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(R.string.domains), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("${ownedDomainAssets.size}", color = LocalAppColors.current.textSecondary)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
+                }
+            }
+
             SettingsSection(title = stringResource(R.string.avatar)) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     ContactAvatar(
-                        imageUrl = pendingAvatarUri?.toString() ?: knsProfile?.avatarUrl,
+                        imageUrl = if (avatarCleared) null else (pendingAvatarUri?.toString() ?: knsProfile?.avatarUrl),
                         fallbackText = activeProfileDomainName ?: "?",
                         size = 64.dp
                     )
@@ -4349,8 +5717,13 @@ fun EditKnsProfileScreen(
                         TextButton(onClick = { avatarPicker.launch("image/*") }, enabled = !inFlight) {
                             Text(stringResource(R.string.choose_avatar), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
-                        if (pendingAvatarUri != null) {
-                            TextButton(onClick = { viewModel.setPendingAvatar(null) }, enabled = !inFlight) {
+                        if (pendingAvatarUri != null || (!avatarCleared && !knsProfile?.avatarUrl.isNullOrEmpty())) {
+                            TextButton(
+                                onClick = {
+                                    if (pendingAvatarUri != null) viewModel.setPendingAvatar(null) else viewModel.clearExistingAvatar()
+                                },
+                                enabled = !inFlight
+                            ) {
                                 Text(stringResource(R.string.remove), color = Color(0xFFFF3B30))
                             }
                         }
@@ -4360,7 +5733,7 @@ fun EditKnsProfileScreen(
 
             SettingsSection(title = stringResource(R.string.banner)) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val previewUrl = pendingBannerUri?.toString() ?: knsProfile?.bannerUrl
+                    val previewUrl = if (bannerCleared) null else (pendingBannerUri?.toString() ?: knsProfile?.bannerUrl)
                     if (previewUrl != null) {
                         SubcomposeAsyncImage(
                             model = previewUrl,
@@ -4378,8 +5751,13 @@ fun EditKnsProfileScreen(
                         TextButton(onClick = { bannerPicker.launch("image/*") }, enabled = !inFlight) {
                             Text(stringResource(R.string.choose_banner), color = KaspaTeal, fontWeight = FontWeight.Bold)
                         }
-                        if (pendingBannerUri != null) {
-                            TextButton(onClick = { viewModel.setPendingBanner(null) }, enabled = !inFlight) {
+                        if (pendingBannerUri != null || (!bannerCleared && !knsProfile?.bannerUrl.isNullOrEmpty())) {
+                            TextButton(
+                                onClick = {
+                                    if (pendingBannerUri != null) viewModel.setPendingBanner(null) else viewModel.clearExistingBanner()
+                                },
+                                enabled = !inFlight
+                            ) {
                                 Text(stringResource(R.string.remove), color = Color(0xFFFF3B30))
                             }
                         }
@@ -4397,23 +5775,6 @@ fun EditKnsProfileScreen(
                     EditProfileTextField(stringResource(R.string.email), email, { email = it }, enabled = !inFlight)
                     EditProfileTextField(stringResource(R.string.github), github, { github = it }, enabled = !inFlight)
                     EditProfileTextField(stringResource(R.string.redirect), redirect, { redirect = it }, enabled = !inFlight)
-                }
-            }
-
-            SettingsSection(title = stringResource(R.string.domains)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToDomains() }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(activeProfileDomainName ?: "—", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(profileAssetId ?: "", color = LocalAppColors.current.textSecondary, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(Icons.Default.ChevronRight, null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
                 }
             }
 
@@ -4455,7 +5816,7 @@ fun EditKnsProfileScreen(
                 when (editState.step) {
                     WalletViewModel.EditProfileStep.IDLE -> Column {
                         Text(
-                            "${pendingChanges.size} change${if (pendingChanges.size == 1) "" else "s"}. Each is submitted as its own on-chain transaction from your spending address:",
+                            "${pendingChanges.size} change${if (pendingChanges.size == 1) "" else "s"}. Each is submitted as its own on-chain transaction from your chatting address:",
                             color = LocalAppColors.current.textPrimary,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -4749,6 +6110,7 @@ fun SettingsScreen(
     val currencyCode by walletViewModel.currency.collectAsState()
     val biometricSeedPhraseEnabled by walletViewModel.biometricSeedPhraseEnabled.collectAsState()
     val biometricAccountLoginEnabled by walletViewModel.biometricAccountLoginEnabled.collectAsState()
+    val biometricSpendingKeyEnabled by walletViewModel.biometricSpendingKeyEnabled.collectAsState()
     val notificationsEnabled by settingsViewModel.notificationsEnabled.collectAsState()
     val showFeeEstimate by settingsViewModel.showFeeEstimate.collectAsState()
     val chatPhotoQualityPreset by chatViewModel.chatPhotoQualityPreset.collectAsState()
@@ -4833,6 +6195,10 @@ fun SettingsScreen(
                 SettingsDivider()
                 SettingsSwitchItem(stringResource(R.string.biometrics_for_account_login), biometricAccountLoginEnabled) { enabled ->
                     walletViewModel.setBiometricAccountLoginEnabled(enabled)
+                }
+                SettingsDivider()
+                SettingsSwitchItem(stringResource(R.string.biometrics_for_address_private_keys), biometricSpendingKeyEnabled) { enabled ->
+                    walletViewModel.setBiometricSpendingKeyEnabled(enabled)
                 }
             }
 
@@ -5689,7 +7055,7 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
     // report as "Suspect" (see NodeRegistry.statusOf's lastProbe == null branch), but counting
     // them as "Verified" is misleading: right after a fresh launch/DNS-seed resolution this made
     // the whole pool look "Verified" before a single probe had actually completed.
-    val verifiedCount = allNodes.count { (it.status == "Active" || it.status == "Suspect") && it.latency != "—" }
+    val verifiedCount = remember(allNodes) { allNodes.count { (it.status == "Active" || it.status == "Suspect") && it.latency != "—" } }
 
     Scaffold(
         containerColor = LocalAppColors.current.background,
@@ -5769,6 +7135,8 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
                     coroutineScope.launch { snackbarHostState.showSnackbar("Reconnecting…") }
                 })
             }
+
+            KaspaNodeQuickAccessSection(viewModel)
 
             Text(
                 text = "Primary: ${activeNodes.firstOrNull()?.ip ?: "None"}",
@@ -6066,6 +7434,207 @@ fun KaspaExplorerSettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel
     }
 }
 
+/**
+ * A single dropdown for quickly picking which node to connect to: the default node (recommended),
+ * automatic discovery, or any address already saved in the IP Address Book. Used by both
+ * [ConnectionStatusScreen] (tap the status dot) and [ConnectionSettingsScreen] (above the
+ * [AddressBookSection], which is where the address book itself is managed - adding, removing, and
+ * labeling entries) - there's no free-text entry anymore, only this dropdown.
+ */
+@Composable
+private fun KaspaNodeQuickAccessSection(viewModel: ConnectionViewModel) {
+    val trustedNodeAddress by viewModel.trustedNodeAddress.collectAsState()
+    val savedNodeAddresses by viewModel.savedNodeAddresses.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+
+    val normalizedTrusted = trustedNodeAddress.trim()
+    val defaultAddress = com.kachat.app.repository.AppSettingsRepository.DEFAULT_TRUSTED_NODE_ADDRESS
+    val matchingSaved = savedNodeAddresses.firstOrNull { it.address.trim() == normalizedTrusted }
+
+    val selectedLabel = when {
+        normalizedTrusted.isEmpty() -> stringResource(R.string.automatic_scan)
+        normalizedTrusted == defaultAddress.trim() -> stringResource(R.string.default_recommended)
+        matchingSaved != null -> matchingSaved.label.ifBlank { matchingSaved.address }
+        else -> normalizedTrusted
+    }
+
+    SettingsSection(title = stringResource(R.string.kaspa_node)) {
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = true }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    selectedLabel,
+                    color = LocalAppColors.current.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(Icons.Default.ArrowDropDown, null, tint = LocalAppColors.current.textSecondary)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.default_recommended)) },
+                    onClick = {
+                        expanded = false
+                        viewModel.setTrustedNodeAddress(defaultAddress)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.automatic_scan)) },
+                    onClick = {
+                        expanded = false
+                        viewModel.setTrustedNodeAddress("")
+                    }
+                )
+                savedNodeAddresses.forEach { entry ->
+                    DropdownMenuItem(
+                        text = { Text(entry.label.ifBlank { entry.address }) },
+                        onClick = {
+                            expanded = false
+                            viewModel.setTrustedNodeAddress(entry.address)
+                        }
+                    )
+                }
+            }
+        }
+        if (normalizedTrusted.isNotEmpty()) {
+            SettingsDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.connected_only_to_this_node), color = KaspaTeal, fontSize = 13.sp)
+            }
+        }
+        SettingsFooter(stringResource(R.string.kaspa_node_quick_access_footer))
+    }
+}
+
+/**
+ * "IP Address Book" - the full management UI (add/remove/label saved addresses), used only by
+ * [ConnectionSettingsScreen], right below its own [KaspaNodeQuickAccessSection]. The trusted-node
+ * override itself is now dropdown-only (default/automatic/a saved address) - no free-text entry -
+ * so this section is just the address book, feeding entries into that dropdown.
+ */
+@Composable
+private fun AddressBookSection(viewModel: ConnectionViewModel) {
+    val savedNodeAddresses by viewModel.savedNodeAddresses.collectAsState()
+
+    SettingsSection(title = stringResource(R.string.ip_address_book)) {
+        var newLabel by remember { mutableStateOf("") }
+        var newAddress by remember { mutableStateOf("") }
+        var addError by remember { mutableStateOf<String?>(null) }
+        val clipboardManager = LocalClipboardManager.current
+        val context = LocalContext.current
+
+        TextField(
+            value = newLabel,
+            onValueChange = { newLabel = it },
+            placeholder = { Text(stringResource(R.string.label_optional), color = Color.DarkGray) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(50.dp).clip(RoundedCornerShape(12.dp)),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = LocalAppColors.current.surfaceVariant,
+                unfocusedContainerColor = LocalAppColors.current.surfaceVariant,
+                focusedTextColor = LocalAppColors.current.textPrimary,
+                unfocusedTextColor = LocalAppColors.current.textPrimary,
+                cursorColor = KaspaTeal,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            )
+        )
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = newAddress,
+                onValueChange = { newAddress = it; addError = null },
+                placeholder = { Text(stringResource(R.string.host_port_or_grpcs_host), color = Color.DarkGray) },
+                modifier = Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(12.dp)),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = LocalAppColors.current.surfaceVariant,
+                    unfocusedContainerColor = LocalAppColors.current.surfaceVariant,
+                    focusedTextColor = LocalAppColors.current.textPrimary,
+                    unfocusedTextColor = LocalAppColors.current.textPrimary,
+                    cursorColor = KaspaTeal,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
+                )
+            )
+            Spacer(Modifier.width(12.dp))
+            IconButton(
+                onClick = {
+                    val trimmed = newAddress.trim()
+                    if (trimmed.isEmpty()) return@IconButton
+                    if (com.kachat.app.services.grpc.parseNodeAddress(trimmed) == null) {
+                        addError = "Enter as host:port or grpcs://host"
+                    } else {
+                        addError = null
+                        viewModel.addSavedNodeAddress(newLabel.trim(), trimmed)
+                        newLabel = ""
+                        newAddress = ""
+                    }
+                },
+                modifier = Modifier.size(40.dp).background(KaspaTeal, CircleShape)
+            ) {
+                Icon(Icons.Default.Add, null, tint = Color.Black)
+            }
+        }
+        addError?.let {
+            Text(it, color = Color(0xFFFF3B30), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+
+        if (savedNodeAddresses.isEmpty()) {
+            Text(
+                stringResource(R.string.no_saved_addresses),
+                color = LocalAppColors.current.textSecondary,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(16.dp)
+            )
+        } else {
+            savedNodeAddresses.forEachIndexed { index, entry ->
+                if (index > 0) SettingsDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            clipboardManager.setText(AnnotatedString(entry.address))
+                            Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        if (entry.label.isNotBlank()) {
+                            Text(entry.label, color = LocalAppColors.current.textPrimary)
+                            Text(
+                                entry.address,
+                                color = LocalAppColors.current.textSecondary,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        } else {
+                            Text(entry.address, color = LocalAppColors.current.textPrimary, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                    IconButton(onClick = { viewModel.removeSavedNodeAddress(entry.id) }) {
+                        Icon(Icons.Default.Delete, null, tint = LocalAppColors.current.textSecondary)
+                    }
+                }
+            }
+        }
+        SettingsFooter(stringResource(R.string.save_your_own_node_addresses_here))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = hiltViewModel()) {
@@ -6074,8 +7643,6 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
     val pushIndexerUrl by viewModel.pushIndexerUrl.collectAsState()
     val knsApiUrl by viewModel.knsApiUrl.collectAsState()
     val kaspaRestApiUrl by viewModel.kaspaRestApiUrl.collectAsState()
-    val trustedNodeAddress by viewModel.trustedNodeAddress.collectAsState()
-    val savedNodeAddresses by viewModel.savedNodeAddresses.collectAsState()
     val scrollState = rememberScrollState()
 
     Scaffold(
@@ -6146,197 +7713,9 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 SettingsFooter(stringResource(R.string.rest_api_for_transaction_history_and))
             }
 
-            SettingsSection(title = stringResource(R.string.kaspa_node)) {
-                var endpoint by remember(trustedNodeAddress) { mutableStateOf(trustedNodeAddress) }
-                var validationError by remember { mutableStateOf<String?>(null) }
-                val keyboardController = LocalSoftwareKeyboardController.current
+            KaspaNodeQuickAccessSection(viewModel)
+            AddressBookSection(viewModel)
 
-                fun save() {
-                    val trimmed = endpoint.trim()
-                    if (trimmed.isEmpty()) {
-                        validationError = null
-                        viewModel.setTrustedNodeAddress("")
-                    } else if (com.kachat.app.services.grpc.parseNodeAddress(trimmed) == null) {
-                        validationError = "Enter as host:port or grpcs://host"
-                    } else {
-                        validationError = null
-                        viewModel.setTrustedNodeAddress(trimmed)
-                    }
-                    keyboardController?.hide()
-                }
-
-                TextField(
-                    value = endpoint,
-                    onValueChange = { endpoint = it; validationError = null },
-                    placeholder = { Text(stringResource(R.string.host_port_or_grpcs_host), color = Color.DarkGray) },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).height(50.dp).clip(RoundedCornerShape(12.dp)),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { save() }),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = LocalAppColors.current.surfaceVariant,
-                        unfocusedContainerColor = LocalAppColors.current.surfaceVariant,
-                        focusedTextColor = LocalAppColors.current.textPrimary,
-                        unfocusedTextColor = LocalAppColors.current.textPrimary,
-                        cursorColor = KaspaTeal,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    )
-                )
-                TextButton(
-                    onClick = {
-                        endpoint = com.kachat.app.repository.AppSettingsRepository.DEFAULT_TRUSTED_NODE_ADDRESS
-                        validationError = null
-                        viewModel.setTrustedNodeAddress(com.kachat.app.repository.AppSettingsRepository.DEFAULT_TRUSTED_NODE_ADDRESS)
-                    },
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                ) {
-                    Text("Use Default (${com.kachat.app.repository.AppSettingsRepository.DEFAULT_TRUSTED_NODE_ADDRESS})", color = KaspaTeal)
-                }
-                validationError?.let {
-                    Text(it, color = Color(0xFFFF3B30), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                }
-                if (trustedNodeAddress.isNotBlank()) {
-                    SettingsDivider()
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(stringResource(R.string.connected_only_to_this_node), color = KaspaTeal, fontSize = 13.sp)
-                        TextButton(onClick = {
-                            endpoint = ""
-                            validationError = null
-                            viewModel.setTrustedNodeAddress("")
-                        }) {
-                            Text(stringResource(R.string.clear), color = Color(0xFFFF3B30))
-                        }
-                    }
-                }
-                SettingsFooter(
-                    if (trustedNodeAddress.isNotBlank()) {
-                        "KaChat connects only to this node for sending and message scanning, and won't search for or fall back to other nodes. Clear, or edit and tap Done on the keyboard, to change it."
-                    } else {
-                        "Enter a trusted node (host:port for plaintext, or grpcs://host for TLS-secured nodes like Kaspium's) and tap Done on the keyboard to always connect to it instead of automatic discovery. Doesn't affect the Indexer/KNS/REST API URLs above."
-                    }
-                )
-            }
-
-            SettingsSection(title = stringResource(R.string.ip_address_book)) {
-                var newLabel by remember { mutableStateOf("") }
-                var newAddress by remember { mutableStateOf("") }
-                var addError by remember { mutableStateOf<String?>(null) }
-                val clipboardManager = LocalClipboardManager.current
-                val context = LocalContext.current
-
-                TextField(
-                    value = newLabel,
-                    onValueChange = { newLabel = it },
-                    placeholder = { Text(stringResource(R.string.label_optional), color = Color.DarkGray) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(50.dp).clip(RoundedCornerShape(12.dp)),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = LocalAppColors.current.surfaceVariant,
-                        unfocusedContainerColor = LocalAppColors.current.surfaceVariant,
-                        focusedTextColor = LocalAppColors.current.textPrimary,
-                        unfocusedTextColor = LocalAppColors.current.textPrimary,
-                        cursorColor = KaspaTeal,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    )
-                )
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextField(
-                        value = newAddress,
-                        onValueChange = { newAddress = it; addError = null },
-                        placeholder = { Text(stringResource(R.string.host_port_or_grpcs_host), color = Color.DarkGray) },
-                        modifier = Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(12.dp)),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = LocalAppColors.current.surfaceVariant,
-                            unfocusedContainerColor = LocalAppColors.current.surfaceVariant,
-                            focusedTextColor = LocalAppColors.current.textPrimary,
-                            unfocusedTextColor = LocalAppColors.current.textPrimary,
-                            cursorColor = KaspaTeal,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        )
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    IconButton(
-                        onClick = {
-                            val trimmed = newAddress.trim()
-                            if (trimmed.isEmpty()) return@IconButton
-                            if (com.kachat.app.services.grpc.parseNodeAddress(trimmed) == null) {
-                                addError = "Enter as host:port or grpcs://host"
-                            } else {
-                                addError = null
-                                viewModel.addSavedNodeAddress(newLabel.trim(), trimmed)
-                                newLabel = ""
-                                newAddress = ""
-                            }
-                        },
-                        modifier = Modifier.size(40.dp).background(KaspaTeal, CircleShape)
-                    ) {
-                        Icon(Icons.Default.Add, null, tint = Color.Black)
-                    }
-                }
-                addError?.let {
-                    Text(it, color = Color(0xFFFF3B30), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                }
-
-                if (savedNodeAddresses.isEmpty()) {
-                    Text(
-                        stringResource(R.string.no_saved_addresses),
-                        color = LocalAppColors.current.textSecondary,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                } else {
-                    savedNodeAddresses.forEachIndexed { index, entry ->
-                        if (index > 0) SettingsDivider()
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    clipboardManager.setText(AnnotatedString(entry.address))
-                                    Toast.makeText(context, context.getString(R.string.address_copied), Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                if (entry.label.isNotBlank()) {
-                                    Text(entry.label, color = LocalAppColors.current.textPrimary)
-                                    Text(
-                                        entry.address,
-                                        color = LocalAppColors.current.textSecondary,
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                } else {
-                                    Text(entry.address, color = LocalAppColors.current.textPrimary, fontFamily = FontFamily.Monospace)
-                                }
-                            }
-                            IconButton(onClick = { viewModel.removeSavedNodeAddress(entry.id) }) {
-                                Icon(Icons.Default.Delete, null, tint = LocalAppColors.current.textSecondary)
-                            }
-                        }
-                    }
-                }
-                SettingsFooter(stringResource(R.string.save_your_own_node_addresses_here))
-            }
-
-            Button(
-                onClick = { },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surface),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(stringResource(R.string.reset_to_defaults), color = Color.Red, fontSize = 18.sp)
-            }
-            
             Spacer(modifier = Modifier.height(100.dp))
         }
     }
@@ -7365,13 +8744,35 @@ fun ChatInfoScreen(
     contactId: String,
     onBack: () -> Unit,
     chatViewModel: ChatViewModel = hiltViewModel(),
+    walletViewModel: WalletViewModel = hiltViewModel(),
     fromBroadcast: Boolean = false,
     onNavigateToPhotoSettings: (String) -> Unit = {},
-    onNavigateToNotificationSettings: (String) -> Unit = {},
-    onNavigateToDomainSettings: (String) -> Unit = {}
+    onNavigateToNotificationSettings: (String) -> Unit = {}
 ) {
     val conversation = chatViewModel.conversations.collectAsState().value.find { it.contact.id == contactId }
     val messages by chatViewModel.getMessages(contactId).collectAsState(initial = emptyList())
+    val myAddress by walletViewModel.address.collectAsState()
+    val kaspaExplorer by chatViewModel.kaspaExplorer.collectAsState()
+    val uriHandler = LocalUriHandler.current
+    // nil hides the "Chess Stats" row entirely - only shown once this contact has actually played
+    // at least one chess game (an always-visible "0W - 0L" on every contact who's never played
+    // would just be clutter). See ChessGameEngine.record.
+    val chessRecord = remember(messages, myAddress) {
+        val address = myAddress ?: return@remember null
+        val chessSourceMessages = messages.map {
+            com.kachat.app.util.ChessGameEngine.SimpleChessSourceMessage(
+                id = it.id,
+                plaintextBody = it.plaintextBody,
+                isOutgoing = it.direction == "sent",
+                blockTimestamp = it.blockTimestamp
+            )
+        }
+        val hasChessHistory = chessSourceMessages.any { message ->
+            val unwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
+            com.kachat.app.util.ChessMessage.parseOrNull(unwrapped) is com.kachat.app.util.ChessEnvelope.Invite
+        }
+        if (hasChessHistory) com.kachat.app.util.ChessGameEngine.record(chessSourceMessages, address, contactId) else null
+    }
     val knsProfile = chatViewModel.knsProfiles.collectAsState().value[contactId]
     val knsFields = knsProfile?.profile
     val ownedDomains = knsProfile?.ownedDomains.orEmpty()
@@ -7610,22 +9011,23 @@ fun ChatInfoScreen(
                             }
                         }
 
-                        // Which owned domain represents this contact — placed right under More
-                        // Info, in the same card, rather than as its own separate section. A
-                        // dedicated picker page rather than an inline list, matching Photos/
-                        // Incoming Notifications' pattern.
-                        HorizontalDivider(color = LocalAppColors.current.divider)
-                        SettingsNavigationItem(
-                            stringResource(R.string.domains),
-                            Icons.Default.Language,
-                            knsProfile?.selectedDomain ?: "",
-                            onClick = { onNavigateToDomainSettings(contactId) }
-                        )
                     }
                 }
             }
 
-            SettingsSection(title = stringResource(R.string.address)) {
+            SettingsSection(
+                title = stringResource(R.string.address),
+                headerAction = {
+                    Text(
+                        stringResource(R.string.view_in_explorer),
+                        color = KaspaTeal,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .padding(end = 8.dp, bottom = 8.dp)
+                            .clickable { uriHandler.openUri(kaspaExplorer.addressUrl(contactId)) }
+                    )
+                }
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -7736,7 +9138,12 @@ fun ChatInfoScreen(
                                 val diff = System.currentTimeMillis() - it
                                 val hours = diff / (1000 * 60 * 60)
                                 val minutes = (diff / (1000 * 60)) % 60
-                                if (hours > 0) "${hours} hr, ${minutes} min" else "${minutes} min"
+                                val days = hours / 24
+                                when {
+                                    days > 0 -> "$days day${if (days == 1L) "" else "s"} ago"
+                                    hours > 0 -> "${hours} hr, ${minutes} min"
+                                    else -> "${minutes} min"
+                                }
                             } ?: "None"
                         }
 
@@ -7750,6 +9157,15 @@ fun ChatInfoScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(stringResource(R.string.last_message), color = LocalAppColors.current.textPrimary)
                             Text(lastMessageTime, color = LocalAppColors.current.textSecondary)
+                        }
+                        if (chessRecord != null) {
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider(color = LocalAppColors.current.divider)
+                            Spacer(Modifier.height(12.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(stringResource(R.string.chess_stats), color = LocalAppColors.current.textPrimary)
+                                Text("${chessRecord.first}W - ${chessRecord.second}L", color = LocalAppColors.current.textSecondary)
+                            }
                         }
                         Spacer(Modifier.height(24.dp))
 
@@ -7897,78 +9313,6 @@ fun ContactNotificationSettingsScreen(contactId: String, onBack: () -> Unit, cha
                         if (notificationOverride == mode) {
                             Icon(Icons.Default.Check, null, tint = KaspaTeal)
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Reached from Chat Info's "Domains" row — lets you pick which of this contact's owned KNS
- * domains represents them (also the default contact name when there's no custom nickname).
- * Domain strings from [ChatViewModel.KnsProfileUiState.ownedDomains] already carry their real
- * ".kas" suffix, so they're shown as-is here — never re-appended.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ContactDomainSettingsScreen(contactId: String, onBack: () -> Unit, chatViewModel: ChatViewModel = hiltViewModel()) {
-    val knsProfile = chatViewModel.knsProfiles.collectAsState().value[contactId]
-    val ownedDomains = knsProfile?.ownedDomains.orEmpty()
-
-    // This screen gets its own ChatViewModel instance (scoped to its own nav destination), so it
-    // needs its own fetch — reading knsProfiles alone would only ever see whatever Chat Info's
-    // separate instance happened to load, which is nothing the first time you open this page.
-    LaunchedEffect(contactId) {
-        chatViewModel.refreshKnsProfile(contactId)
-    }
-
-    Scaffold(
-        containerColor = LocalAppColors.current.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.domains), color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                stringResource(R.string.pick_which_domain_you_want_to),
-                color = LocalAppColors.current.textSecondary,
-                style = MaterialTheme.typography.bodySmall
-            )
-
-            SettingsSection(title = stringResource(R.string.domains)) {
-                ownedDomains.forEachIndexed { index, domain ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { chatViewModel.selectKnsDomain(contactId, domain) }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(domain, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        if (domain == knsProfile?.selectedDomain) {
-                            Icon(Icons.Default.Check, null, tint = KaspaTeal)
-                        }
-                    }
-                    if (index < ownedDomains.lastIndex) {
-                        SettingsDivider()
                     }
                 }
             }

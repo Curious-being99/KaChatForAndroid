@@ -119,7 +119,8 @@ class KnsInscriptionEngine @Inject constructor(
         commit: CommitResult,
         revealTargetAddress: String,
         changeAddress: String,
-        ownerPrivateKey: ByteArray
+        ownerPrivateKey: ByteArray,
+        priorityFeeSompi: Long = REVEAL_PRIORITY_FEE_SOMPI
     ): String = mutex.withLock {
         val api = networkService.kaspaRestApi.value ?: throw IllegalStateException("Network service unavailable")
 
@@ -146,7 +147,7 @@ class KnsInscriptionEngine @Inject constructor(
             payloadSize = 0,
             sigScriptLens = listOf(sigScriptSize)
         )
-        val feeWithChange = KaspaMass.calculateFee(massWithChange, feeRateSompiPerGram) + REVEAL_PRIORITY_FEE_SOMPI
+        val feeWithChange = KaspaMass.calculateFee(massWithChange, feeRateSompiPerGram) + priorityFeeSompi
 
         val outputs = baseOutputs.toMutableList()
         val availableForChangeAndFee = commit.commitAmountSompi - commit.revealAmountSompi
@@ -165,7 +166,7 @@ class KnsInscriptionEngine @Inject constructor(
                 payloadSize = 0,
                 sigScriptLens = listOf(sigScriptSize)
             )
-            val feeNoChange = KaspaMass.calculateFee(massNoChange, feeRateSompiPerGram) + REVEAL_PRIORITY_FEE_SOMPI
+            val feeNoChange = KaspaMass.calculateFee(massNoChange, feeRateSompiPerGram) + priorityFeeSompi
             require(availableForChangeAndFee >= feeNoChange) { "Insufficient commit amount for KNS reveal fee" }
             val changeNoChange = availableForChangeAndFee - feeNoChange
             if (changeNoChange > DUST_THRESHOLD_SOMPI) {

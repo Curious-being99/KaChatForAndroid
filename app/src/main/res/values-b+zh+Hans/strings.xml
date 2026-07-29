@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">检查 Drive 备份大小</string>
     <string name="checking_availability">正在检查可用性...</string>
     <string name="checking_your_chatting_address_balance">正在检查您的聊天地址余额...</string>
+    <string name="chess_stats">国际象棋战绩</string>
     <string name="choose_avatar">选择头像</string>
     <string name="choose_banner">选择横幅</string>
+    <string name="choose_coin">选择币种</string>
     <string name="choose_photo">选择照片</string>
     <string name="choose_which_tabs_appear_in_your">选择底部菜单中显示的标签页。</string>
     <string name="clear">清除</string>
@@ -90,6 +92,8 @@
     <string name="delete">删除</string>
     <string name="delete_account">删除账户</string>
     <string name="delete_group">删除群组</string>
+    <string name="delete_swap_history_message">这只会将其从本地记录中删除，不会影响实际的兑换。</string>
+    <string name="delete_this_swap">删除此次兑换？</string>
     <string name="delete_transaction">删除交易</string>
     <string name="deposit_address">存款地址</string>
     <string name="domain_name">域名</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">二维码</string>
     <string name="quantity">数量</string>
     <string name="rate">汇率</string>
+    <string name="read">已读</string>
     <string name="receiving_kas_at">接收 KAS 于</string>
     <string name="recipient_address">收款地址</string>
     <string name="recipient_address_or_kas_name">收款地址或 .kas 名称</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">正在解析域名…</string>
     <string name="resolving">正在解析...</string>
     <string name="retention">保留</string>
+    <string name="retry">重试</string>
     <string name="retry_inscription_reveal">重试铭文揭示</string>
     <string name="save">保存</string>
     <string name="saved_accounts">已保存账户</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">用您的 KasSigner 设备扫描此项,在那里查看,然后签名。</string>
     <string name="scroll_to_latest">滚动到最新</string>
     <string name="search_chats">搜索聊天</string>
+    <string name="search_coins">搜索币种</string>
     <string name="secure_messaging_on_kaspa_blockdag">在 Kaspa BlockDAG 上安全通信</string>
     <string name="security_warning">安全警告</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">重试</string>
     <string name="unhide">取消隐藏</string>
     <string name="unlink">取消关联</string>
+    <string name="unread">未读</string>
     <string name="use_default">使用默认值</string>
     <string name="users_you_hide_from_a_broadcast">您从广播室隐藏的用户(通过其头像菜单)会显示在这里,并且永远不会出现在任何房间中或被缓存。</string>
     <string name="valid_address">有效地址</string>
     <string name="view_on_changenow">在 ChangeNOW 上查看</string>
     <string name="waiting_for_camera">正在等待相机...</string>
+    <string name="waiting_on_opponent">等待对手</string>
     <string name="walk_through_setting_up_your_domain">逐步指导您设置域名、横幅、头像和详细信息。</string>
     <string name="when_you_message_someone_new_on">当您在 KaChat 上给新对象发送消息时,对方不会收到通知,您的消息将保持隐藏,直到对方回复您或也将您添加。这可以防止垃圾信息并提高您的隐私。如果您希望对方收到通知,请点击手形图标发送通信请求,费用为 0.2 KAS。(注意:所有非 KaChat 的消息应用都需要发送通信请求)</string>
     <string name="wipe_account">清除账户</string>

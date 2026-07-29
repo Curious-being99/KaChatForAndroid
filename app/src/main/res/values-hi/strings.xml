@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Drive बैकअप का आकार जांचें</string>
     <string name="checking_availability">उपलब्धता की जाँच की जा रही है...</string>
     <string name="checking_your_chatting_address_balance">आपकी चैट पते का बैलेंस जांचा जा रहा है...</string>
+    <string name="chess_stats">शतरंज आंकड़े</string>
     <string name="choose_avatar">अवतार चुनें</string>
     <string name="choose_banner">बैनर चुनें</string>
+    <string name="choose_coin">सिक्का चुनें</string>
     <string name="choose_photo">फ़ोटो चुनें</string>
     <string name="choose_which_tabs_appear_in_your">चुनें कि आपके निचले मेनू में कौन से टैब दिखाई देते हैं।</string>
     <string name="clear">साफ़ करें</string>
@@ -90,6 +92,8 @@
     <string name="delete">हटाएं</string>
     <string name="delete_account">खाता हटाएं</string>
     <string name="delete_group">समूह हटाएं</string>
+    <string name="delete_swap_history_message">यह इसे केवल आपके स्थानीय इतिहास से हटाता है - यह वास्तविक एक्सचेंज को प्रभावित नहीं करता।</string>
+    <string name="delete_this_swap">क्या इस स्वैप को हटाना है?</string>
     <string name="delete_transaction">लेन-देन हटाएं</string>
     <string name="deposit_address">जमा पता</string>
     <string name="domain_name">डोमेन नाम</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">QR कोड</string>
     <string name="quantity">मात्रा</string>
     <string name="rate">दर</string>
+    <string name="read">पढ़ा हुआ</string>
     <string name="receiving_kas_at">KAS प्राप्त कर रहे हैं</string>
     <string name="recipient_address">प्राप्तकर्ता का पता</string>
     <string name="recipient_address_or_kas_name">प्राप्तकर्ता का पता या .kas नाम</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">डोमेन हल किया जा रहा है…</string>
     <string name="resolving">हल किया जा रहा है...</string>
     <string name="retention">रिटेंशन</string>
+    <string name="retry">पुनः प्रयास करें</string>
     <string name="retry_inscription_reveal">इंस्क्रिप्शन रिवील फिर से प्रयास करें</string>
     <string name="save">सहेजें</string>
     <string name="saved_accounts">सहेजे गए खाते</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">इसे अपने KasSigner डिवाइस से स्कैन करें, वहां इसकी समीक्षा करें, फिर हस्ताक्षर करें।</string>
     <string name="scroll_to_latest">नवीनतम पर स्क्रॉल करें</string>
     <string name="search_chats">चैट खोजें</string>
+    <string name="search_coins">सिक्के खोजें</string>
     <string name="secure_messaging_on_kaspa_blockdag">Kaspa BlockDAG पर सुरक्षित मैसेजिंग</string>
     <string name="security_warning">सुरक्षा चेतावनी</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">फिर कोशिश करें</string>
     <string name="unhide">अनहाइड करें</string>
     <string name="unlink">अनलिंक करें</string>
+    <string name="unread">अपठित</string>
     <string name="use_default">डिफ़ॉल्ट उपयोग करें</string>
     <string name="users_you_hide_from_a_broadcast">जिन उपयोगकर्ताओं को आप ब्रॉडकास्ट रूम से छिपाते हैं (उनके अवतार मेनू के माध्यम से) वे यहां दिखाई देते हैं, और किसी भी रूम में कभी दिखाई नहीं देते या कैश नहीं होते।</string>
     <string name="valid_address">मान्य पता</string>
     <string name="view_on_changenow">ChangeNOW पर देखें</string>
     <string name="waiting_for_camera">कैमरे की प्रतीक्षा हो रही है...</string>
+    <string name="waiting_on_opponent">प्रतिद्वंद्वी की प्रतीक्षा है</string>
     <string name="walk_through_setting_up_your_domain">आपके डोमेन, बैनर, अवतार और विवरण को सेट करने में चरण-दर-चरण मार्गदर्शन करता है।</string>
     <string name="when_you_message_someone_new_on">जब आप KaChat पर किसी नए व्यक्ति को संदेश भेजते हैं, तो उसे कोई सूचना नहीं मिलेगी और आपका संदेश तब तक छिपा रहेगा जब तक वह आपको जवाब नहीं देता या आपको भी नहीं जोड़ता। यह स्पैम से बचाता है और आपकी गोपनीयता बढ़ाता है। अगर आप चाहते हैं कि उसे सूचित किया जाए, तो संचार अनुरोध भेजने के लिए हाथ के आइकन पर टैप करें, जिसकी कीमत 0.2 KAS होगी। (नोट: सभी गैर-KaChat मैसेजिंग ऐप्स को संचार अनुरोध की आवश्यकता होगी)</string>
     <string name="wipe_account">खाता मिटाएं</string>

@@ -9,6 +9,7 @@ import com.kachat.app.models.HandshakePayload
 import com.kachat.app.models.MessageEntity
 import com.kachat.app.models.MessageSyncCursorEntity
 import com.kachat.app.models.PhotoAutoDisplayMode
+import com.kachat.app.models.ReactionEntity
 import com.kachat.app.models.UnreadCount
 import com.kachat.app.services.ContextualMessageIndexerResponse
 import com.kachat.app.services.HandshakeIndexerResponse
@@ -25,6 +26,7 @@ import com.kachat.app.util.ImageMessage
 import com.kachat.app.util.KaspaAddress
 import com.kachat.app.util.KasiaCipher
 import com.kachat.app.util.MessageProtocol
+import com.kachat.app.util.MessageReaction
 import com.kachat.app.util.MessageReply
 import com.kachat.app.util.VoiceMessage
 import kotlinx.coroutines.CoroutineScope
@@ -146,6 +148,7 @@ class ChatRepository @Inject constructor(
             )
         )
         database.messageDao().deleteAllForContact(contactId, myAddress)
+        database.reactionDao().deleteAllForContact(contactId, myAddress)
         // So a later re-handshake with this same address starts its indexer sync clean instead of
         // resuming from a stale per-contact cursor left over from before the deletion.
         database.messageDao().deleteSyncCursorsForContact(contactId, myAddress)
@@ -251,6 +254,29 @@ class ChatRepository @Inject constructor(
         database.messageDao().deleteById(id, walletManager.getAddress())
     }
 
+    /** Replaces any previous reaction [reactorAddress] left on [targetTxId] with [emoji] - one reaction per (message, reactor). */
+    suspend fun upsertReaction(targetTxId: String, reactorAddress: String, contactId: String, emoji: String, reactionTxId: String?, blockTimestamp: Long) {
+        database.reactionDao().upsertReaction(
+            ReactionEntity(
+                targetTxId = targetTxId,
+                walletAddress = walletManager.getAddress(),
+                reactorAddress = reactorAddress,
+                emoji = emoji,
+                reactionTxId = reactionTxId,
+                blockTimestamp = blockTimestamp,
+                contactId = contactId
+            )
+        )
+    }
+
+    suspend fun removeReaction(targetTxId: String, reactorAddress: String) {
+        database.reactionDao().deleteReaction(targetTxId, walletManager.getAddress(), reactorAddress)
+    }
+
+    fun getReactionsForContact(contactId: String): Flow<List<ReactionEntity>> {
+        return database.reactionDao().getReactionsForContact(contactId, walletManager.getAddress())
+    }
+
     /**
      * "Wipe and re-sync incoming messages" — deletes only received messages for the active
      * account (sent messages, contacts, and the wallet itself are untouched), resets every sync
@@ -271,6 +297,7 @@ class ChatRepository @Inject constructor(
     /** Deletes every local message and contact for [address] — used when wiping an account entirely. Does not touch the wallet's keys (see WalletManager.deleteAccount) or any Google Drive backup. */
     suspend fun wipeAllLocalDataForAddress(address: String) {
         database.messageDao().deleteAllForWallet(address)
+        database.reactionDao().deleteAllForWallet(address)
         database.messageDao().deleteSyncCursorsForWallet(address)
         database.contactDao().deleteAllForWallet(address)
         database.contactDao().deleteTombstonesForWallet(address)
@@ -433,6 +460,19 @@ class ChatRepository @Inject constructor(
         // Decryption only needs our own private key + the ephemeral key embedded in the
         // message itself (ECDH) — the sender's static pubkey is never required here.
         val plaintext = MessageProtocol.decrypt(encryptedMessage, walletManager.getPrivateKeyBytes())
+
+        // Reactions are never shown as their own chat bubble - just attached to the message they
+        // target - so intercept and route to the reactions table before a MessageEntity is ever
+        // created for this tx. The sender of an incoming reaction is always this contact.
+        val reaction = MessageReaction.parseOrNull(plaintext)
+        if (reaction != null) {
+            if (reaction.action == "add") {
+                upsertReaction(reaction.targetTxId, contact.id, contact.id, reaction.emoji, message.txId, message.blockTime)
+            } else {
+                removeReaction(reaction.targetTxId, contact.id)
+            }
+            return
+        }
 
         insertMessage(
             MessageEntity(

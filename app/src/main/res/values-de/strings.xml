@@ -51,8 +51,10 @@
     <string name="check_drive_backup_size">Grosse der Drive-Sicherung prufen</string>
     <string name="checking_availability">Verfügbarkeit prüfen...</string>
     <string name="checking_your_chatting_address_balance">Guthaben deiner Chat-Adresse wird gepruft...</string>
+    <string name="chess_stats">Schachstatistik</string>
     <string name="choose_avatar">Wählen Sie Avatar</string>
     <string name="choose_banner">Wählen Sie Banner</string>
+    <string name="choose_coin">Munze wahlen</string>
     <string name="choose_photo">Foto wahlen</string>
     <string name="choose_which_tabs_appear_in_your">Wahle, welche Tabs in deinem unteren Menu erscheinen.</string>
     <string name="clear">Leeren</string>
@@ -90,6 +92,8 @@
     <string name="delete">Löschen</string>
     <string name="delete_account">Konto löschen</string>
     <string name="delete_group">Gruppe loschen</string>
+    <string name="delete_swap_history_message">Dadurch wird er nur aus deinem lokalen Verlauf entfernt - der eigentliche Tausch wird nicht beeinflusst.</string>
+    <string name="delete_this_swap">Diesen Swap löschen?</string>
     <string name="delete_transaction">Transaktion loschen</string>
     <string name="deposit_address">Einzahlungsadresse</string>
     <string name="domain_name">Domainname</string>
@@ -226,6 +230,7 @@
     <string name="qr_code_2">QR-Code</string>
     <string name="quantity">Menge</string>
     <string name="rate">Kurs</string>
+    <string name="read">Gelesen</string>
     <string name="receiving_kas_at">KAS empfangen an</string>
     <string name="recipient_address">Empfangeradresse</string>
     <string name="recipient_address_or_kas_name">Empfangeradresse oder .kas-Name</string>
@@ -245,6 +250,7 @@
     <string name="resolving_domain">Domain wird aufgelost…</string>
     <string name="resolving">Wird aufgelost...</string>
     <string name="retention">Aufbewahrung</string>
+    <string name="retry">Wiederholen</string>
     <string name="retry_inscription_reveal">Inschriftenenthullung erneut versuchen</string>
     <string name="save">Speichern</string>
     <string name="saved_accounts">Gespeicherte Konten</string>
@@ -255,6 +261,7 @@
     <string name="scan_this_with_your_kassigner_device">Scanne dies mit deinem KasSigner-Gerat, uberprufe es dort und signiere dann.</string>
     <string name="scroll_to_latest">Zum neuesten scrollen</string>
     <string name="search_chats">Chats durchsuchen</string>
+    <string name="search_coins">Munzen suchen</string>
     <string name="secure_messaging_on_kaspa_blockdag">Sichere Nachrichten auf Kaspa BlockDAG</string>
     <string name="security_warning">Sicherheitswarnung</string>
     <string name="seed_phrase">Seed Phrase</string>
@@ -314,11 +321,13 @@
     <string name="try_again">Erneut versuchen</string>
     <string name="unhide">Einblenden</string>
     <string name="unlink">Verknuepfung aufheben</string>
+    <string name="unread">Ungelesen</string>
     <string name="use_default">Standard verwenden</string>
     <string name="users_you_hide_from_a_broadcast">Nutzer, die du in einem Broadcast-Raum versteckst (uber deren Avatar-Menu), erscheinen hier und werden in keinem Raum angezeigt oder zwischengespeichert.</string>
     <string name="valid_address">Gultige Adresse</string>
     <string name="view_on_changenow">Auf ChangeNOW ansehen</string>
     <string name="waiting_for_camera">Warte auf Kamera...</string>
+    <string name="waiting_on_opponent">Warte auf Gegner</string>
     <string name="walk_through_setting_up_your_domain">Fuhrt dich Schritt fur Schritt durch die Einrichtung deiner Domain, deines Banners, Avatars und deiner Details.</string>
     <string name="when_you_message_someone_new_on">Wenn du jemand Neuem auf KaChat schreibst, erhalt er keine Benachrichtigung und deine Nachricht bleibt verborgen, bis er dir antwortet oder dich ebenfalls hinzufugt. Dies schutzt vor Spam und erhoht deine Privatsphare. Wenn du mochtest, dass er benachrichtigt wird, tippe auf das Handsymbol, um eine Kommunikationsanfrage zu senden, die 0,2 KAS kostet. (Hinweis: Alle Nicht-KaChat-Messaging-Apps erfordern eine Kommunikationsanfrage)</string>
     <string name="wipe_account">Konto loschen</string>

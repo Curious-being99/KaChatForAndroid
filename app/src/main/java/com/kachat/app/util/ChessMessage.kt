@@ -293,6 +293,62 @@ object ChessGameEngine {
         )
     }
 
+    /** Cumulative decisive-outcome tally across every distinct chess game ever invited with this
+     *  contact (not just the current one) - checkmate/resignation count as a win or loss for the
+     *  local player; stalemate/declined/pending/in-progress games don't count either way. Used by
+     *  [ChessGameScreen]'s W/L counter and the chat info screen's "Chess Stats" row. */
+    fun record(messages: List<ChessSourceMessage>, myAddress: String, contactAddress: String): Pair<Int, Int> {
+        val inviteMessages = messages.filter { message ->
+            val unwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
+            ChessMessage.parseOrNull(unwrapped) is ChessEnvelope.Invite
+        }
+
+        val seenGameIds = mutableSetOf<String>()
+        var wins = 0
+        var losses = 0
+        for (message in inviteMessages) {
+            val unwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
+            val envelope = ChessMessage.parseOrNull(unwrapped) ?: continue
+            if (!seenGameIds.add(envelope.gameId)) continue
+            val summary = summarize(envelope.gameId, messages, myAddress, contactAddress) ?: continue
+            val myColor = summary.colorFor(myAddress) ?: continue
+            when (summary.status.kind) {
+                ChessGameStatusKind.CHECKMATE -> {
+                    if (summary.status.color == myColor) wins++ else losses++
+                }
+                ChessGameStatusKind.RESIGNED -> {
+                    if (summary.status.color == myColor) losses++ else wins++
+                }
+                else -> {}
+            }
+        }
+        return wins to losses
+    }
+
+    /** The contact's current active (not yet game-over) chess game, if any - scans for every
+     *  distinct `gameId` invited in `messages` and returns the summary for whichever is still
+     *  active. Enforcement (see `ChatViewModel.startChessGame`) keeps at most one active game per
+     *  contact, so this should never find more than one candidate in practice; if older history
+     *  somehow left more than one, the most recently invited game wins. */
+    fun activeGame(messages: List<ChessSourceMessage>, myAddress: String, contactAddress: String): ChessGameSummary? {
+        val inviteMessages = messages
+            .filter { message ->
+                val unwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
+                ChessMessage.parseOrNull(unwrapped) is ChessEnvelope.Invite
+            }
+            .sortedByDescending { it.blockTimestamp }
+
+        val seenGameIds = mutableSetOf<String>()
+        for (message in inviteMessages) {
+            val unwrapped = MessageReply.parseOrNull(message.plaintextBody)?.text ?: message.plaintextBody
+            val envelope = ChessMessage.parseOrNull(unwrapped) ?: continue
+            if (!seenGameIds.add(envelope.gameId)) continue
+            val summary = summarize(envelope.gameId, messages, myAddress, contactAddress)
+            if (summary != null && !summary.status.isGameOver) return summary
+        }
+        return null
+    }
+
     /** True if `message` is any chess envelope and no *later* message in `messages` shares its
      *  `gameId` - i.e. this is the current/latest state for that game, which is the only one that
      *  should render as the live status card (earlier moves render as a compact log line

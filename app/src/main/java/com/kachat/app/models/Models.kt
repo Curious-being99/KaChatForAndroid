@@ -32,6 +32,27 @@ data class MessageEntity(
 )
 
 /**
+ * A reaction (tapback) sent or received on a message — 1:1 ([contactId] set) or group ([groupId]
+ * set), never both. One row per (message, reactor): picking a new emoji replaces the previous
+ * row's [emoji] rather than adding a second row, and removing a reaction deletes the row outright
+ * (see [com.kachat.app.services.database.ReactionDao]). [targetTxId] is the reacted-to message's
+ * transaction id — the only identifier both parties/platforms agree on, since a local row id
+ * isn't shared cross-platform. [reactionTxId] is the reaction message's own transaction id, kept
+ * for reference/debugging (not used for dedup — the primary key already prevents duplicates).
+ */
+@Entity(tableName = "reactions", primaryKeys = ["targetTxId", "walletAddress", "reactorAddress"])
+data class ReactionEntity(
+    val targetTxId: String,
+    val walletAddress: String,
+    val reactorAddress: String,
+    val emoji: String,
+    val reactionTxId: String?,
+    val blockTimestamp: Long,
+    val contactId: String? = null,
+    val groupId: String? = null
+)
+
+/**
  * Tracks how far into one contact's `contextual-messages/by-sender` stream this wallet has
  * already synced, per alias (a contact may be messaging under more than one — see
  * `ChatRepository.syncContextualMessages`'s legacy/deterministic alias loop). The indexer's

@@ -12,6 +12,7 @@ import com.kachat.app.models.BackupRetention
 import com.kachat.app.models.ContactEntity
 import com.kachat.app.models.Conversation
 import com.kachat.app.models.MessageEntity
+import com.kachat.app.models.ReactionEntity
 import com.kachat.app.repository.GroupConversation
 import com.kachat.app.services.ChatHistoryExportImportService
 import com.kachat.app.services.GoogleDriveBackupService
@@ -21,15 +22,18 @@ import com.kachat.app.services.SystemContactsSyncService
 import com.kachat.app.services.VoiceRecorderService
 import com.kachat.app.util.ImageMessage
 import com.kachat.app.util.ImagePrep
+import com.kachat.app.util.MessageReaction
 import com.kachat.app.util.MessageReply
 import com.kachat.app.util.VoiceMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import javax.inject.Inject
 
@@ -481,6 +485,11 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { chatRepository.deleteChat(contactId) }
     }
 
+    /** Multi-select bulk delete — mirrors markContactsAsRead/markContactsAsUnread's Collection shape. */
+    fun deleteChats(contactIds: Collection<String>) {
+        viewModelScope.launch { contactIds.forEach { chatRepository.deleteChat(it) } }
+    }
+
     /** Sends a real reciprocal handshake and activates the conversation. */
     fun acceptHandshake(contactId: String) {
         viewModelScope.launch {
@@ -557,6 +566,9 @@ class ChatViewModel @Inject constructor(
     val currentUtxos: StateFlow<List<com.kachat.app.services.UtxoEntry>> = _currentUtxos.asStateFlow()
 
     private val _spendingUtxos = MutableStateFlow<List<com.kachat.app.services.UtxoEntry>>(emptyList())
+    // Exposed publicly (unlike the backing field) so the payment composer's "Max" button can mass/
+    // fee-estimate against the spending-chain UTXOs actually spent from, not the identity address's.
+    val spendingUtxos: StateFlow<List<com.kachat.app.services.UtxoEntry>> = _spendingUtxos.asStateFlow()
 
     private val _paymentAmount = MutableStateFlow("")
     val paymentAmount: StateFlow<String> = _paymentAmount.asStateFlow()
@@ -939,6 +951,22 @@ class ChatViewModel @Inject constructor(
         _groupReplyingTo.value = null
     }
 
+    fun getGroupReactions(groupId: String) = groupRepository.getReactions(groupId)
+
+    /**
+     * Reacts to [targetTxId] with [emoji] ("add"), or removes this wallet's existing reaction on
+     * it ("remove"). Mirrors [sendReaction] for 1:1 chats - see [GroupRepository.sendGroupReaction].
+     */
+    fun sendGroupReaction(groupId: String, targetTxId: String, emoji: String, action: String) {
+        viewModelScope.launch {
+            try {
+                groupRepository.sendGroupReaction(targetTxId, groupId, emoji, action)
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Error sending group reaction", e)
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Group hide/mute/mentions-only - mirrors iOS's GroupChatService equivalents.
     // -------------------------------------------------------------------------
@@ -1040,6 +1068,13 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** Multi-select bulk delete — mirrors markGroupsAsRead/markGroupsAsUnread's Collection shape. */
+    fun deleteGroupChats(groupIds: Collection<String>) {
+        viewModelScope.launch {
+            groupIds.forEach { groupRepository.deleteGroup(it) }
+        }
+    }
+
     fun renameGroup(groupId: String, newName: String, onError: (String) -> Unit = {}) {
         viewModelScope.launch {
             try {
@@ -1123,19 +1158,6 @@ class ChatViewModel @Inject constructor(
             if (contact != null && profile?.avatarUrl != contact.knsAvatarUrl) {
                 chatRepository.addContact(contact.copy(knsAvatarUrl = profile?.avatarUrl))
             }
-        }
-    }
-
-    /**
-     * User picked a different owned domain in Chat Info to represent this contact — an explicit
-     * choice, so it always updates the displayed name too (unlike the passive KNS auto-rename in
-     * [refreshKnsNamesForAllContacts], which backs off from a real custom nickname).
-     */
-    fun selectKnsDomain(contactId: String, domain: String) {
-        viewModelScope.launch {
-            val contact = getOrCreateContact(contactId)
-            chatRepository.addContact(contact.copy(knsName = domain, alias = domain))
-            refreshKnsProfile(contactId)
         }
     }
 
@@ -1342,6 +1364,33 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Reacts to [targetTxId] with [emoji] ("add"), or removes the caller's existing reaction on
+     * it ("remove"). Unlike [sendMessage], this never creates a visible pending bubble - the
+     * reaction is applied to the local reactions table immediately (optimistic UI) and the actual
+     * send happens in the background via the same [WalletService.sendKasiaMessage] pipeline any
+     * other message uses.
+     */
+    fun sendReaction(contactId: String, targetTxId: String, emoji: String, action: String) {
+        viewModelScope.launch {
+            val myAddress = walletManager.getAddress()
+            if (action == "add") {
+                chatRepository.upsertReaction(targetTxId, myAddress, contactId, emoji, null, System.currentTimeMillis())
+            } else {
+                chatRepository.removeReaction(targetTxId, myAddress)
+            }
+            try {
+                val payload = MessageReaction.encode(targetTxId, emoji, action)
+                val result = walletService.sendKasiaMessage(contactId, payload)
+                if (action == "add") {
+                    chatRepository.upsertReaction(targetTxId, myAddress, contactId, emoji, result.txId, System.currentTimeMillis())
+                }
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Error sending reaction", e)
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Chess — "Play Chess" 1:1 feature. Each action is just a JSON envelope (see ChessMessage.kt)
     // sent through the exact same sendMessage() pipeline as text, the same way VoiceMessage/
@@ -1349,13 +1398,33 @@ class ChatViewModel @Inject constructor(
     // aren't things you'd ever want wrapped in an unrelated pending reply.
     // -------------------------------------------------------------------------
 
+    /** Starting a new game always supersedes whichever one is currently active against this
+     *  contact - only one active chess game per contact is allowed, so an existing in-progress/
+     *  pending-response game is auto-resigned first rather than left orphaned alongside a second
+     *  one. Looks up the contact's messages fresh (rather than relying on a UI-side cache) so this
+     *  check is correct even right after the very latest message. */
     fun startChessGame(contactId: String) {
         cancelReply()
-        val content = com.kachat.app.util.ChessInviteContent(
-            gameId = java.util.UUID.randomUUID().toString(),
-            inviterColor = if (kotlin.random.Random.nextBoolean()) com.kachat.app.util.ChessInviteColor.WHITE else com.kachat.app.util.ChessInviteColor.BLACK
-        )
-        sendMessage(contactId, com.kachat.app.util.ChessMessage.encode(content))
+        viewModelScope.launch {
+            val myAddress = walletManager.getAddress()
+            val messages = chatRepository.getMessages(contactId).first().map { entity ->
+                com.kachat.app.util.ChessGameEngine.SimpleChessSourceMessage(
+                    id = entity.id,
+                    plaintextBody = entity.plaintextBody,
+                    isOutgoing = entity.direction == "sent",
+                    blockTimestamp = entity.blockTimestamp
+                )
+            }
+            val existing = com.kachat.app.util.ChessGameEngine.activeGame(messages, myAddress, contactId)
+            if (existing != null) {
+                resignChessGame(contactId, existing.gameId)
+            }
+            val content = com.kachat.app.util.ChessInviteContent(
+                gameId = java.util.UUID.randomUUID().toString(),
+                inviterColor = if (kotlin.random.Random.nextBoolean()) com.kachat.app.util.ChessInviteColor.WHITE else com.kachat.app.util.ChessInviteColor.BLACK
+            )
+            sendMessage(contactId, com.kachat.app.util.ChessMessage.encode(content))
+        }
     }
 
     fun respondToChessInvite(contactId: String, gameId: String, accepted: Boolean) {
@@ -1514,7 +1583,7 @@ class ChatViewModel @Inject constructor(
         _groupPendingPhotoUri.value = null
         viewModelScope.launch {
             try {
-                val prepared = ImagePrep.prepareForChatMessage(appContext, uri, GROUP_PHOTO_TARGET_BYTES)
+                val prepared = withContext(Dispatchers.Default) { ImagePrep.prepareForChatMessage(appContext, uri, GROUP_PHOTO_TARGET_BYTES) }
                 groupRepository.sendGroupImage(prepared.bytes, groupId, fileName = prepared.fileName, mimeType = prepared.mimeType)
             } catch (e: Exception) {
                 Log.e("ChatViewModel", "Error preparing group photo message", e)
@@ -1528,7 +1597,7 @@ class ChatViewModel @Inject constructor(
         _pendingPhotoUri.value = null
         viewModelScope.launch {
             try {
-                val prepared = ImagePrep.prepareForChatMessage(appContext, uri, chatPhotoQualityPreset.value.targetBytes)
+                val prepared = withContext(Dispatchers.Default) { ImagePrep.prepareForChatMessage(appContext, uri, chatPhotoQualityPreset.value.targetBytes) }
                 val base64 = android.util.Base64.encodeToString(prepared.bytes, android.util.Base64.NO_WRAP)
                 val json = ImageMessage.encode(fileName = prepared.fileName, sizeBytes = prepared.bytes.size.toLong(), base64Image = base64, mimeType = prepared.mimeType)
                 sendMessage(contactId, json)
@@ -1641,6 +1710,10 @@ class ChatViewModel @Inject constructor(
     
     fun getMessages(contactId: String): Flow<List<MessageEntity>> {
         return chatRepository.getMessages(contactId)
+    }
+
+    fun getReactions(contactId: String): Flow<List<ReactionEntity>> {
+        return chatRepository.getReactionsForContact(contactId)
     }
 
     companion object {
