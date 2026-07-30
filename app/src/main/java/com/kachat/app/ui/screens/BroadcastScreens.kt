@@ -44,7 +44,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -1085,7 +1085,7 @@ fun BroadcastChannelScreen(
                                             showMenu = false
                                         }
                                         HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                                        PopupMenuRow(Icons.Default.Tag, stringResource(R.string.go_to_explorer)) {
+                                        PopupMenuRow(Icons.Default.Public, stringResource(R.string.view_in_explorer)) {
                                             uriHandler.openUri(kaspaExplorer.txUrl(message.id))
                                             showMenu = false
                                         }

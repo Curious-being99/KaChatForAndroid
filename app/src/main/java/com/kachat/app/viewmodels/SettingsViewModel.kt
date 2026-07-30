@@ -38,6 +38,8 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val showFeeEstimate = settings.showFeeEstimate
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val quickReactionEmojis = settings.quickReactionEmojis
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettingsRepository.DEFAULT_QUICK_REACTION_EMOJIS)
 
     fun saveNetwork(value: String) = viewModelScope.launch { settings.setNetwork(value) }
     fun saveIndexerUrl(value: String) = viewModelScope.launch { settings.setIndexerUrl(value) }
@@ -47,4 +49,5 @@ class SettingsViewModel @Inject constructor(
     fun setNotificationSoundEnabled(value: Boolean) = viewModelScope.launch { settings.setNotificationSoundEnabled(value) }
     fun setNotificationVibrationEnabled(value: Boolean) = viewModelScope.launch { settings.setNotificationVibrationEnabled(value) }
     fun setShowFeeEstimate(value: Boolean) = viewModelScope.launch { settings.setShowFeeEstimate(value) }
+    fun setQuickReactionEmojis(value: List<String>) = viewModelScope.launch { settings.setQuickReactionEmojis(value) }
 }

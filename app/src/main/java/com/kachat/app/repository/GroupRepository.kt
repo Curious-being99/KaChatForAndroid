@@ -322,6 +322,14 @@ class GroupRepository @Inject constructor(
         database.groupDao().deleteGroup(groupId, walletAddress)
     }
 
+    /** Deletes individual messages from this device only - local-only, never on-chain (other
+     *  members still have their own copy, and the underlying transaction is still permanently on
+     *  the blockchain). Used by GroupChatThreadScreen's message multi-select "Delete". */
+    suspend fun deleteMessages(messageIds: Collection<String>) {
+        val walletAddress = walletManager.getAddress()
+        messageIds.forEach { database.groupDao().deleteMessage(it, walletAddress) }
+    }
+
     // -------------------------------------------------------------------------
     // Sending group messages
     // -------------------------------------------------------------------------
@@ -590,8 +598,8 @@ class GroupRepository @Inject constructor(
                         ?: senderAddress.takeLast(8)
                     val notificationText = when {
                         replyContent != null -> "$senderLabel replied to \"${replyContent.replyToPreview}\""
-                        VoiceMessage.parseOrNull(plaintext) != null -> "$senderLabel: 🎤 Audio message"
-                        ImageMessage.parseOrNull(plaintext) != null -> "$senderLabel: 📷 Photo"
+                        VoiceMessage.parseOrNull(plaintext) != null -> "$senderLabel sent a voice message"
+                        ImageMessage.parseOrNull(plaintext) != null -> "$senderLabel sent a photo"
                         else -> "$senderLabel: $plaintext"
                     }
                     notificationHelper.showGroup(group.groupId, group.name, notificationText)

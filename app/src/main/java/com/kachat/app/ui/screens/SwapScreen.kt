@@ -688,8 +688,9 @@ private fun SwapDetailDialog(
 }
 
 /** Ticker -> drawable resource for coins with real brand art (sourced from the Tangem wallet
- * app's bundled network logos). Tickers not listed here (xmr, zec, usdt) have no available art
- * and fall back to the plain ticker-text circle. */
+ * app's bundled network logos, via its own remote icon CDN -
+ * `s3.eu-central-1.amazonaws.com/tangem.api/coins/large/{coingecko-id}.png`). Tickers not listed
+ * here have no available art and fall back to the plain ticker-text circle. */
 private val coinLogoDrawables: Map<String, Int> = mapOf(
     "btc" to R.drawable.ic_coin_btc,
     "eth" to R.drawable.ic_coin_eth,
@@ -703,7 +704,10 @@ private val coinLogoDrawables: Map<String, Int> = mapOf(
     "ada" to R.drawable.ic_coin_ada,
     "bch" to R.drawable.ic_coin_bch,
     "etc" to R.drawable.ic_coin_etc,
-    "usdc" to R.drawable.ic_coin_usdc
+    "usdc" to R.drawable.ic_coin_usdc,
+    "usdt" to R.drawable.ic_coin_usdt,
+    "zec" to R.drawable.ic_coin_zec,
+    "xmr" to R.drawable.ic_coin_xmr
 )
 
 /**

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -47,7 +48,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -185,6 +186,11 @@ fun GroupChatThreadScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showComposerMenu by remember { mutableStateOf(false) }
     var composerMenuAnchor by remember { mutableStateOf(Offset.Zero) }
+    // Local-only multi-select for deleting individual messages (never the whole group - see
+    // GroupChatInfoScreen's delete for that) - toggled from the top bar's "Select" action.
+    var isSelectingMessages by remember { mutableStateOf(false) }
+    var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showDeleteMessagesConfirmation by remember { mutableStateOf(false) }
     // @mention inline autocomplete - the text typed after an unclosed "@" at the cursor, or null
     // when the cursor isn't currently in a mention context. See detectMentionQuery/mentionCandidates.
     var mentionQuery by remember { mutableStateOf<String?>(null) }
@@ -336,19 +342,36 @@ fun GroupChatThreadScreen(
                     }
                 },
                 actions = {
-                    val statusColor = Color(dotColorHex)
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(LocalAppColors.current.surface, CircleShape)
-                            .clickable { navController.navigate("connection_status") },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(modifier = Modifier.size(10.dp).background(statusColor, CircleShape))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(onClick = { navController.navigate("group_chat_info/$groupId") }) {
-                        Icon(Icons.Default.Info, contentDescription = stringResource(R.string.group_info), tint = LocalAppColors.current.textPrimary)
+                    if (isSelectingMessages) {
+                        TextButton(onClick = {
+                            isSelectingMessages = false
+                            selectedMessageIds = emptySet()
+                        }) {
+                            Text("Cancel", color = KaspaTeal)
+                        }
+                        IconButton(
+                            onClick = { showDeleteMessagesConfirmation = true },
+                            enabled = selectedMessageIds.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.Delete, stringResource(R.string.delete), tint = Color(0xFFFF3B30))
+                        }
+                    } else {
+                        // Entry point into select mode is a message's long-press "Select" menu
+                        // item, not a toolbar button.
+                        val statusColor = Color(dotColorHex)
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(LocalAppColors.current.surface, CircleShape)
+                                .clickable { navController.navigate("connection_status") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(modifier = Modifier.size(10.dp).background(statusColor, CircleShape))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(onClick = { navController.navigate("group_chat_info/$groupId") }) {
+                            Icon(Icons.Default.Info, contentDescription = stringResource(R.string.group_info), tint = LocalAppColors.current.textPrimary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -613,32 +636,59 @@ fun GroupChatThreadScreen(
                             }
                         }
                     }
-                    GroupMessageBubble(
-                        message = message,
-                        group = group,
-                        avatarUrl = message.senderAddress?.let { contactAvatarsByAddress[it] },
-                        liveAlias = message.senderAddress?.let { contactAliasesByAddress[it] },
-                        myAddress = myAddress,
-                        myAvatarUrl = myKnsProfile?.avatarUrl,
-                        navController = navController,
-                        onRetry = { chatViewModel.retryGroupMessage(groupId, message.content) },
-                        onReply = { chatViewModel.startGroupReplyTo(message) },
-                        reactions = groupReactionsByTxId[message.txId] ?: emptyList(),
-                        onReact = { emoji ->
-                            val existing = groupReactionsByTxId[message.txId]?.find { it.reactorAddress == myAddress }
-                            val action = if (existing?.emoji == emoji) "remove" else "add"
-                            chatViewModel.sendGroupReaction(groupId, message.txId, emoji, action)
-                        },
-                        onJumpToReply = jumpToReply,
-                        isHighlighted = message.txId == highlightedMessageId,
-                        resolveMentionName = resolveDisplayName,
-                        isMuted = message.senderAddress?.let { chatViewModel.isGroupMemberMuted(groupId, it) } ?: false,
-                        onMute = { address -> chatViewModel.muteGroupMember(groupId, address) },
-                        onUnmute = { address -> chatViewModel.unmuteGroupMember(groupId, address) },
-                        onHide = { address -> chatViewModel.hideGroupMember(groupId, address) },
-                        revealOffsetPx = revealOffsetPx,
-                        maxRevealOffsetPx = maxRevealOffsetPx
-                    )
+                    Box {
+                        GroupMessageBubble(
+                            message = message,
+                            group = group,
+                            avatarUrl = message.senderAddress?.let { contactAvatarsByAddress[it] },
+                            liveAlias = message.senderAddress?.let { contactAliasesByAddress[it] },
+                            myAddress = myAddress,
+                            myAvatarUrl = myKnsProfile?.avatarUrl,
+                            navController = navController,
+                            onRetry = { chatViewModel.retryGroupMessage(groupId, message.content) },
+                            onReply = { chatViewModel.startGroupReplyTo(message) },
+                            reactions = groupReactionsByTxId[message.txId] ?: emptyList(),
+                            onReact = { emoji ->
+                                val existing = groupReactionsByTxId[message.txId]?.find { it.reactorAddress == myAddress }
+                                val action = if (existing?.emoji == emoji) "remove" else "add"
+                                chatViewModel.sendGroupReaction(groupId, message.txId, emoji, action)
+                            },
+                            onJumpToReply = jumpToReply,
+                            isHighlighted = message.txId == highlightedMessageId,
+                            resolveMentionName = resolveDisplayName,
+                            isMuted = message.senderAddress?.let { chatViewModel.isGroupMemberMuted(groupId, it) } ?: false,
+                            onMute = { address -> chatViewModel.muteGroupMember(groupId, address) },
+                            onUnmute = { address -> chatViewModel.unmuteGroupMember(groupId, address) },
+                            onHide = { address -> chatViewModel.hideGroupMember(groupId, address) },
+                            revealOffsetPx = revealOffsetPx,
+                            maxRevealOffsetPx = maxRevealOffsetPx,
+                            onSelect = {
+                                isSelectingMessages = true
+                                selectedMessageIds = selectedMessageIds + message.txId
+                            }
+                        )
+                        // Same selection-mode tap catcher as 1:1 chat's message list.
+                        if (isSelectingMessages) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable {
+                                        selectedMessageIds = if (message.txId in selectedMessageIds) {
+                                            selectedMessageIds - message.txId
+                                        } else {
+                                            selectedMessageIds + message.txId
+                                        }
+                                    }
+                            ) {
+                                Icon(
+                                    imageVector = if (message.txId in selectedMessageIds) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = null,
+                                    tint = if (message.txId in selectedMessageIds) KaspaTeal else Color.Gray
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -699,6 +749,40 @@ fun GroupChatThreadScreen(
                     TextButton(onClick = { showFeeEditor = false }) {
                         Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                     }
+                }
+            }
+        )
+    }
+
+    if (showDeleteMessagesConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteMessagesConfirmation = false },
+            containerColor = LocalAppColors.current.surface,
+            title = {
+                Text(
+                    "Delete ${selectedMessageIds.size} Message${if (selectedMessageIds.size == 1) "" else "s"}?",
+                    color = LocalAppColors.current.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    "This only deletes the message from this device - other members still have their own copy, and the encrypted transaction remains permanently on the Kaspa blockchain, visible to anyone but unreadable without your keys. This cannot be undone.",
+                    color = LocalAppColors.current.textSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    chatViewModel.deleteGroupMessages(groupId, selectedMessageIds)
+                    showDeleteMessagesConfirmation = false
+                    isSelectingMessages = false
+                    selectedMessageIds = emptySet()
+                }) {
+                    Text("Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessagesConfirmation = false }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                 }
             }
         )
@@ -833,7 +917,10 @@ private fun GroupMessageBubble(
     onUnmute: (String) -> Unit = {},
     onHide: (String) -> Unit = {},
     revealOffsetPx: Animatable<Float, AnimationVector1D>,
-    maxRevealOffsetPx: Float
+    maxRevealOffsetPx: Float,
+    /** Enters the chat's message multi-select mode with this message pre-selected - null disables
+     *  the "Select" long-press menu option entirely. Mirrors [MessageBubble]'s onSelect. */
+    onSelect: (() -> Unit)? = null
 ) {
     val isSent = message.isOutgoing
     // Prefers the live contact alias (kept current by refreshKnsProfilesForGroupMembers, e.g. a
@@ -992,7 +1079,7 @@ private fun GroupMessageBubble(
                         )
                     }
                     TextLinkify.findUrls(displayContent).firstOrNull()?.let { match ->
-                        LinkPreviewCard(url = match.uri, txId = message.txId)
+                        LinkPreviewCard(url = match.uri, txId = message.txId, onSelect = onSelect)
                     }
                 }
             }
@@ -1019,7 +1106,7 @@ private fun GroupMessageBubble(
                         showMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.Tag, stringResource(R.string.view_in_explorer)) {
+                    PopupMenuRow(Icons.Default.Public, stringResource(R.string.view_in_explorer)) {
                         uriHandler.openUri(com.kachat.app.models.KaspaExplorer.default.txUrl(message.txId))
                         showMenu = false
                     }
@@ -1030,15 +1117,25 @@ private fun GroupMessageBubble(
                             showMenu = false
                         }
                     }
+                    if (onSelect != null) {
+                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                        PopupMenuRow(Icons.Default.CheckCircle, "Select") {
+                            onSelect()
+                            showMenu = false
+                        }
+                    }
                 }
             }
 
             if (showQuickReactionBar) {
+                val settingsViewModel: com.kachat.app.viewmodels.SettingsViewModel = hiltViewModel()
+                val quickReactionEmojis by settingsViewModel.quickReactionEmojis.collectAsState()
                 QuickReactionBar(
                     onDismissRequest = { showQuickReactionBar = false },
                     anchor = menuAnchor,
                     onReact = onReact,
-                    onReply = onReply
+                    onReply = onReply,
+                    emojis = quickReactionEmojis
                 )
             }
 

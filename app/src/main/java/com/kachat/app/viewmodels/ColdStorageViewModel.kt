@@ -230,11 +230,26 @@ class ColdStorageViewModel @Inject constructor(
     private val _isLoadingTxHistory = MutableStateFlow(false)
     val isLoadingTxHistory: StateFlow<Boolean> = _isLoadingTxHistory.asStateFlow()
 
+    // In-memory, per-address caches so re-visiting the same address's tx-history screen shows
+    // what was already fetched instantly instead of a blank blocking spinner every single time -
+    // the real gap this screen had vs. Kaspium's persistent-cache approach (a full local DB is
+    // overkill for a watch-only REST screen, but "don't re-blank on every visit" isn't). Each
+    // `load*` call serves the cached value immediately (if any) while still kicking off a fresh
+    // fetch in the background to keep it current - stale-while-revalidate, not stale-forever.
+    private val txHistoryCache = mutableMapOf<String, List<ColdStorageAddressDiscovery.AddressTransaction>>()
+    private val utxoCache = mutableMapOf<String, List<ColdStorageAddressDiscovery.AddressUtxo>>()
+
     fun loadTxHistory(address: String) {
+        val cached = txHistoryCache[address]
+        if (cached != null) {
+            _txHistory.value = cached
+        }
         viewModelScope.launch {
-            _isLoadingTxHistory.value = true
+            if (cached == null) _isLoadingTxHistory.value = true
             try {
-                _txHistory.value = addressDiscovery.getTransactionHistory(address)
+                val fresh = addressDiscovery.getTransactionHistory(address)
+                txHistoryCache[address] = fresh
+                _txHistory.value = fresh
             } finally {
                 _isLoadingTxHistory.value = false
             }
@@ -248,10 +263,16 @@ class ColdStorageViewModel @Inject constructor(
     val isLoadingUtxos: StateFlow<Boolean> = _isLoadingUtxos.asStateFlow()
 
     fun loadUtxos(address: String) {
+        val cached = utxoCache[address]
+        if (cached != null) {
+            _utxos.value = cached
+        }
         viewModelScope.launch {
-            _isLoadingUtxos.value = true
+            if (cached == null) _isLoadingUtxos.value = true
             try {
-                _utxos.value = addressDiscovery.getUtxos(address)
+                val fresh = addressDiscovery.getUtxos(address)
+                utxoCache[address] = fresh
+                _utxos.value = fresh
             } finally {
                 _isLoadingUtxos.value = false
             }

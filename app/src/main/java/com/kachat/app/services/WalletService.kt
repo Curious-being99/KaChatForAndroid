@@ -308,9 +308,13 @@ class WalletService @Inject constructor(
                 )
         )
 
-        // So the sender also sees a "Request to communicate" bubble in their own
-        // thread, matching the real reference apps — previously only the recipient
-        // ever got a local record of the handshake.
+        // So the sender also sees a bubble for their own handshake in their own thread,
+        // matching the real reference apps — previously only the recipient ever got a local
+        // record of the handshake. A response (accepting an incoming request) reads as
+        // "[Handshake completed]" instead of the generic outreach text, since by definition
+        // accepting means the connection is now live, not still pending - matches the
+        // "🤝 Handshake completed" pill already shown for the other side of a completed
+        // handshake (see MessageBubble's `showCompleted`/`pillText`).
         chatRepository.insertMessage(
             MessageEntity(
                 id = txId,
@@ -318,7 +322,7 @@ class WalletService @Inject constructor(
                 walletAddress = walletManager.getAddress(),
                 type = MessageProtocol.TYPE_HANDSHAKE,
                 direction = "sent",
-                plaintextBody = "[Request to communicate]",
+                plaintextBody = if (isResponse) "[Handshake completed]" else "[Request to communicate]",
                 encryptedPayload = payloadBytes.toHexString(),
                 amountSompi = HANDSHAKE_AMOUNT_SOMPI,
                 blockTimestamp = System.currentTimeMillis()

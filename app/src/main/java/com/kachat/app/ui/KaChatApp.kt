@@ -742,6 +742,12 @@ fun MainShell(
                 )
             }
 
+            composable("quick_reaction_settings") {
+                QuickReactionSettingsScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
             composable("hidden_broadcast_users") {
                 HiddenBroadcastUsersScreen(
                     onBack = { navController.popBackStack() }
@@ -797,7 +803,7 @@ fun MainShell(
 
             composable("group_chat/{groupId}") { backStackEntry ->
                 val groupId = backStackEntry.arguments?.getString("groupId") ?: return@composable
-                GroupChatThreadScreen(navController = navController, groupId = groupId, chatViewModel = chatViewModel)
+                GroupChatThreadScreen(navController = navController, groupId = groupId, chatViewModel = chatViewModel, walletViewModel = walletViewModel)
             }
 
             composable("group_chat_info/{groupId}") { backStackEntry ->
@@ -818,6 +824,7 @@ fun MainShell(
                     navController = navController,
                     contactId = contactId,
                     chatViewModel = chatViewModel,
+                    walletViewModel = walletViewModel,
                     startInPaymentMode = startInPaymentMode
                 )
             }

@@ -444,6 +444,16 @@ class ChatViewModel @Inject constructor(
         .map { contacts -> contacts.mapNotNull { c -> c.alias?.takeIf { it.isNotBlank() }?.let { c.id to it } }.toMap() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /** contactId -> that conversation's newest reaction, for the chat list's "Reacted to your/
+     *  their message" preview when it's more recent than the last real message - a separate flow
+     *  (not folded into [Conversation]) since reactions never become messages, mirroring how
+     *  [contactAvatarsByAddress]/[contactAliasesByAddress] are already kept alongside
+     *  [conversations] rather than inside it. */
+    val latestReactionByContact: StateFlow<Map<String, com.kachat.app.services.database.LatestReactionRow>> =
+        chatRepository.getLatestReactions()
+            .map { rows -> rows.associateBy { it.contactId } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     /**
      * Fetches KNS name + avatar for every member of a group - group rosters cache a `displayName`
      * snapshot taken at add/join time (`GroupMember.displayName`), which never reflects a KNS name
@@ -488,6 +498,13 @@ class ChatViewModel @Inject constructor(
     /** Multi-select bulk delete — mirrors markContactsAsRead/markContactsAsUnread's Collection shape. */
     fun deleteChats(contactIds: Collection<String>) {
         viewModelScope.launch { contactIds.forEach { chatRepository.deleteChat(it) } }
+    }
+
+    /** Deletes individual messages from this device only - local-only, never on-chain (the
+     *  recipient still has their own copy, and the underlying transaction is still permanently on
+     *  the blockchain). Used by ChatThreadScreen's message multi-select "Delete". */
+    fun deleteMessages(messageIds: Collection<String>) {
+        viewModelScope.launch { messageIds.forEach { chatRepository.deleteMessage(it) } }
     }
 
     /** Sends a real reciprocal handshake and activates the conversation. */
@@ -549,6 +566,12 @@ class ChatViewModel @Inject constructor(
             _isRefreshing.value = true
             try {
                 chatRepository.syncMessages()
+                // Group invites (gctl_root) otherwise only surface via the 15-min SyncWorker
+                // periodic job or the live block-scan - neither fires reliably for "just got
+                // invited, opened the app to check", unlike 1:1's syncMessages() above which
+                // already had this same on-demand path. Mirrors iOS's performCatchUpSync(),
+                // which always includes its group-control catch-up too.
+                groupRepository.syncGroups()
                 walletService.refreshBalance()
             } catch (e: Exception) {
                 Log.e("ChatViewModel", "Error refreshing chats", e)
@@ -1073,6 +1096,15 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             groupIds.forEach { groupRepository.deleteGroup(it) }
         }
+    }
+
+    /** Deletes individual messages from a group, this device only - local-only, never on-chain.
+     *  Used by GroupChatThreadScreen's message multi-select "Delete". [groupId] isn't needed by
+     *  the delete itself (txId + wallet address alone identify a group message row) but is kept
+     *  in the signature to mirror deleteMessages(contactId:)'s 1:1 shape and leave room for a
+     *  future per-group scoping need without another signature change. */
+    fun deleteGroupMessages(groupId: String, messageIds: Collection<String>) {
+        viewModelScope.launch { groupRepository.deleteMessages(messageIds) }
     }
 
     fun renameGroup(groupId: String, newName: String, onError: (String) -> Unit = {}) {

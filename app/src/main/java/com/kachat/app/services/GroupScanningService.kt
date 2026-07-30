@@ -29,10 +29,11 @@ private fun hexPrefix(prefix: String): String = prefix.toByteArray(Charsets.US_A
 
 /**
  * Block-scan discovery for group chat's two on-chain payload types (`gcomm`/`gctl`) - mirrors
- * [BroadcastScanningService]'s subscription pattern, since there's no per-address indexer lookup
- * for either yet (group-chat indexer support is deferred - see the plan's Phase 4; the
- * protocol's own receive algorithm today is "scan and match candidate blinded ids/decryption",
- * not a targeted query).
+ * [BroadcastScanningService]'s subscription pattern. This is the real-time path; indexer catch-up
+ * (`GroupRepository.syncGroups()` -> `/group-control/by-recipient`, `/group-messages/by-blinded-group-id`)
+ * covers the gap for anything mined while the app wasn't alive to see it live - see `syncGroups()`'s
+ * own doc comment, and its call sites in `ChatViewModel.refreshChats()` and `KaChatApplication`'s
+ * app-foreground observer.
  *
  * Runs whenever a wallet is active - NOT gated on already having a joined group. A `gctl_root`
  * direct-add (from [GroupRepository.createGroup]/`addMember` on the *admin's* device) is a push

@@ -97,6 +97,8 @@ fun ChatsScreen(
     val hiddenTabs by walletViewModel.hiddenTabs.collectAsState()
     val conversations by chatViewModel.conversations.collectAsState()
     val groupConversations by chatViewModel.groupConversations.collectAsState()
+    val latestReactionByContact by chatViewModel.latestReactionByContact.collectAsState()
+    val myAddress by walletViewModel.address.collectAsState()
     val isRefreshing by chatViewModel.isRefreshing.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -160,6 +162,16 @@ fun ChatsScreen(
     // until something explicitly asks the network for the current balance again.
     LaunchedEffect(Unit) {
         walletViewModel.refreshBalance()
+    }
+
+    // Warms walletViewModel.knsProfile (my own avatar/domain) so it's already populated by the
+    // time a chat or group chat thread is opened - those screens read it via the SAME shared
+    // walletViewModel instance (passed down from MainShell) but never trigger this refresh
+    // themselves, so without this, "my avatar" in a chat's own-message bubble stayed null on
+    // every single visit until the user happened to open Manage Addresses/KNS Domains/Edit
+    // Profile first.
+    LaunchedEffect(Unit) {
+        walletViewModel.refreshOwnedDomains()
     }
 
     // Auto-rename any chat to their KNS domain if they have one, every time the chat
@@ -535,7 +547,7 @@ fun ChatsScreen(
                                     )
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    ConversationRow(convo) {
+                                    ConversationRow(convo, latestReactionByContact[convo.contact.id], myAddress) {
                                         if (isSelectionMode) {
                                             selectedContactIds = if (convo.contact.id in selectedContactIds) {
                                                 selectedContactIds - convo.contact.id
@@ -655,19 +667,25 @@ fun ChatsScreen(
     }
 }
 
-/** Small unread-count badge for the Chats/Group Chats tab labels - hidden entirely when count is 0. */
+/** Small unread-count badge for the Chats/Group Chats tab labels - hidden entirely when count is 0.
+ *  An inline pill next to the label (matching iOS's `chatsTabButton`) rather than `BadgedBox`'s
+ *  corner-overlay style, which sat right on top of the label's last letter since Text has no
+ *  built-in padding for a badge to offset into. */
 @Composable
 private fun TabBadge(count: Int, content: @Composable () -> Unit) {
-    BadgedBox(
-        badge = {
-            if (count > 0) {
-                Badge(containerColor = Color(0xFFFF3B30)) {
-                    Text(if (count > 99) "99+" else count.toString())
-                }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        content()
+        if (count > 0) {
+            Surface(color = Color(0xFFFF3B30), shape = RoundedCornerShape(50)) {
+                Text(
+                    if (count > 99) "99+" else count.toString(),
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
             }
         }
-    ) {
-        content()
     }
 }
 
@@ -1091,7 +1109,12 @@ fun SwipeActionRow(
 }
 
 @Composable
-private fun ConversationRow(convo: Conversation, onClick: () -> Unit) {
+private fun ConversationRow(
+    convo: Conversation,
+    latestReaction: com.kachat.app.services.database.LatestReactionRow?,
+    myAddress: String?,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1115,8 +1138,26 @@ private fun ConversationRow(convo: Conversation, onClick: () -> Unit) {
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold
             )
+            // A reaction more recent than the last message gets shown instead - reactions never
+            // become messages (they're applied as a corner pill), so without this the preview
+            // would silently show a stale last message even when the truly most recent activity
+            // was someone reacting to something older.
+            val reactionPreview = latestReaction?.let { reaction ->
+                if (convo.lastMessage != null && convo.lastMessage.blockTimestamp >= reaction.blockTimestamp) {
+                    return@let null
+                }
+                val reactedByMe = reaction.reactorAddress == myAddress
+                val targetIsMine = reaction.targetDirection == "sent"
+                when {
+                    reactedByMe && targetIsMine -> "You reacted to your message"
+                    reactedByMe -> "You reacted to their message"
+                    targetIsMine -> "Reacted to your message"
+                    else -> "Reacted to their message"
+                }
+            }
             Text(
                 text = when {
+                    reactionPreview != null -> reactionPreview
                     convo.contact.conversationStatus == "pending" -> "🤝 ${messagePreviewText(convo.lastMessage, contactLabel) ?: "Wants to connect"}"
                     else -> messagePreviewText(convo.lastMessage, contactLabel) ?: "No messages yet"
                 },

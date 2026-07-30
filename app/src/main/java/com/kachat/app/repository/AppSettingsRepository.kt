@@ -26,6 +26,9 @@ class AppSettingsRepository @Inject constructor(
 ) {
 
     companion object {
+        // Matches Screens.kt's QUICK_REACTION_EMOJIS / iOS's AppSettings.defaultQuickReactionEmojis.
+        val DEFAULT_QUICK_REACTION_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+
         // Network
         val KEY_NETWORK          = stringPreferencesKey("network")           // "mainnet" | "testnet"
         val KEY_INDEXER_URL      = stringPreferencesKey("indexer_url")
@@ -92,6 +95,10 @@ class AppSettingsRepository @Inject constructor(
         val KEY_AUTOCREATE_SYSTEM_CONTACTS = booleanPreferencesKey("autocreate_system_contacts")
 
         val KEY_SHOW_FEE_ESTIMATE = booleanPreferencesKey("show_fee_estimate")
+
+        // Customizable double-tap quick-reaction set - see QUICK_REACTION_EMOJIS's default and
+        // QuickReactionBar (Screens.kt) / QuickReactionBarView (iOS) for where this is read.
+        val KEY_QUICK_REACTION_EMOJIS = stringPreferencesKey("quick_reaction_emojis")
 
         // A single in-flight KNS commit awaiting its reveal — see PendingKnsCommit.
         val KEY_PENDING_KNS_COMMIT = stringPreferencesKey("pending_kns_commit")
@@ -249,6 +256,20 @@ class AppSettingsRepository @Inject constructor(
         it[KEY_SHOW_FEE_ESTIMATE] ?: true
     }
 
+    /** Falls back to [DEFAULT_QUICK_REACTION_EMOJIS] (matches the default in `Screens.kt`'s
+     *  `QUICK_REACTION_EMOJIS` / iOS's `AppSettings.defaultQuickReactionEmojis`) if never
+     *  customized, or if a stored value somehow isn't exactly 6 entries. */
+    val quickReactionEmojis: Flow<List<String>> = dataStore.data.map { prefs ->
+        val stored = prefs[KEY_QUICK_REACTION_EMOJIS]?.let { json ->
+            try {
+                Gson().fromJson(json, Array<String>::class.java).toList()
+            } catch (e: Exception) {
+                null
+            }
+        }
+        stored?.takeIf { it.size == 6 } ?: DEFAULT_QUICK_REACTION_EMOJIS
+    }
+
     val groupHiddenMembers: Flow<Set<String>> = dataStore.data.map { it[KEY_GROUP_HIDDEN_MEMBERS] ?: emptySet() }
     val groupMutedMembers: Flow<Set<String>> = dataStore.data.map { it[KEY_GROUP_MUTED_MEMBERS] ?: emptySet() }
     val groupMentionsOnly: Flow<Set<String>> = dataStore.data.map { it[KEY_GROUP_MENTIONS_ONLY] ?: emptySet() }
@@ -381,6 +402,7 @@ class AppSettingsRepository @Inject constructor(
     suspend fun setSwapDisclaimerAgreed(value: Boolean) = dataStore.edit { it[KEY_SWAP_DISCLAIMER_AGREED] = value }
     suspend fun setNotificationsEnabled(value: Boolean) = dataStore.edit { it[KEY_NOTIFICATIONS_ENABLED] = value }
     suspend fun setShowFeeEstimate(value: Boolean) = dataStore.edit { it[KEY_SHOW_FEE_ESTIMATE] = value }
+    suspend fun setQuickReactionEmojis(value: List<String>) = dataStore.edit { it[KEY_QUICK_REACTION_EMOJIS] = Gson().toJson(value) }
     suspend fun setNotificationSoundEnabled(value: Boolean) = dataStore.edit { it[KEY_NOTIFICATION_SOUND] = value }
     suspend fun setNotificationVibrationEnabled(value: Boolean) = dataStore.edit { it[KEY_NOTIFICATION_VIBRATION] = value }
     suspend fun setSyncSystemContactsEnabled(value: Boolean) = dataStore.edit { it[KEY_SYNC_SYSTEM_CONTACTS] = value }

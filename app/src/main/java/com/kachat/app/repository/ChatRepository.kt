@@ -111,6 +111,13 @@ class ChatRepository @Inject constructor(
         return scopedToActiveAccount({ address -> database.messageDao().getUnreadCounts(address) }, emptyList())
     }
 
+    /** One row per contact - their newest reaction across every message in that conversation,
+     *  joined to the target message's direction. Backs the chat list's "Reacted to your/their
+     *  message" preview. */
+    fun getLatestReactions(): Flow<List<com.kachat.app.services.database.LatestReactionRow>> {
+        return scopedToActiveAccount({ address -> database.reactionDao().getLatestReactionPerContact(address) }, emptyList())
+    }
+
     suspend fun markAsRead(contactId: String) {
         database.messageDao().markAllAsRead(contactId, walletManager.getAddress())
     }
@@ -382,14 +389,14 @@ class ChatRepository @Inject constructor(
                 walletAddress = myAddress,
                 type = MessageProtocol.TYPE_HANDSHAKE,
                 direction = "received",
-                plaintextBody = theirAlias?.let { "$it wants to connect" } ?: "Wants to connect",
+                plaintextBody = "${theirAlias ?: com.kachat.app.util.KaspaAddress.shortDisplay(handshake.sender)} wants to connect",
                 encryptedPayload = handshake.messagePayload,
                 amountSompi = null,
                 blockTimestamp = handshake.blockTime
             )
         )
 
-        val displayName = theirAlias ?: handshake.sender.takeLast(8)
+        val displayName = theirAlias ?: com.kachat.app.util.KaspaAddress.shortDisplay(handshake.sender)
         notificationHelper.show(
             contactId = handshake.sender,
             title = if (newStatus == "pending") "Request to communicate" else "Connected",
@@ -489,10 +496,12 @@ class ChatRepository @Inject constructor(
         )
 
         val replyContent = MessageReply.parseOrNull(plaintext)
+        // Title above is already the contact's name, so these don't repeat it - matches iOS's
+        // ChatService.formatNotificationBody wording exactly.
         val notificationText = when {
             replyContent != null -> "Replied to \"${replyContent.replyToPreview}\""
-            VoiceMessage.parseOrNull(plaintext) != null -> "🎤 Audio message"
-            ImageMessage.parseOrNull(plaintext) != null -> "📷 Photo"
+            VoiceMessage.parseOrNull(plaintext) != null -> "Sent a voice message"
+            ImageMessage.parseOrNull(plaintext) != null -> "Sent a photo"
             com.kachat.app.util.ChessMessage.parseOrNull(plaintext) != null -> "♟️ Chess game"
             else -> plaintext
         }

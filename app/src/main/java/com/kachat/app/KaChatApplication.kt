@@ -7,15 +7,19 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.kachat.app.repository.GroupRepository
 import com.kachat.app.services.BroadcastScanningService
 import com.kachat.app.services.GroupScanningService
 import com.kachat.app.services.SyncForegroundService
 import com.kachat.app.services.SyncWorker
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -42,6 +46,9 @@ class KaChatApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var nodePoolManager: com.kachat.app.services.NodePoolManager
+
+    @Inject
+    lateinit var groupRepository: GroupRepository
 
     @Inject
     lateinit var hiltWorkerFactory: HiltWorkerFactory
@@ -91,6 +98,14 @@ class KaChatApplication : Application(), Configuration.Provider {
                 // suspended along with the rest of the app) - reconnect any that are dead right
                 // now instead of waiting for the next 5-30s probe cycle to notice and replace them.
                 nodePoolManager.reconnectStaleConnections()
+                // Group invites (gctl_root) otherwise only surface via the 15-min SyncWorker
+                // periodic job or the live block-scan - unlike 1:1 chat, which has its own
+                // always-running poll loop, groups had no on-foreground catch-up at all, so a
+                // brand-new invite could sit unseen well past 15 minutes. Mirrors iOS's
+                // performCatchUpSync() on app foreground (KaChatApp.swift).
+                owner.lifecycleScope.launch(Dispatchers.IO) {
+                    groupRepository.syncGroups()
+                }
             }
         })
     }

@@ -7,6 +7,19 @@ import androidx.room.Query
 import com.kachat.app.models.ReactionEntity
 import kotlinx.coroutines.flow.Flow
 
+/** One contact's newest reaction across every message in that conversation, joined against the
+ *  target message's `direction` - backs the chat list's "Reacted to your/their message" preview,
+ *  which otherwise has no visibility into reactions at all (they're applied as a corner pill,
+ *  never inserted as a message). `targetDirection` is null if the reacted-to message can't be
+ *  found (e.g. pruned by message retention while the reaction row was kept). */
+data class LatestReactionRow(
+    val contactId: String,
+    val emoji: String,
+    val reactorAddress: String,
+    val blockTimestamp: Long,
+    val targetDirection: String?
+)
+
 @Dao
 interface ReactionDao {
 
@@ -19,6 +32,25 @@ interface ReactionDao {
 
     @Query("SELECT * FROM reactions WHERE walletAddress = :walletAddress AND contactId = :contactId")
     fun getReactionsForContact(contactId: String, walletAddress: String): Flow<List<ReactionEntity>>
+
+    /** One row per contactId (1:1 only - `contactId IS NOT NULL` excludes group reactions) -
+     *  whichever reaction has the most recent blockTimestamp, joined to the target message's
+     *  direction. Mirrors [MessageDao.getLatestMessagePerContact]'s exact "max blockTimestamp
+     *  grouped by contact" shape. */
+    @Query(
+        """
+        SELECT r.contactId AS contactId, r.emoji AS emoji, r.reactorAddress AS reactorAddress,
+               r.blockTimestamp AS blockTimestamp, m.direction AS targetDirection
+        FROM reactions r
+        LEFT JOIN messages m ON m.id = r.targetTxId AND m.walletAddress = r.walletAddress
+        WHERE r.walletAddress = :walletAddress AND r.contactId IS NOT NULL AND r.blockTimestamp IN (
+            SELECT MAX(blockTimestamp) FROM reactions
+            WHERE walletAddress = :walletAddress AND contactId IS NOT NULL
+            GROUP BY contactId
+        )
+        """
+    )
+    fun getLatestReactionPerContact(walletAddress: String): Flow<List<LatestReactionRow>>
 
     @Query("SELECT * FROM reactions WHERE walletAddress = :walletAddress AND groupId = :groupId")
     fun getReactionsForGroup(groupId: String, walletAddress: String): Flow<List<ReactionEntity>>

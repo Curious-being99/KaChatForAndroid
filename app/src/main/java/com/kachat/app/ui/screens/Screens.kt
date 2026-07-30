@@ -193,6 +193,11 @@ fun ChatThreadScreen(
     var paymentMode by remember { mutableStateOf(startInPaymentMode) }
     var showComposerMenu by remember { mutableStateOf(false) }
     var composerMenuAnchor by remember { mutableStateOf(Offset.Zero) }
+    // Local-only multi-select for deleting individual messages (never the whole chat - see
+    // ChatsScreen's own delete for that) - toggled from the top bar's "Select" action.
+    var isSelectingMessages by remember { mutableStateOf(false) }
+    var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showDeleteMessagesConfirmation by remember { mutableStateOf(false) }
     var showFeeEditor by remember { mutableStateOf(false) }
     var feeEditorInput by remember { mutableStateOf("") }
     // The live fee preview already reflects whatever's currently being composed (text/photo/voice/
@@ -247,6 +252,14 @@ fun ChatThreadScreen(
 
     LaunchedEffect(contactId) {
         chatViewModel.markAsRead(contactId)
+    }
+
+    // Keeps this contact's `knsAvatarUrl` (read by `contactAvatarUrl` below) current - it's
+    // otherwise only ever refreshed from ChatInfoScreen, so a contact whose Chat Info was never
+    // opened would never get their real KNS avatar here, even mid-conversation. Matches iOS's
+    // fetchKNSDomainsForAllContacts, which keeps the avatar cache warm unconditionally.
+    LaunchedEffect(contactId) {
+        chatViewModel.refreshKnsProfile(contactId)
     }
 
     DisposableEffect(contactId) {
@@ -322,7 +335,22 @@ fun ChatThreadScreen(
                     }
                 },
                 actions = {
-                    if (activeChessGame != null) {
+                    if (isSelectingMessages) {
+                        TextButton(onClick = {
+                            isSelectingMessages = false
+                            selectedMessageIds = emptySet()
+                        }) {
+                            Text("Cancel", color = KaspaTeal)
+                        }
+                        IconButton(
+                            onClick = { showDeleteMessagesConfirmation = true },
+                            enabled = selectedMessageIds.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.Delete, stringResource(R.string.delete), tint = Color(0xFFFF3B30))
+                        }
+                    } else if (activeChessGame != null) {
+                        // Entry point into select mode is a message's long-press "Select" menu
+                        // item, not a toolbar button - this only shows the chess shortcut now.
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -332,7 +360,6 @@ fun ChatThreadScreen(
                         ) {
                             Icon(Icons.Default.Apps, stringResource(R.string.play_chess), tint = KaspaTeal, modifier = Modifier.size(18.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
@@ -941,47 +968,78 @@ fun ChatThreadScreen(
                                 chessSourceMessages
                             )
                         }
-                        MessageBubble(
-                            message = msg,
-                            chessSummary = chessSummaryForRow,
-                            isLatestChessMessage = isLatestChessForRow,
-                            onRespondToChessInvite = { accepted ->
-                                val gameId = chessEnvelopeForRow?.gameId
-                                if (gameId != null) {
-                                    chatViewModel.respondToChessInvite(contactId, gameId, accepted)
+                        Box {
+                            MessageBubble(
+                                message = msg,
+                                chessSummary = chessSummaryForRow,
+                                isLatestChessMessage = isLatestChessForRow,
+                                onRespondToChessInvite = { accepted ->
+                                    val gameId = chessEnvelopeForRow?.gameId
+                                    if (gameId != null) {
+                                        chatViewModel.respondToChessInvite(contactId, gameId, accepted)
+                                    }
+                                },
+                                onOpenChessGame = { gameId -> navController.navigate("chess_game/$contactId/$gameId") },
+                                contactAvatarUrl = conversation?.contact?.knsAvatarUrl,
+                                contactAvatarFallback = conversation?.contact?.alias ?: contactId.takeLast(8),
+                                myAvatarUrl = myKnsProfile?.avatarUrl,
+                                myAvatarFallback = myAddress?.takeLast(8) ?: "",
+                                isPendingRequest = msg.type == MessageProtocol.TYPE_HANDSHAKE &&
+                                    msg.direction == "received" &&
+                                    conversation?.contact?.conversationStatus == "pending",
+                                isHandshakeComplete = conversation?.contact?.conversationStatus == "active",
+                                onAccept = { chatViewModel.acceptHandshake(contactId) },
+                                onDecline = { chatViewModel.declineHandshake(contactId) },
+                                onRetry = { chatViewModel.retrySendMessage(msg) },
+                                onReply = { chatViewModel.startReplyTo(msg) },
+                                reactions = reactionsByTxId[msg.id] ?: emptyList(),
+                                onReact = { emoji ->
+                                    val existing = reactionsByTxId[msg.id]?.find { it.reactorAddress == myAddress }
+                                    val action = if (existing?.emoji == emoji) "remove" else "add"
+                                    chatViewModel.sendReaction(contactId, msg.id, emoji, action)
+                                },
+                                onSavePhoto = savePhotoIfPermitted,
+                                revealOffsetPx = revealOffsetPx,
+                                maxRevealOffsetPx = maxRevealOffsetPx,
+                                photosBlocked = !com.kachat.app.repository.ChatRepository.shouldAutoDisplayPhotos(
+                                    conversation?.contact
+                                ),
+                                isPhotoRevealed = msg.id in revealedPhotoTxIds,
+                                onRevealPhoto = { chatViewModel.revealPhoto(msg.id) },
+                                kaspaExplorer = kaspaExplorer,
+                                onJumpToReply = jumpToReply,
+                                isHighlighted = msg.id == highlightedMessageId,
+                                onSelect = {
+                                    isSelectingMessages = true
+                                    selectedMessageIds = selectedMessageIds + msg.id
                                 }
-                            },
-                            onOpenChessGame = { gameId -> navController.navigate("chess_game/$contactId/$gameId") },
-                            contactAvatarUrl = conversation?.contact?.knsAvatarUrl,
-                            contactAvatarFallback = conversation?.contact?.alias ?: contactId.takeLast(8),
-                            myAvatarUrl = myKnsProfile?.avatarUrl,
-                            myAvatarFallback = myAddress?.takeLast(8) ?: "",
-                            isPendingRequest = msg.type == MessageProtocol.TYPE_HANDSHAKE &&
-                                msg.direction == "received" &&
-                                conversation?.contact?.conversationStatus == "pending",
-                            isHandshakeComplete = conversation?.contact?.conversationStatus == "active",
-                            onAccept = { chatViewModel.acceptHandshake(contactId) },
-                            onDecline = { chatViewModel.declineHandshake(contactId) },
-                            onRetry = { chatViewModel.retrySendMessage(msg) },
-                            onReply = { chatViewModel.startReplyTo(msg) },
-                            reactions = reactionsByTxId[msg.id] ?: emptyList(),
-                            onReact = { emoji ->
-                                val existing = reactionsByTxId[msg.id]?.find { it.reactorAddress == myAddress }
-                                val action = if (existing?.emoji == emoji) "remove" else "add"
-                                chatViewModel.sendReaction(contactId, msg.id, emoji, action)
-                            },
-                            onSavePhoto = savePhotoIfPermitted,
-                            revealOffsetPx = revealOffsetPx,
-                            maxRevealOffsetPx = maxRevealOffsetPx,
-                            photosBlocked = !com.kachat.app.repository.ChatRepository.shouldAutoDisplayPhotos(
-                                conversation?.contact
-                            ),
-                            isPhotoRevealed = msg.id in revealedPhotoTxIds,
-                            onRevealPhoto = { chatViewModel.revealPhoto(msg.id) },
-                            kaspaExplorer = kaspaExplorer,
-                            onJumpToReply = jumpToReply,
-                            isHighlighted = msg.id == highlightedMessageId
-                        )
+                            )
+                            // Selection-mode tap catcher - sits on top (Box's later children draw
+                            // over earlier ones, and Compose dispatches touches to the topmost
+                            // hit-testable composable), so it intercepts taps instead of the
+                            // bubble's own gestures (links, double-tap-to-react, long-press menu)
+                            // while selecting.
+                            if (isSelectingMessages) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable {
+                                            selectedMessageIds = if (msg.id in selectedMessageIds) {
+                                                selectedMessageIds - msg.id
+                                            } else {
+                                                selectedMessageIds + msg.id
+                                            }
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = if (msg.id in selectedMessageIds) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                        contentDescription = null,
+                                        tint = if (msg.id in selectedMessageIds) KaspaTeal else Color.Gray
+                                    )
+                                }
+                            }
+                        }
                     }
                     if (ChatViewModel.shouldShowUnnotifiedWarning(messages)) {
                         item { UnnotifiedMessageBanner() }
@@ -1069,6 +1127,40 @@ fun ChatThreadScreen(
             }
         )
     }
+
+    if (showDeleteMessagesConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteMessagesConfirmation = false },
+            containerColor = LocalAppColors.current.surface,
+            title = {
+                Text(
+                    "Delete ${selectedMessageIds.size} Message${if (selectedMessageIds.size == 1) "" else "s"}?",
+                    color = LocalAppColors.current.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    "This only deletes the message from this device - the recipient still has their own copy, and the encrypted transaction remains permanently on the Kaspa blockchain, visible to anyone but unreadable without your keys. This cannot be undone.",
+                    color = LocalAppColors.current.textSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    chatViewModel.deleteMessages(selectedMessageIds)
+                    showDeleteMessagesConfirmation = false
+                    isSelectingMessages = false
+                    selectedMessageIds = emptySet()
+                }) {
+                    Text("Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessagesConfirmation = false }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1138,7 +1230,11 @@ fun MessageBubble(
      *  ChessGameEngine.isLatestChessMessage. */
     isLatestChessMessage: Boolean = false,
     onRespondToChessInvite: (Boolean) -> Unit = {},
-    onOpenChessGame: (String) -> Unit = {}
+    onOpenChessGame: (String) -> Unit = {},
+    /** Enters the chat's message multi-select mode with this message pre-selected - null disables
+     *  the "Select" long-press menu option entirely (matches onReply's always-present convention,
+     *  just optional since not every caller of this composable is inside a selectable chat thread). */
+    onSelect: (() -> Unit)? = null
 ) {
     val isSent = message.direction == "sent"
     var showMenu by remember { mutableStateOf(false) }
@@ -1308,13 +1404,14 @@ fun MessageBubble(
                     )
                 }
             } else if (message.type == MessageProtocol.TYPE_HANDSHAKE) {
-                // Matches the iOS bubble for any handshake message once it's not the
-                // pending accept/decline card anymore (sent, or an already-accepted
-                // received one) — a small pill above a "[Request to communicate]" bubble.
-                // A message I sent is always framed as my outreach/response and never
-                // changes. Their message only flips to "completed" once the connection
-                // is actually live — i.e. once I've received their side of it.
-                val showCompleted = !isSent && isHandshakeComplete
+                // A message I sent is either my initial outreach ("Request to communicate",
+                // frozen as-is - it stays a historical record of what I sent, doesn't
+                // retroactively change) or my *response* accepting an incoming request, which
+                // is inherently already complete the moment it's sent - WalletService.sendHandshake
+                // stores that distinction in plaintextBody itself (see its isResponse branch).
+                // Their message only flips to "completed" once the connection is actually live —
+                // i.e. once I've received their side of it (isHandshakeComplete).
+                val showCompleted = if (isSent) message.plaintextBody == "[Handshake completed]" else isHandshakeComplete
                 val pillText = if (showCompleted) "🤝 Handshake completed" else "👋 Request to communicate"
                 val bodyText = if (showCompleted) "[Handshake completed]" else "[Request to communicate]"
                 Column(horizontalAlignment = if (isSent) Alignment.End else Alignment.Start) {
@@ -1423,7 +1520,8 @@ fun MessageBubble(
                         url = TextLinkify.findUrls(bodyText).first().uri,
                         txId = message.id,
                         kaspaExplorer = kaspaExplorer,
-                        fallbackText = bodyText
+                        fallbackText = bodyText,
+                        onSelect = onSelect
                     )
                 } else {
                     var textLayoutResult by remember(bodyText) { mutableStateOf<TextLayoutResult?>(null) }
@@ -1482,7 +1580,7 @@ fun MessageBubble(
                         showMenu = false
                     }
                     HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-                    PopupMenuRow(Icons.Default.Tag, stringResource(R.string.go_to_explorer)) {
+                    PopupMenuRow(Icons.Default.Public, stringResource(R.string.view_in_explorer)) {
                         uriHandler.openUri(kaspaExplorer.txUrl(message.id))
                         showMenu = false
                     }
@@ -1505,15 +1603,25 @@ fun MessageBubble(
                             showMenu = false
                         }
                     }
+                    if (onSelect != null) {
+                        HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                        PopupMenuRow(Icons.Default.CheckCircle, "Select") {
+                            onSelect()
+                            showMenu = false
+                        }
+                    }
                 }
             }
 
             if (showQuickReactionBar) {
+                val settingsViewModel: com.kachat.app.viewmodels.SettingsViewModel = hiltViewModel()
+                val quickReactionEmojis by settingsViewModel.quickReactionEmojis.collectAsState()
                 QuickReactionBar(
                     onDismissRequest = { showQuickReactionBar = false },
                     anchor = menuAnchor,
                     onReact = onReact,
-                    onReply = onReply
+                    onReply = onReply,
+                    emojis = quickReactionEmojis
                 )
             }
 
@@ -1532,7 +1640,7 @@ fun MessageBubble(
         // attaches to that Box) sizes against just the text bubble, not this taller card too -
         // matches iOS's identical placement outside its equivalent `Group`.
         separateLinkPreviewUrl?.let { url ->
-            LinkPreviewCard(url = url, txId = message.id, kaspaExplorer = kaspaExplorer)
+            LinkPreviewCard(url = url, txId = message.id, kaspaExplorer = kaspaExplorer, onSelect = onSelect)
         }
 
         if (isSent) {
@@ -5324,7 +5432,9 @@ private fun ManageAddressRow(
     }
 }
 
-/** Fixed tapback-style set, not a full emoji keyboard - keeps [QuickReactionBar] identical on iOS/Android. */
+/** Default tapback-style set, not a full emoji keyboard - user-customizable via Settings > Chats
+ *  > Quick Reactions (see [com.kachat.app.repository.AppSettingsRepository.quickReactionEmojis]),
+ *  this is just the fallback [QuickReactionBar] uses until then. */
 val QUICK_REACTION_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
 
 /**
@@ -5335,11 +5445,17 @@ val QUICK_REACTION_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "�
  * than [PopupMenuRow]s.
  */
 @Composable
-fun QuickReactionBar(onDismissRequest: () -> Unit, anchor: Offset, onReact: (String) -> Unit, onReply: () -> Unit) {
+fun QuickReactionBar(
+    onDismissRequest: () -> Unit,
+    anchor: Offset,
+    onReact: (String) -> Unit,
+    onReply: () -> Unit,
+    emojis: List<String> = QUICK_REACTION_EMOJIS
+) {
     CenteredOptionsMenu(onDismissRequest = onDismissRequest, anchor = anchor) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                QUICK_REACTION_EMOJIS.forEach { emoji ->
+                emojis.forEach { emoji ->
                     Text(
                         emoji,
                         fontSize = 26.sp,
@@ -6229,6 +6345,14 @@ fun SettingsScreen(
                     Icons.Default.NotificationsNone,
                     if (notificationsEnabled) "On" else "Off",
                     onClick = { navController.navigate("notification_settings") }
+                )
+                SettingsDivider()
+                val quickReactionEmojis by settingsViewModel.quickReactionEmojis.collectAsState()
+                SettingsNavigationItem(
+                    "Quick Reactions",
+                    Icons.Default.EmojiEmotions,
+                    quickReactionEmojis.joinToString(""),
+                    onClick = { navController.navigate("quick_reaction_settings") }
                 )
             }
 
@@ -7376,6 +7500,88 @@ fun PhotoQualitySettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel 
     }
 }
 
+/** Settings > Chats > Quick Reactions - lets the user replace any of the 6 emojis shown in the
+ *  double-tap [QuickReactionBar]. Each slot is a single-emoji text field, pre-selected on focus
+ *  so tapping the system keyboard's emoji key naturally replaces it rather than appending -
+ *  matches iOS's `QuickReactionEmojisSettingsView` (a grid picker there, since iOS's system
+ *  emoji keyboard isn't as immediately reachable as Android's dedicated emoji key). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickReactionSettingsScreen(onBack: () -> Unit, settingsViewModel: SettingsViewModel = hiltViewModel()) {
+    val emojis by settingsViewModel.quickReactionEmojis.collectAsState()
+    var editingSlotIndex by remember { mutableStateOf<Int?>(null) }
+
+    Scaffold(
+        containerColor = LocalAppColors.current.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Quick Reactions", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBackIos, null, tint = LocalAppColors.current.textPrimary, modifier = Modifier.size(20.dp))
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = LocalAppColors.current.background)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                "Tap a slot to replace it with a different emoji.",
+                color = LocalAppColors.current.textSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                emojis.forEachIndexed { index, emoji ->
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(LocalAppColors.current.surface)
+                            .clickable { editingSlotIndex = index },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // A plain Text sized to fill the box (rather than an OutlinedTextField,
+                        // which was clipping the emoji glyph - its decoration box's own internal
+                        // padding/min-line-height left too little room at 26sp) renders the full
+                        // glyph cleanly and doubles as this slot's tap target.
+                        Text(emoji, fontSize = 28.sp)
+                    }
+                }
+            }
+
+            TextButton(onClick = {
+                settingsViewModel.setQuickReactionEmojis(com.kachat.app.repository.AppSettingsRepository.DEFAULT_QUICK_REACTION_EMOJIS)
+            }) {
+                Text("Reset to Default", color = Color(0xFFFF3B30))
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+
+    val slotIndex = editingSlotIndex
+    if (slotIndex != null) {
+        EmojiPickerDialog(
+            onDismissRequest = { editingSlotIndex = null },
+            onSelect = { emoji ->
+                settingsViewModel.setQuickReactionEmojis(
+                    emojis.toMutableList().also { it[slotIndex] = emoji }
+                )
+            }
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KaspaExplorerSettingsScreen(onBack: () -> Unit, chatViewModel: ChatViewModel = hiltViewModel()) {
@@ -8184,7 +8390,13 @@ fun CreateChatScreen(
     }
 
     val canCreateGroup = groupName.trim().isNotEmpty() &&
-        groupAddressRows.filter { it.trimmedText.isNotEmpty() }.let { rows -> rows.isNotEmpty() && rows.all { it.isValid } }
+        groupAddressRows.filter { it.trimmedText.isNotEmpty() }.let { rows ->
+            if (rows.isEmpty() || !rows.all { it.isValid }) return@let false
+            // No two rows may resolve to the same address/KNS domain (same raw address typed
+            // twice, same domain typed twice, or two different domains owned by the same address).
+            val addresses = rows.mapNotNull { it.effectiveAddress?.lowercase() }
+            addresses.size == addresses.toSet().size
+        }
 
     Scaffold(
         containerColor = LocalAppColors.current.background,
@@ -8450,7 +8662,7 @@ fun CreateChatActionItem(icon: ImageVector, label: String, onClick: () -> Unit) 
     }
 }
 
-private const val MAX_GROUP_MEMBERS = 10
+private const val MAX_GROUP_MEMBERS = 50
 
 /** One row in the group-member address list - supports both a raw Kaspa address and a KNS domain, resolved the same way the single-contact flow's address field does. */
 data class GroupAddressRow(
@@ -8499,6 +8711,19 @@ fun GroupChatCreationFields(
     var editingRowId by remember { mutableStateOf(rows.firstOrNull()?.id) }
 
     fun isValidRow(row: GroupAddressRow): Boolean = row.isValid
+
+    // Lowercased effective addresses that appear more than once across all rows - catches the
+    // same raw address typed twice, the same KNS domain typed twice, and two different KNS
+    // domains that happen to resolve to the same owner address.
+    val duplicateAddresses = remember(rows) {
+        val addresses = rows.mapNotNull { it.effectiveAddress?.lowercase() }
+        val seen = mutableSetOf<String>()
+        val duplicates = mutableSetOf<String>()
+        for (address in addresses) {
+            if (!seen.add(address)) duplicates.add(address)
+        }
+        duplicates
+    }
 
     fun commitRow(id: String) {
         val row = rows.firstOrNull { it.id == id } ?: return
@@ -8642,6 +8867,11 @@ fun GroupChatCreationFields(
                             Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(row.knsError, color = Color(0xFFFF3B30), fontSize = 12.sp)
+                        }
+                        row.effectiveAddress?.lowercase()?.let { it in duplicateAddresses } == true -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFF3B30), modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Already added to this group", color = Color(0xFFFF3B30), fontSize = 12.sp)
                         }
                         row.looksLikeDomain && row.resolvedAddress != null -> Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CD964), modifier = Modifier.size(14.dp))

@@ -11,9 +11,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -66,7 +67,10 @@ fun LinkPreviewCard(
      *  if the fetch finds no preview data, so the message doesn't render as nothing at all. Null
      *  when used alongside a real text bubble, where showing nothing on failure is correct since
      *  the message's own text is already visible. Mirrors iOS's `LinkPreviewCardView.fallbackText`. */
-    fallbackText: String? = null
+    fallbackText: String? = null,
+    /** Enters the chat's message multi-select mode with this message pre-selected - null disables
+     *  the "Select" long-press menu option entirely. Mirrors [MessageBubble]'s onSelect. */
+    onSelect: (() -> Unit)? = null
 ) {
     var preview by remember(url) { mutableStateOf<LinkPreviewData?>(null) }
     var hasFinishedLoading by remember(url) { mutableStateOf(false) }
@@ -78,14 +82,14 @@ fun LinkPreviewCard(
     }
 
     if (hasFinishedLoading && preview != null) {
-        LinkPreviewCardContent(data = preview!!, url = url, txId = txId, kaspaExplorer = kaspaExplorer)
+        LinkPreviewCardContent(data = preview!!, url = url, txId = txId, kaspaExplorer = kaspaExplorer, onSelect = onSelect)
     } else if (hasFinishedLoading && fallbackText != null) {
-        LinkPreviewFallbackBubble(text = fallbackText, url = url, txId = txId, kaspaExplorer = kaspaExplorer)
+        LinkPreviewFallbackBubble(text = fallbackText, url = url, txId = txId, kaspaExplorer = kaspaExplorer, onSelect = onSelect)
     }
 }
 
 @Composable
-private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, kaspaExplorer: KaspaExplorer) {
+private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, kaspaExplorer: KaspaExplorer, onSelect: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     var showMenu by remember { mutableStateOf(false) }
@@ -117,16 +121,23 @@ private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, k
                 showMenu = false
             }
             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.Tag, "View in Explorer") {
+            PopupMenuRow(Icons.Default.Public, "View in Explorer") {
                 uriHandler.openUri(kaspaExplorer.txUrl(txId))
                 showMenu = false
+            }
+            if (onSelect != null) {
+                HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                PopupMenuRow(Icons.Default.CheckCircle, "Select") {
+                    onSelect()
+                    showMenu = false
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LinkPreviewCardContent(data: LinkPreviewData, url: String, txId: String, kaspaExplorer: KaspaExplorer) {
+private fun LinkPreviewCardContent(data: LinkPreviewData, url: String, txId: String, kaspaExplorer: KaspaExplorer, onSelect: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     val isVideoLink = remember(url) {
@@ -219,9 +230,16 @@ private fun LinkPreviewCardContent(data: LinkPreviewData, url: String, txId: Str
                 showMenu = false
             }
             HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
-            PopupMenuRow(Icons.Default.Tag, "View in Explorer") {
+            PopupMenuRow(Icons.Default.Public, "View in Explorer") {
                 uriHandler.openUri(kaspaExplorer.txUrl(txId))
                 showMenu = false
+            }
+            if (onSelect != null) {
+                HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.08f))
+                PopupMenuRow(Icons.Default.CheckCircle, "Select") {
+                    onSelect()
+                    showMenu = false
+                }
             }
         }
     }

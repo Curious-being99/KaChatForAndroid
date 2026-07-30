@@ -2,9 +2,6 @@ package com.kachat.app.services
 
 import android.util.Log
 import com.kachat.app.util.KaspaExtendedPublicKey
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import org.bitcoinj.crypto.DeterministicKey
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,35 +26,29 @@ class ColdStorageAddressDiscovery @Inject constructor(
     suspend fun discoverAddresses(
         rootKey: DeterministicKey,
         chain: Int = 0,
-        gapLimit: Int = 5,
-        batchSize: Int = 10
-    ): List<DiscoveredAddress> = coroutineScope {
-        networkService.kaspaRestApi.value ?: return@coroutineScope emptyList()
+        gapLimit: Int = 5
+    ): List<DiscoveredAddress> {
+        networkService.kaspaRestApi.value ?: return emptyList()
         val results = mutableListOf<DiscoveredAddress>()
         var consecutiveUnused = 0
         var index = 0
 
-        // Fetch a batch of addresses concurrently instead of one at a time - the gap-limit
-        // stopping condition only needs each batch's results in order, not a strictly one-by-one
-        // fetch, so this turns what was O(n) sequential network round trips into O(n / batchSize)
-        // sequential rounds. A wallet needing 15 addresses to satisfy the gap limit went from 15
-        // sequential round trips to 2 batches of 10 - the actual cause of Cold Storage's slow load.
-        outer@ while (consecutiveUnused < gapLimit) {
-            val batch = (index until index + batchSize).map { i ->
-                async { checkAddress(rootKey, chain, i) }
-            }
-            val batchResults = batch.awaitAll()
-
-            for (result in batchResults) {
-                if (result == null) break@outer
-                results.add(result)
-                consecutiveUnused = if (result.hasHistory || result.balanceSompi > 0) 0 else consecutiveUnused + 1
-                index++
-                if (consecutiveUnused >= gapLimit) break@outer
-            }
+        // Sequential, one address at a time - a prior attempt at concurrent/batched lookups here
+        // (firing several addresses' history+balance calls at once against the shared public REST
+        // API) made things *worse*, not faster: it had no rate-limit handling, so a burst of
+        // concurrent requests routinely got throttled/timed out, and - worse - a single failed
+        // lookup anywhere in a batch (via checkAddress returning null) aborted the entire scan
+        // early. One-at-a-time is slower per-request in isolation but finishes the whole scan
+        // faster and more reliably in practice. Matches iOS's WalletManager.discoverSpendingAddresses/
+        // ColdStorageManager.discoverAddresses, both deliberately sequential for the same reason.
+        while (consecutiveUnused < gapLimit) {
+            val result = checkAddress(rootKey, chain, index) ?: break
+            results.add(result)
+            consecutiveUnused = if (result.hasHistory || result.balanceSompi > 0) 0 else consecutiveUnused + 1
+            index++
         }
 
-        results
+        return results
     }
 
     /**
@@ -73,28 +64,18 @@ class ColdStorageAddressDiscovery @Inject constructor(
         } catch (e: Exception) {
             return null
         }
-        // History and balance are two independent single-address lookups — run them
-        // concurrently instead of one after the other, roughly halving this address's
-        // contribution to the overall (sequential, gap-limit-bounded) scan below.
-        return coroutineScope {
-            val historyDeferred = async {
-                try {
-                    api.getTransactions(address, limit = 1).isNotEmpty()
-                } catch (e: Exception) {
-                    Log.w("ColdStorageAddressDiscovery", "Lookup failed for index $index", e)
-                    null
-                }
-            }
-            val balanceDeferred = async {
-                try {
-                    api.getBalance(address).balance
-                } catch (e: Exception) {
-                    0L
-                }
-            }
-            val hasHistory = historyDeferred.await() ?: return@coroutineScope null
-            DiscoveredAddress(index, address, balanceDeferred.await(), hasHistory)
+        val hasHistory = try {
+            api.getTransactions(address, limit = 1).isNotEmpty()
+        } catch (e: Exception) {
+            Log.w("ColdStorageAddressDiscovery", "Lookup failed for index $index", e)
+            return null
         }
+        val balance = try {
+            api.getBalance(address).balance
+        } catch (e: Exception) {
+            0L
+        }
+        return DiscoveredAddress(index, address, balance, hasHistory)
     }
 
     data class AddressTransaction(
@@ -141,7 +122,10 @@ class ColdStorageAddressDiscovery @Inject constructor(
      */
     suspend fun getFullTransactionHistoryPaginated(
         address: String,
-        pageSize: Int = 50,
+        // Confirmed live against api.kaspa.org that limit=500 works fine in a single call
+        // (~0.7s) - cuts a full 500-tx history down to 1 round trip instead of 10 sequential
+        // limit=50 ones, without changing anything else about this loop's shape/correctness.
+        pageSize: Int = 500,
         maxTransactions: Int = 500
     ): List<AddressTransaction> {
         val api = networkService.kaspaRestApi.value ?: return emptyList()
