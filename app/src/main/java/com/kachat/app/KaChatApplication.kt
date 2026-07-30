@@ -104,7 +104,14 @@ class KaChatApplication : Application(), Configuration.Provider {
                 // brand-new invite could sit unseen well past 15 minutes. Mirrors iOS's
                 // performCatchUpSync() on app foreground (KaChatApp.swift).
                 owner.lifecycleScope.launch(Dispatchers.IO) {
-                    groupRepository.syncGroups()
+                    // Never let a foreground catch-up take down the app on launch — an uncaught
+                    // throw here (e.g. no active account yet on a cold start) would otherwise crash
+                    // the whole process. Same non-fatal treatment as the FGS start in onStop above.
+                    try {
+                        groupRepository.syncGroups()
+                    } catch (e: Exception) {
+                        android.util.Log.w("KaChatApplication", "Foreground group catch-up sync failed", e)
+                    }
                 }
             }
         })

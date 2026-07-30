@@ -694,7 +694,10 @@ class GroupRepository @Inject constructor(
      */
     suspend fun syncGroups() {
         val api = networkService.indexerApi.value ?: return
-        val walletAddress = walletManager.getAddress()
+        // On a cold foreground before the user has logged in/imported a wallet there's no active
+        // account yet, and getAddress() would throw IllegalStateException. Bail out the same way
+        // as the missing-api guard above rather than crashing the on-foreground catch-up.
+        val walletAddress = walletManager.getActiveAccount()?.address ?: return
 
         syncGroupControlByRecipient(api, walletAddress)
 
