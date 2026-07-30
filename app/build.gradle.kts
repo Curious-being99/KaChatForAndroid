@@ -72,13 +72,13 @@ val localProperties = Properties().apply {
 
 android {
     namespace = "com.kachat.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.kachat.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 15
+        targetSdk = 36
+        versionCode = 16
         versionName = "3.0"
 
         buildConfigField(
