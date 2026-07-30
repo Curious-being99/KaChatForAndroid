@@ -71,10 +71,10 @@ private enum class WelcomeGuideStep { WELCOME, LANGUAGE, CURRENCY, FEES, FUNDING
 private enum class NodeChoice { DEFAULT_NODE, OWN_NODE, AUTO_DISCOVER }
 
 /**
- * First-run guided walkthrough shown automatically right after creating a brand-new wallet
- * (never after importing one - see `WalletViewModel.justCreatedNewWallet`), and replayable any
- * time from the Profile screen. Mirrors [KnsCreateProfileWizardScreen]'s step-enum-driven
- * single-screen wizard shape.
+ * First-run guided walkthrough shown automatically right after an account is added — whether
+ * created or imported (see `WalletViewModel.pendingWelcomeGuide`) — and replayable any time from
+ * the Profile screen. Mirrors [KnsCreateProfileWizardScreen]'s step-enum-driven single-screen
+ * wizard shape.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,7 +225,7 @@ private fun WelcomeGuideStepScaffold(
 
 /**
  * Picking a language here applies it immediately via [applyAppLanguage], which recreates the
- * Activity (see [applyAppLanguage]'s doc). [WalletViewModel.markJustCreatedNewWallet] is re-armed
+ * Activity (see [applyAppLanguage]'s doc). [WalletViewModel.markPendingWelcomeGuide] is re-armed
  * first so the guide automatically restarts from the beginning - this time actually rendered in
  * the new language - once the recreated Activity's `MainShell` observes the flag again.
  */
@@ -277,7 +277,7 @@ private fun WelcomeGuideLanguageStep(walletViewModel: WalletViewModel, onNext: (
                             // MainShell back to a fresh "welcome_guide" destination on every tap,
                             // resetting the wizard to WELCOME with no way to progress past here.
                             if (language != current) {
-                                walletViewModel.markJustCreatedNewWallet()
+                                walletViewModel.markPendingWelcomeGuide()
                                 applyAppLanguage(language)
                             }
                         }

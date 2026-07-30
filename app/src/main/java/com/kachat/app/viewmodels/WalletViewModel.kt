@@ -81,20 +81,23 @@ class WalletViewModel @Inject constructor(
     private val _onMnemonicGenerated = MutableStateFlow<String?>(null)
     val onMnemonicGenerated: StateFlow<String?> = _onMnemonicGenerated
 
-    // Set once `BackupMnemonicScreen.onComplete` finishes the create-a-new-wallet flow (never for
-    // `ImportWalletScreen`'s import path) so the main app can show the Welcome Guide automatically
-    // for a brand-new account, but never for an imported one. Transient/in-memory only — the first
-    // composable to notice it is expected to call `consumeJustCreatedNewWallet()` right after
-    // presenting the guide, so this is a one-shot signal, not a persisted flag.
-    private val _justCreatedNewWallet = MutableStateFlow(false)
-    val justCreatedNewWallet: StateFlow<Boolean> = _justCreatedNewWallet
+    // Armed whenever an account is added — both the create-a-new-wallet flow
+    // (`BackupMnemonicScreen.onComplete`) and the import flow (`ImportWalletScreen`'s `onImported`)
+    // — so the main app shows the Welcome Guide automatically. The guide always appears on
+    // create/import regardless of the "show setup guides" setting (that toggle only gates the
+    // replayable guide entries in Settings). Also re-armed by the guide's own language step to
+    // restart it in the newly-picked language. Transient/in-memory only — the first composable to
+    // notice it is expected to call `consumePendingWelcomeGuide()` right after presenting the
+    // guide, so this is a one-shot signal, not a persisted flag.
+    private val _pendingWelcomeGuide = MutableStateFlow(false)
+    val pendingWelcomeGuide: StateFlow<Boolean> = _pendingWelcomeGuide
 
-    fun markJustCreatedNewWallet() {
-        _justCreatedNewWallet.value = true
+    fun markPendingWelcomeGuide() {
+        _pendingWelcomeGuide.value = true
     }
 
-    fun consumeJustCreatedNewWallet() {
-        _justCreatedNewWallet.value = false
+    fun consumePendingWelcomeGuide() {
+        _pendingWelcomeGuide.value = false
     }
 
     private val _address = MutableStateFlow<String?>(null)

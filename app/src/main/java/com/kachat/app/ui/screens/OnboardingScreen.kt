@@ -79,7 +79,13 @@ fun OnboardingScreen(viewModel: WalletViewModel) {
             ImportWalletScreen(
                 viewModel,
                 onBack = { navController.popBackStack() },
-                onImported = { viewModel.login() }
+                onImported = {
+                    // Same as the create-a-new-wallet path below: arm the Welcome Guide so it
+                    // pops automatically once the main shell renders. It shows on both create and
+                    // import, and always — independent of the "show setup guides" setting.
+                    viewModel.markPendingWelcomeGuide()
+                    viewModel.login()
+                }
             )
         }
         composable("backup_mnemonic/{words}") { backStackEntry ->
@@ -88,7 +94,7 @@ fun OnboardingScreen(viewModel: WalletViewModel) {
                 mnemonic = words,
                 onComplete = {
                     viewModel.clearMnemonic()
-                    viewModel.markJustCreatedNewWallet()
+                    viewModel.markPendingWelcomeGuide()
                     viewModel.login()
                 }
             )

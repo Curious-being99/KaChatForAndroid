@@ -199,13 +199,14 @@ fun MainShell(
         }
     }
 
-    // Shows the Welcome Guide automatically the first time this shell renders after creating a
-    // brand-new wallet (never after importing one) — see `WalletViewModel.justCreatedNewWallet`.
-    val justCreatedNewWallet by walletViewModel.justCreatedNewWallet.collectAsState()
-    LaunchedEffect(justCreatedNewWallet) {
-        if (justCreatedNewWallet) {
+    // Shows the Welcome Guide automatically the first time this shell renders after an account is
+    // added — whether created or imported — see `WalletViewModel.pendingWelcomeGuide`. Always shown
+    // on create/import, independent of the "show setup guides" setting.
+    val pendingWelcomeGuide by walletViewModel.pendingWelcomeGuide.collectAsState()
+    LaunchedEffect(pendingWelcomeGuide) {
+        if (pendingWelcomeGuide) {
             navController.navigate("welcome_guide")
-            walletViewModel.consumeJustCreatedNewWallet()
+            walletViewModel.consumePendingWelcomeGuide()
         }
     }
 
