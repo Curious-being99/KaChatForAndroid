@@ -448,15 +448,36 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    // Name + words captured during the seed step, carried to the passphrase step where the wallet
+    // is actually committed (create) or imported. In-memory only, like the onboarding flow itself.
+    private var pendingAccountName: String = ""
+    private var pendingMnemonicWords: List<String> = emptyList()
+
     fun createWallet(name: String, wordCount: Int = 12) {
         viewModelScope.launch {
-            val words = walletManager.createWallet(name, wordCount)
+            // Generate the mnemonic for display only; the account is derived + persisted later in
+            // commitCreatedWallet(), after the backup + passphrase steps, so the passphrase can
+            // shape the derived account.
+            val words = walletManager.generateMnemonic(wordCount)
+            pendingAccountName = name
+            pendingMnemonicWords = words
             _mnemonic.value = words
             _onMnemonicGenerated.value = words.joinToString(" ")
+        }
+    }
+
+    /** Commits the pending new wallet with the chosen passphrase ("" = none), then logs in. The
+     *  save happens before login() so the main shell sees a fully-persisted active account. */
+    fun commitCreatedWallet(passphrase: String) {
+        viewModelScope.launch {
+            walletManager.commitCreatedWallet(pendingAccountName, pendingMnemonicWords, passphrase)
             _hasWallet.value = true
             _address.value = walletManager.getAddress()
             _accountName.value = walletManager.getAccountName()
             _accounts.value = walletManager.getAllAccounts()
+            clearMnemonic()
+            markPendingWelcomeGuide()
+            login()
             refreshBalance()
         }
     }
@@ -483,19 +504,41 @@ class WalletViewModel @Inject constructor(
     private val _importWalletState = MutableStateFlow(ImportWalletUiState())
     val importWalletState: StateFlow<ImportWalletUiState> = _importWalletState.asStateFlow()
 
-    /** Blocked while another import is already in flight; surfaces a real error (e.g. an invalid mnemonic checksum) instead of failing silently. */
-    fun importWallet(name: String, words: List<String>) {
+    /**
+     * Validates the seed phrase up front (so a typo surfaces on the import screen, not after the
+     * passphrase step) and stashes it for [commitImport]. Returns false and surfaces the error if
+     * the mnemonic is invalid. The passphrase itself can't be validated — a wrong one just derives
+     * a different, empty account — so it's only collected on the next screen.
+     */
+    fun prepareImport(name: String, words: List<String>): Boolean {
+        if (!walletManager.isValidMnemonic(words)) {
+            _importWalletState.value = ImportWalletUiState(
+                status = ImportWalletStatus.FAILED,
+                errorMessage = "Invalid seed phrase. Please check the words and try again."
+            )
+            return false
+        }
+        pendingAccountName = name
+        pendingMnemonicWords = words
+        _importWalletState.value = ImportWalletUiState() // clear any prior FAILED before advancing
+        return true
+    }
+
+    /** Imports the prepared wallet with the chosen passphrase ("" = none), then logs in. */
+    fun commitImport(passphrase: String) {
         if (_importWalletState.value.status == ImportWalletStatus.IMPORTING) return
         viewModelScope.launch {
             _importWalletState.value = ImportWalletUiState(status = ImportWalletStatus.IMPORTING)
             try {
-                walletManager.importWallet(words, name)
+                walletManager.importWallet(pendingMnemonicWords, pendingAccountName, passphrase)
                 _hasWallet.value = true
                 _address.value = walletManager.getAddress()
                 _accountName.value = walletManager.getAccountName()
                 _accounts.value = walletManager.getAllAccounts()
                 refreshBalance()
                 _importWalletState.value = ImportWalletUiState(status = ImportWalletStatus.SUCCESS)
+                markPendingWelcomeGuide()
+                login()
 
                 // Recovers this mnemonic's real spending-address index if it was already used
                 // with this feature before (a different install, or after a wipe) — runs after

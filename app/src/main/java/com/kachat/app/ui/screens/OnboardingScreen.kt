@@ -27,6 +27,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,24 +81,40 @@ fun OnboardingScreen(viewModel: WalletViewModel) {
             ImportWalletScreen(
                 viewModel,
                 onBack = { navController.popBackStack() },
-                onImported = {
-                    // Same as the create-a-new-wallet path below: arm the Welcome Guide so it
-                    // pops automatically once the main shell renders. It shows on both create and
-                    // import, and always — independent of the "show setup guides" setting.
-                    viewModel.markPendingWelcomeGuide()
-                    viewModel.login()
-                }
+                // Seed validated + stashed by prepareImport(); the actual import happens on the
+                // passphrase screen (which arms the Welcome Guide + logs in on success).
+                onProceed = { navController.navigate("passphrase_import") }
             )
         }
         composable("backup_mnemonic/{words}") { backStackEntry ->
             val words = backStackEntry.arguments?.getString("words") ?: ""
             BackupMnemonicScreen(
                 mnemonic = words,
-                onComplete = {
-                    viewModel.clearMnemonic()
-                    viewModel.markPendingWelcomeGuide()
-                    viewModel.login()
-                }
+                // Wallet isn't committed yet — go collect the optional passphrase, then commit.
+                onComplete = { navController.navigate("passphrase_create") }
+            )
+        }
+        composable("passphrase_create") {
+            PassphraseSetupScreen(
+                mode = PassphraseMode.CREATE,
+                onBack = { navController.popBackStack() },
+                // commitCreatedWallet() derives + saves with the passphrase, arms the guide, and
+                // logs in (which swaps onboarding for the main shell).
+                onProceed = { passphrase -> viewModel.commitCreatedWallet(passphrase) }
+            )
+        }
+        composable("passphrase_import") {
+            val importState by viewModel.importWalletState.collectAsState()
+            PassphraseSetupScreen(
+                mode = PassphraseMode.IMPORT,
+                isBusy = importState.status == WalletViewModel.ImportWalletStatus.IMPORTING,
+                errorMessage = importState.errorMessage.takeIf {
+                    importState.status == WalletViewModel.ImportWalletStatus.FAILED
+                },
+                onDismissError = { viewModel.resetImportWalletState() },
+                onBack = { navController.popBackStack() },
+                // commitImport() imports with the passphrase, arms the guide, and logs in on success.
+                onProceed = { passphrase -> viewModel.commitImport(passphrase) }
             )
         }
     }
@@ -585,7 +603,7 @@ internal fun parseSeedPhraseWords(raw: String): List<String> =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImported: () -> Unit) {
+fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onProceed: () -> Unit) {
     var seedPhraseText by remember { mutableStateOf("") }
     var accountName by remember { mutableStateOf("Imported Account") }
     val importState by viewModel.importWalletState.collectAsState()
@@ -594,14 +612,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
     val words = remember(seedPhraseText) { parseSeedPhraseWords(seedPhraseText) }
     val wordCount = words.size
     val isValidCount = wordCount == 12 || wordCount == 24
-    val isImporting = importState.status == WalletViewModel.ImportWalletStatus.IMPORTING
-    val canImport = isValidCount && accountName.isNotBlank() && !isImporting
-
-    LaunchedEffect(importState.status) {
-        if (importState.status == WalletViewModel.ImportWalletStatus.SUCCESS) {
-            onImported()
-        }
-    }
+    val canImport = isValidCount && accountName.isNotBlank()
 
     Surface(color = LocalAppColors.current.background, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -729,7 +740,7 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
-                onClick = { viewModel.importWallet(accountName, words) },
+                onClick = { if (viewModel.prepareImport(accountName, words)) onProceed() },
                 enabled = canImport,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -737,16 +748,12 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onImporte
                 colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surface),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                if (isImporting) {
-                    CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(
-                        text = stringResource(R.string.import_account),
-                        color = if (canImport) Color.Black else Color.Gray,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.import_account),
+                    color = if (canImport) Color.Black else Color.Gray,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -921,4 +928,258 @@ fun BackupMnemonicScreen(mnemonic: String, onComplete: () -> Unit) {
             }
         }
     }
+}
+
+enum class PassphraseMode { CREATE, IMPORT }
+
+/**
+ * Optional BIP39 passphrase ("25th word") step, shown after seed backup (create) or seed entry
+ * (import) and before the Welcome Guide. Explains what a passphrase does, how it helps, and the
+ * risk of forgetting it, then lets the user proceed with a passphrase or skip. The caller performs
+ * the actual create/import commit via [onProceed], which receives the chosen passphrase ("" when
+ * skipped). Copy is English-only for now — a follow-up can move these literals into strings.xml.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PassphraseSetupScreen(
+    mode: PassphraseMode,
+    isBusy: Boolean = false,
+    errorMessage: String? = null,
+    onDismissError: () -> Unit = {},
+    onBack: () -> Unit,
+    onProceed: (String) -> Unit
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var reveal by remember { mutableStateOf(false) }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    fun submit(usePassphrase: Boolean) {
+        if (isBusy) return
+        if (!usePassphrase) {
+            onProceed("")
+            return
+        }
+        when {
+            passphrase.isBlank() ->
+                localError = "Enter a passphrase, or tap Skip to continue without one."
+            mode == PassphraseMode.CREATE && passphrase != confirm ->
+                localError = "The passphrases don't match. Please re-enter them."
+            else -> onProceed(passphrase)
+        }
+    }
+
+    Surface(color = LocalAppColors.current.background, modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+        ) {
+            IconButton(
+                onClick = onBack,
+                enabled = !isBusy,
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(LocalAppColors.current.surface, CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    tint = LocalAppColors.current.textPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Add a Passphrase",
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                color = LocalAppColors.current.textPrimary
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Explainer
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(LocalAppColors.current.surface)
+                    .padding(16.dp)
+            ) {
+                Text("Optional Passphrase", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "A passphrase is an optional extra secret only you know. It's combined with your seed phrase to unlock a completely separate, hidden account.",
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Benefits
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF12241C))
+                    .padding(16.dp)
+            ) {
+                Text("Why add one?", color = Color(0xFF4CD964), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(6.dp))
+                PassphraseBullet("Even if someone finds your written seed phrase, they can't reach this account without the passphrase.", LocalAppColors.current.textSecondary)
+                PassphraseBullet("It creates a hidden account, separate from the standard one your seed phrase alone unlocks.", LocalAppColors.current.textSecondary)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("Passphrase", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            PassphraseInputField(value = passphrase, onValueChange = { passphrase = it }, reveal = reveal, onToggleReveal = { reveal = !reveal }, placeholder = "Enter passphrase")
+
+            if (mode == PassphraseMode.CREATE) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Confirm Passphrase", color = LocalAppColors.current.textPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                PassphraseInputField(value = confirm, onValueChange = { confirm = it }, reveal = reveal, onToggleReveal = { reveal = !reveal }, placeholder = "Re-enter passphrase")
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Enter the exact passphrase you used when this account was created.",
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Risks
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF2C1E1E))
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFF39C12), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Important — read this", color = Color(0xFFF39C12), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                PassphraseBullet("If you forget your passphrase, this account is permanently lost. Your seed phrase alone will NOT recover it.", Color(0xFFF39C12))
+                PassphraseBullet("There is no way to reset or recover a passphrase. Store it as carefully as your seed phrase.", Color(0xFFF39C12))
+                if (mode == PassphraseMode.IMPORT) {
+                    PassphraseBullet("A different passphrase silently opens a different, empty account — it won't show an error.", Color(0xFFF39C12))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = { submit(usePassphrase = true) },
+                enabled = !isBusy,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal, disabledContainerColor = LocalAppColors.current.surface),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                if (isBusy) {
+                    CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        text = if (mode == PassphraseMode.CREATE) "Continue with Passphrase" else "Import with Passphrase",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = { submit(usePassphrase = false) },
+                enabled = !isBusy,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surface),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Skip — no passphrase",
+                    color = LocalAppColors.current.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    val shownError = localError ?: errorMessage
+    if (shownError != null) {
+        AlertDialog(
+            onDismissRequest = { localError = null; onDismissError() },
+            containerColor = LocalAppColors.current.surface,
+            title = { Text(stringResource(R.string.error), color = LocalAppColors.current.textPrimary) },
+            text = { Text(shownError, color = LocalAppColors.current.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = { localError = null; onDismissError() }) {
+                    Text(stringResource(R.string.ok), color = KaspaTeal, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun PassphraseBullet(text: String, color: Color) {
+    Row(modifier = Modifier.padding(top = 4.dp)) {
+        Text("•  ", color = color, style = MaterialTheme.typography.bodyMedium)
+        Text(text, color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PassphraseInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    reveal: Boolean,
+    onToggleReveal: () -> Unit,
+    placeholder: String
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp)),
+        placeholder = { Text(placeholder, color = LocalAppColors.current.textSecondary) },
+        singleLine = true,
+        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrect = false),
+        trailingIcon = {
+            TextButton(onClick = onToggleReveal) {
+                Text(if (reveal) "Hide" else "Show", color = KaspaTeal, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            }
+        },
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = LocalAppColors.current.surface,
+            unfocusedContainerColor = LocalAppColors.current.surface,
+            focusedTextColor = LocalAppColors.current.textPrimary,
+            unfocusedTextColor = LocalAppColors.current.textPrimary,
+            cursorColor = KaspaTeal,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent
+        )
+    )
 }

@@ -137,6 +137,7 @@ import com.kachat.app.util.ImagePrep
 import com.kachat.app.util.MessageReply
 import com.kachat.app.util.TextLinkify
 import com.kachat.app.util.MessageProtocol
+import com.kachat.app.util.copyPrivateKeyWithAutoWipe
 import com.kachat.app.util.VoiceMessage
 import com.kachat.app.util.VoiceMessageContent
 import com.kachat.app.viewmodels.ChatViewModel
@@ -5093,7 +5094,6 @@ fun IdentityAddressDetailScreen(onBack: () -> Unit, viewModel: WalletViewModel, 
 @Composable
 private fun SpendingAddressPrivateKeyOverlay(privateKeyHex: String, onDismiss: () -> Unit) {
     var revealed by remember { mutableStateOf(false) }
-    val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
     val window = (LocalContext.current as? Activity)?.window
@@ -5196,8 +5196,8 @@ private fun SpendingAddressPrivateKeyOverlay(privateKeyHex: String, onDismiss: (
 
             if (revealed) {
                 TextButton(onClick = {
-                    clipboardManager.setText(AnnotatedString(privateKeyHex))
-                    Toast.makeText(context, "Private key copied", Toast.LENGTH_SHORT).show()
+                    copyPrivateKeyWithAutoWipe(context, privateKeyHex)
+                    Toast.makeText(context, "Private key copied. Clipboard clears in 30s.", Toast.LENGTH_SHORT).show()
                 }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
@@ -6044,7 +6044,7 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
     val mnemonic = remember { viewModel.getActiveMnemonic() ?: "" }
     val privateKey = remember { viewModel.getPrivateKeyHex() }
     val words = remember { mnemonic.split(" ") }
-    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
 
     // Blocks screenshots and screen recording of the seed phrase / private key for as long as
     // this screen is on-screen (window-level flag, the standard Android mechanism - unlike iOS,
@@ -6177,17 +6177,12 @@ fun SeedPhraseScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
 
             if (revealed) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    TextButton(onClick = { 
-                        clipboardManager.setText(AnnotatedString(mnemonic))
-                    }) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ContentCopy, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.copy_seed_phrase), color = KaspaTeal)
-                        }
-                    }
-                    TextButton(onClick = { 
-                        clipboardManager.setText(AnnotatedString(privateKey))
+                    // Seed-phrase copy is intentionally NOT offered — the recovery phrase must be
+                    // transcribed by hand, never placed on the clipboard (other apps and clipboard
+                    // history can read it). The private key hex may still be copied, but the
+                    // clipboard is auto-wiped 30s later (see copyPrivateKeyWithAutoWipe).
+                    TextButton(onClick = {
+                        copyPrivateKeyWithAutoWipe(context, privateKey)
                     }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Tag, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
