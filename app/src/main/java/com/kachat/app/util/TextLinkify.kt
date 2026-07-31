@@ -29,4 +29,16 @@ object TextLinkify {
             UrlMatch(range, uri)
         }.toList()
     }
+
+    /** True when [text] (trimmed) is nothing but a single link - mirrors iOS's
+     *  `MessageTextRenderPlan.isEntirelyLink`, used so callers can show only the rich preview
+     *  card instead of both a redundant raw-link bubble and the card stacked on top of it. */
+    fun isEntirelyLink(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return false
+        val match = URL_REGEX.find(trimmed) ?: return false
+        var end = match.range.last
+        while (end >= match.range.first && trimmed[end] in TRAILING_PUNCTUATION) end--
+        return match.range.first == 0 && end == trimmed.length - 1
+    }
 }

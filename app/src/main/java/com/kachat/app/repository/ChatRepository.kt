@@ -3,11 +3,13 @@ package com.kachat.app.repository
 import android.util.Log
 import com.google.gson.Gson
 import com.kachat.app.models.ContactEntity
+import com.kachat.app.models.ContactNotificationMode
 import com.kachat.app.models.DeletedContactEntity
 import com.kachat.app.models.HandshakePayload
 import com.kachat.app.models.MessageEntity
 import com.kachat.app.models.MessageSyncCursorEntity
 import com.kachat.app.models.PhotoAutoDisplayMode
+import com.kachat.app.models.ReactionEntity
 import com.kachat.app.models.UnreadCount
 import com.kachat.app.services.ContextualMessageIndexerResponse
 import com.kachat.app.services.HandshakeIndexerResponse
@@ -24,6 +26,7 @@ import com.kachat.app.util.ImageMessage
 import com.kachat.app.util.KaspaAddress
 import com.kachat.app.util.KasiaCipher
 import com.kachat.app.util.MessageProtocol
+import com.kachat.app.util.MessageReaction
 import com.kachat.app.util.MessageReply
 import com.kachat.app.util.VoiceMessage
 import kotlinx.coroutines.CoroutineScope
@@ -104,13 +107,15 @@ class ChatRepository @Inject constructor(
         return database.messageDao().getAllMessagesForWallet(walletManager.getAddress())
     }
 
-    /** Contacts that only exist because of an auto-detected payment — never a real handshake/message. */
-    fun getPaymentOnlyContactIds(): Flow<List<String>> {
-        return scopedToActiveAccount({ address -> database.messageDao().getPaymentOnlyContactIds(address) }, emptyList())
-    }
-
     fun getUnreadCounts(): Flow<List<UnreadCount>> {
         return scopedToActiveAccount({ address -> database.messageDao().getUnreadCounts(address) }, emptyList())
+    }
+
+    /** One row per contact - their newest reaction across every message in that conversation,
+     *  joined to the target message's direction. Backs the chat list's "Reacted to your/their
+     *  message" preview. */
+    fun getLatestReactions(): Flow<List<com.kachat.app.services.database.LatestReactionRow>> {
+        return scopedToActiveAccount({ address -> database.reactionDao().getLatestReactionPerContact(address) }, emptyList())
     }
 
     suspend fun markAsRead(contactId: String) {
@@ -150,6 +155,7 @@ class ChatRepository @Inject constructor(
             )
         )
         database.messageDao().deleteAllForContact(contactId, myAddress)
+        database.reactionDao().deleteAllForContact(contactId, myAddress)
         // So a later re-handshake with this same address starts its indexer sync clean instead of
         // resuming from a stale per-contact cursor left over from before the deletion.
         database.messageDao().deleteSyncCursorsForContact(contactId, myAddress)
@@ -255,6 +261,29 @@ class ChatRepository @Inject constructor(
         database.messageDao().deleteById(id, walletManager.getAddress())
     }
 
+    /** Replaces any previous reaction [reactorAddress] left on [targetTxId] with [emoji] - one reaction per (message, reactor). */
+    suspend fun upsertReaction(targetTxId: String, reactorAddress: String, contactId: String, emoji: String, reactionTxId: String?, blockTimestamp: Long) {
+        database.reactionDao().upsertReaction(
+            ReactionEntity(
+                targetTxId = targetTxId,
+                walletAddress = walletManager.getAddress(),
+                reactorAddress = reactorAddress,
+                emoji = emoji,
+                reactionTxId = reactionTxId,
+                blockTimestamp = blockTimestamp,
+                contactId = contactId
+            )
+        )
+    }
+
+    suspend fun removeReaction(targetTxId: String, reactorAddress: String) {
+        database.reactionDao().deleteReaction(targetTxId, walletManager.getAddress(), reactorAddress)
+    }
+
+    fun getReactionsForContact(contactId: String): Flow<List<ReactionEntity>> {
+        return database.reactionDao().getReactionsForContact(contactId, walletManager.getAddress())
+    }
+
     /**
      * "Wipe and re-sync incoming messages" — deletes only received messages for the active
      * account (sent messages, contacts, and the wallet itself are untouched), resets every sync
@@ -275,6 +304,7 @@ class ChatRepository @Inject constructor(
     /** Deletes every local message and contact for [address] — used when wiping an account entirely. Does not touch the wallet's keys (see WalletManager.deleteAccount) or any Google Drive backup. */
     suspend fun wipeAllLocalDataForAddress(address: String) {
         database.messageDao().deleteAllForWallet(address)
+        database.reactionDao().deleteAllForWallet(address)
         database.messageDao().deleteSyncCursorsForWallet(address)
         database.contactDao().deleteAllForWallet(address)
         database.contactDao().deleteTombstonesForWallet(address)
@@ -341,7 +371,7 @@ class ChatRepository @Inject constructor(
 
         val senderPubKeyHex = KaspaAddress.decode(handshake.sender).second.joinToString("") { "%02x".format(it) }
         val existing = database.contactDao().getContact(handshake.sender, myAddress)
-        val newStatus = deriveIncomingHandshakeStatus(existing?.conversationStatus, existing?.handshakeComplete ?: false)
+        val newStatus = deriveIncomingHandshakeStatus(existing?.conversationStatus, existing?.handshakeComplete ?: false, payload?.isResponse ?: false)
 
         database.contactDao().insert(
             (existing ?: ContactEntity(id = handshake.sender, walletAddress = myAddress, alias = null, knsName = null, publicKeyHex = null))
@@ -359,18 +389,19 @@ class ChatRepository @Inject constructor(
                 walletAddress = myAddress,
                 type = MessageProtocol.TYPE_HANDSHAKE,
                 direction = "received",
-                plaintextBody = theirAlias?.let { "$it wants to connect" } ?: "Wants to connect",
+                plaintextBody = "${theirAlias ?: com.kachat.app.util.KaspaAddress.shortDisplay(handshake.sender)} wants to connect",
                 encryptedPayload = handshake.messagePayload,
                 amountSompi = null,
                 blockTimestamp = handshake.blockTime
             )
         )
 
-        val displayName = theirAlias ?: handshake.sender.takeLast(8)
+        val displayName = theirAlias ?: com.kachat.app.util.KaspaAddress.shortDisplay(handshake.sender)
         notificationHelper.show(
             contactId = handshake.sender,
             title = if (newStatus == "pending") "Request to communicate" else "Connected",
-            text = if (newStatus == "pending") "$displayName wants to connect" else "$displayName accepted your request"
+            text = if (newStatus == "pending") "$displayName wants to connect" else "$displayName accepted your request",
+            notificationOverride = ContactNotificationMode.fromName(existing?.notificationOverride)
         )
     }
 
@@ -437,6 +468,19 @@ class ChatRepository @Inject constructor(
         // message itself (ECDH) — the sender's static pubkey is never required here.
         val plaintext = MessageProtocol.decrypt(encryptedMessage, walletManager.getPrivateKeyBytes())
 
+        // Reactions are never shown as their own chat bubble - just attached to the message they
+        // target - so intercept and route to the reactions table before a MessageEntity is ever
+        // created for this tx. The sender of an incoming reaction is always this contact.
+        val reaction = MessageReaction.parseOrNull(plaintext)
+        if (reaction != null) {
+            if (reaction.action == "add") {
+                upsertReaction(reaction.targetTxId, contact.id, contact.id, reaction.emoji, message.txId, message.blockTime)
+            } else {
+                removeReaction(reaction.targetTxId, contact.id)
+            }
+            return
+        }
+
         insertMessage(
             MessageEntity(
                 id = message.txId,
@@ -452,16 +496,20 @@ class ChatRepository @Inject constructor(
         )
 
         val replyContent = MessageReply.parseOrNull(plaintext)
+        // Title above is already the contact's name, so these don't repeat it - matches iOS's
+        // ChatService.formatNotificationBody wording exactly.
         val notificationText = when {
             replyContent != null -> "Replied to \"${replyContent.replyToPreview}\""
-            VoiceMessage.parseOrNull(plaintext) != null -> "🎤 Audio message"
-            ImageMessage.parseOrNull(plaintext) != null -> "📷 Photo"
+            VoiceMessage.parseOrNull(plaintext) != null -> "Sent a voice message"
+            ImageMessage.parseOrNull(plaintext) != null -> "Sent a photo"
+            com.kachat.app.util.ChessMessage.parseOrNull(plaintext) != null -> "♟️ Chess game"
             else -> plaintext
         }
         notificationHelper.show(
             contactId = contact.id,
             title = contact.alias ?: contact.id.takeLast(8),
-            text = notificationText
+            text = notificationText,
+            notificationOverride = ContactNotificationMode.fromName(contact.notificationOverride)
         )
     }
 
@@ -531,7 +579,8 @@ class ChatRepository @Inject constructor(
         val deleted = database.contactDao().getDeletedContact(sender, myAddress)
         if (isTombstoned(deleted, tx.transactionId, blockTime)) return
 
-        if (database.contactDao().getContact(sender, myAddress) == null) {
+        val existingContact = database.contactDao().getContact(sender, myAddress)
+        if (existingContact == null) {
             database.contactDao().insert(ContactEntity(id = sender, walletAddress = myAddress, alias = null, knsName = null, publicKeyHex = null))
         }
 
@@ -550,7 +599,12 @@ class ChatRepository @Inject constructor(
             )
         )
 
-        notificationHelper.show(contactId = sender, title = "Payment received", text = displayText)
+        notificationHelper.show(
+            contactId = sender,
+            title = "Payment received",
+            text = displayText,
+            notificationOverride = ContactNotificationMode.fromName(existingContact?.notificationOverride)
+        )
     }
 
     companion object {
@@ -564,13 +618,19 @@ class ChatRepository @Inject constructor(
          * Decides the conversation status for a freshly-received handshake, given the
          * existing contact's prior state (null if this is a never-seen-before sender).
          * If we already sent them a handshake (or the conversation is already active),
-         * this incoming one is their reply — auto-activate. Otherwise it's a fresh
-         * incoming request that needs an explicit Accept/Decline from the user.
+         * this incoming one is their reply — auto-activate. Also auto-activates if THEY
+         * marked this handshake as a response ([HandshakePayload.isResponse]) — that's them
+         * confirming the connection, which needs to clear our own pending/request-to-connect
+         * state even if we ourselves never sent a handshake (e.g. they're replying to a plain
+         * message we sent to a contact we added manually, not via a handshake at all).
+         * Otherwise it's a fresh incoming request that needs an explicit Accept/Decline from
+         * the user.
          */
-        internal fun deriveIncomingHandshakeStatus(existingStatus: String?, existingHandshakeComplete: Boolean): String {
+        internal fun deriveIncomingHandshakeStatus(existingStatus: String?, existingHandshakeComplete: Boolean, incomingIsResponse: Boolean = false): String {
             return when {
                 existingStatus == "active" -> "active"
                 existingHandshakeComplete -> "active"
+                incomingIsResponse -> "active"
                 else -> "pending"
             }
         }
@@ -589,12 +649,11 @@ class ChatRepository @Inject constructor(
          * contact can't send a photo message at all without a completed handshake, this reuses
          * that field instead of duplicating it.
          */
-        fun shouldAutoDisplayPhotos(contact: ContactEntity?, requirePhotoApprovalForNewContacts: Boolean): Boolean {
+        fun shouldAutoDisplayPhotos(contact: ContactEntity?): Boolean {
             return when (PhotoAutoDisplayMode.fromName(contact?.photoAutoDisplayOverride)) {
                 PhotoAutoDisplayMode.ALWAYS_SHOW -> true
                 PhotoAutoDisplayMode.ALWAYS_HIDE -> false
-                PhotoAutoDisplayMode.AUTOMATIC ->
-                    !requirePhotoApprovalForNewContacts || contact?.conversationStatus == "active"
+                PhotoAutoDisplayMode.AUTOMATIC -> contact?.conversationStatus == "active"
             }
         }
 

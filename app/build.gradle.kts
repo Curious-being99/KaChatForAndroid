@@ -60,16 +60,32 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// Third-party API keys — same gitignored-local-file pattern as keystore.properties above, but in
+// local.properties (already gitignored for the SDK path) rather than a dedicated file, since this
+// is a single dev-convenience key rather than a release-signing secret.
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "com.kachat.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.kachat.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 12
-        versionName = "2.0"
+        targetSdk = 36
+        versionCode = 16
+        versionName = "3.0"
+
+        buildConfigField(
+            "String",
+            "CHANGENOW_API_KEY",
+            "\"${localProperties.getProperty("changenow.api.key", "")}\""
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -92,6 +108,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -129,6 +146,9 @@ android {
 dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)
+    // Per-app language switching (AppCompatDelegate.setApplicationLocales) - the modern,
+    // Google-recommended API, native on API 33+ and backported below it via this dependency.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.process)
@@ -174,6 +194,9 @@ dependencies {
 
     // Security (Keystore-backed encrypted storage)
     implementation(libs.security.crypto)
+
+    // Biometric / device-credential prompt (seed phrase view, unlocking a saved account)
+    implementation(libs.androidx.biometric)
 
     // Crypto (BIP39, BIP32/44)
     implementation(libs.bitcoinj.core)

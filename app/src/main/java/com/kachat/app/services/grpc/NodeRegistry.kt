@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 data class NodeRecord(
     val address: String,
-    val type: String, // "Seed" | "Discovered" | "Manual"
+    val type: String, // "Seed" | "Discovered" | "DNS" | "Manual" | "Trusted"
     val lastProbe: NodeProbeResult?,
     val consecutiveFailures: Int = 0,
     val lastSuccessAt: Long? = null
@@ -49,9 +49,17 @@ class NodeRegistry {
     /** Most recent successful probe across every known node — drives the "Last Sync" field. */
     fun lastSuccessAt(): Long? = records.values.mapNotNull { it.lastSuccessAt }.maxOrNull()
 
-    fun statusOf(r: NodeRecord): String = when {
-        r.lastProbe?.reachable != true -> if (r.consecutiveFailures >= 3) "Quarantined" else "Suspect"
-        r.lastProbe.isSynced == false -> "Suspect" // reachable but not synced — don't trust its data
-        else -> "Active"
+    fun statusOf(r: NodeRecord): String {
+        // A pinned trusted node is always used regardless of health (see
+        // NodePoolManager.getBroadcastConnection, which bypasses this function entirely for
+        // it) - the Suspect/Quarantined classification below exists to filter and rank a large
+        // auto-discovered pool, and is meaningless (and misleading) for the one node the user
+        // explicitly chose to always connect to.
+        if (r.type == "Trusted") return "Active"
+        return when {
+            r.lastProbe?.reachable != true -> if (r.consecutiveFailures >= 3) "Quarantined" else "Suspect"
+            r.lastProbe.isSynced == false -> "Suspect" // reachable but not synced — don't trust its data
+            else -> "Active"
+        }
     }
 }

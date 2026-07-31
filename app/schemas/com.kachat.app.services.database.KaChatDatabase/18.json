@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "ac7402f43622f98439769118ecc4da61",
+    "identityHash": "fa1c4e848de1b5a6587275903cfc9705",
     "entities": [
       {
         "tableName": "messages",
@@ -93,7 +93,7 @@
       },
       {
         "tableName": "contacts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `alias` TEXT, `knsName` TEXT, `publicKeyHex` TEXT, `handshakeComplete` INTEGER NOT NULL, `addedAt` INTEGER NOT NULL, `conversationStatus` TEXT NOT NULL, `theirAlias` TEXT, `myAlias` TEXT, `knsAvatarUrl` TEXT, `systemContactId` TEXT, `systemContactName` TEXT, `systemContactLinkSource` TEXT, `photoAutoDisplayOverride` TEXT, PRIMARY KEY(`id`, `walletAddress`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `alias` TEXT, `knsName` TEXT, `publicKeyHex` TEXT, `handshakeComplete` INTEGER NOT NULL, `addedAt` INTEGER NOT NULL, `conversationStatus` TEXT NOT NULL, `theirAlias` TEXT, `myAlias` TEXT, `knsAvatarUrl` TEXT, `systemContactId` TEXT, `systemContactName` TEXT, `systemContactLinkSource` TEXT, PRIMARY KEY(`id`, `walletAddress`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -176,12 +176,6 @@
           {
             "fieldPath": "systemContactLinkSource",
             "columnName": "systemContactLinkSource",
-            "affinity": "TEXT",
-            "notNull": false
-          },
-          {
-            "fieldPath": "photoAutoDisplayOverride",
-            "columnName": "photoAutoDisplayOverride",
             "affinity": "TEXT",
             "notNull": false
           }
@@ -402,12 +396,62 @@
         },
         "indices": [],
         "foreignKeys": []
+      },
+      {
+        "tableName": "portfolio_transactions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `type` TEXT NOT NULL, `amountSompi` INTEGER NOT NULL, `fiatValue` REAL NOT NULL, `timestampMillis` INTEGER NOT NULL, `notes` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountSompi",
+            "columnName": "amountSompi",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fiatValue",
+            "columnName": "fiatValue",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampMillis",
+            "columnName": "timestampMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ac7402f43622f98439769118ecc4da61')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fa1c4e848de1b5a6587275903cfc9705')"
     ]
   }
 }

@@ -9,9 +9,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
@@ -23,6 +26,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,12 +40,14 @@ import androidx.navigation.NavController
 import coil.compose.SubcomposeAsyncImage
 import com.kachat.app.R
 import com.kachat.app.ui.theme.KaspaBlue
+import com.kachat.app.ui.theme.LocalAppColors
 import com.kachat.app.ui.theme.KaspaSubtext
 import com.kachat.app.ui.theme.KaspaTeal
 import com.kachat.app.viewmodels.WalletViewModel
 import com.kachat.app.viewmodels.ConnectionViewModel
 import com.kachat.app.viewmodels.ChatViewModel
 import com.kachat.app.models.Conversation
+import com.kachat.app.models.GroupMember
 import com.kachat.app.models.MessageEntity
 import com.kachat.app.util.ImageMessage
 import com.kachat.app.util.MessageReply
@@ -69,13 +75,16 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.kachat.app.repository.GroupConversation
+import com.kachat.app.repository.GroupMessage
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
  * Chats tab — conversation list.
  * Phase 4 will wire this up to ChatService / ChatViewModel.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ChatsScreen(
     navController: NavController, 
@@ -85,11 +94,23 @@ fun ChatsScreen(
 ) {
     val balance by walletViewModel.fullBalance.collectAsState()
     val dotColorHex by connectionViewModel.dotColorHex.collectAsState()
+    val hiddenTabs by walletViewModel.hiddenTabs.collectAsState()
     val conversations by chatViewModel.conversations.collectAsState()
+    val groupConversations by chatViewModel.groupConversations.collectAsState()
+    val latestReactionByContact by chatViewModel.latestReactionByContact.collectAsState()
+    val myAddress by walletViewModel.address.collectAsState()
     val isRefreshing by chatViewModel.isRefreshing.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedContactIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedGroupIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    // Selection is scoped to whichever tab it was started on - switching tabs mid-select would
+    // either strand a selection the visible list can't act on, or blend Chats and Group Chats
+    // selections together, so the other tab is blocked while editing (matches iOS).
+    val isOnGroupsTab = pagerState.currentPage == 1
+    val tabCoroutineScope = rememberCoroutineScope()
 
     // Matches on whatever's already shown per row — display name/alias, KNS domain, the raw
     // address (so pasting/typing part of an address you recognize still finds it), and the last
@@ -100,13 +121,32 @@ fun ChatsScreen(
             conversations
         } else {
             conversations.filter { convo ->
-                val contactLabel = convo.contact.alias ?: convo.contact.id.takeLast(8)
+                val contactLabel = convo.contact.alias ?: com.kachat.app.util.KaspaAddress.shortDisplay(convo.contact.id)
                 listOfNotNull(
                     convo.contact.alias,
                     convo.contact.knsName,
                     convo.contact.id,
                     messagePreviewText(convo.lastMessage, contactLabel)
                 ).any { it.contains(query, ignoreCase = true) }
+            }
+        }
+    }
+
+    // Mirrors filteredConversations above for the Group Chats tab: group name, each member's
+    // display-name-or-address, and the last message preview text.
+    val filteredGroupConversations = remember(groupConversations, searchQuery) {
+        val query = searchQuery.trim()
+        if (query.isBlank()) {
+            groupConversations
+        } else {
+            groupConversations.filter { convo ->
+                val members = parseGroupMembers(convo.group)
+                listOfNotNull(convo.group.name, groupMessagePreviewText(convo.lastMessage, members))
+                    .any { it.contains(query, ignoreCase = true) } ||
+                    members.any { member ->
+                        (member.displayName?.contains(query, ignoreCase = true) == true) ||
+                            member.address.contains(query, ignoreCase = true)
+                    }
             }
         }
     }
@@ -122,6 +162,16 @@ fun ChatsScreen(
     // until something explicitly asks the network for the current balance again.
     LaunchedEffect(Unit) {
         walletViewModel.refreshBalance()
+    }
+
+    // Warms walletViewModel.knsProfile (my own avatar/domain) so it's already populated by the
+    // time a chat or group chat thread is opened - those screens read it via the SAME shared
+    // walletViewModel instance (passed down from MainShell) but never trigger this refresh
+    // themselves, so without this, "my avatar" in a chat's own-message bubble stayed null on
+    // every single visit until the user happened to open Manage Addresses/KNS Domains/Edit
+    // Profile first.
+    LaunchedEffect(Unit) {
+        walletViewModel.refreshOwnedDomains()
     }
 
     // Auto-rename any chat to their KNS domain if they have one, every time the chat
@@ -150,11 +200,11 @@ fun ChatsScreen(
     }
 
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = LocalAppColors.current.background,
         topBar = {
             Column(
                 modifier = Modifier
-                    .background(Color.Black)
+                    .background(LocalAppColors.current.background)
                     .statusBarsPadding()
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -163,24 +213,35 @@ fun ChatsScreen(
                     TopStatusBar(
                         balance = balance,
                         onStatusClick = { navController.navigate("connection_status") },
-                        onAddClick = { navController.navigate("create_chat") },
                         dotColorHex = dotColorHex,
-                        showEditButton = conversations.isNotEmpty(),
+                        showAddButton = false,
+                        showEditButton = if (isOnGroupsTab) groupConversations.isNotEmpty() else conversations.isNotEmpty(),
                         isEditing = isSelectionMode,
                         onEditClick = {
                             isSelectionMode = !isSelectionMode
-                            if (!isSelectionMode) selectedContactIds = emptySet()
+                            if (!isSelectionMode) {
+                                selectedContactIds = emptySet()
+                                selectedGroupIds = emptySet()
+                            }
                         },
-                        selectAllLabel = if (selectedContactIds.size == filteredConversations.size && filteredConversations.isNotEmpty()) {
-                            "Deselect All"
+                        selectAllLabel = if (isOnGroupsTab) {
+                            if (selectedGroupIds.size == filteredGroupConversations.size && filteredGroupConversations.isNotEmpty()) "Deselect All" else "Select All"
                         } else {
-                            "Select All"
+                            if (selectedContactIds.size == filteredConversations.size && filteredConversations.isNotEmpty()) "Deselect All" else "Select All"
                         },
                         onSelectAllClick = {
-                            selectedContactIds = if (selectedContactIds.size == filteredConversations.size) {
-                                emptySet()
+                            if (isOnGroupsTab) {
+                                selectedGroupIds = if (selectedGroupIds.size == filteredGroupConversations.size) {
+                                    emptySet()
+                                } else {
+                                    filteredGroupConversations.map { it.group.groupId }.toSet()
+                                }
                             } else {
-                                filteredConversations.map { it.contact.id }.toSet()
+                                selectedContactIds = if (selectedContactIds.size == filteredConversations.size) {
+                                    emptySet()
+                                } else {
+                                    filteredConversations.map { it.contact.id }.toSet()
+                                }
                             }
                         }
                     )
@@ -195,24 +256,24 @@ fun ChatsScreen(
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(22.dp)),
-                        placeholder = { Text("Search chats", color = Color.Gray) },
+                        placeholder = { Text(stringResource(R.string.search_chats), color = LocalAppColors.current.textSecondary) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium,
                         leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Search, contentDescription = null, tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(20.dp))
                         },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear search", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search), tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(18.dp))
                                 }
                             }
                         },
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFF1C1C1E),
-                            unfocusedContainerColor = Color(0xFF1C1C1E),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = LocalAppColors.current.surface,
+                            unfocusedContainerColor = LocalAppColors.current.surface,
+                            focusedTextColor = LocalAppColors.current.textPrimary,
+                            unfocusedTextColor = LocalAppColors.current.textPrimary,
                             cursorColor = KaspaTeal,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent
@@ -221,146 +282,201 @@ fun ChatsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Outside the padded inner Column above — sharing the same unpadded layout
-                // context as ConversationRow below (in the un-padded LazyColumn) so this row's
-                // avatar size/position and divider match the real chat rows exactly, pixel for
-                // pixel, rather than sitting inset an extra 16dp from the wrapping Column's own
-                // horizontal padding.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { navController.navigate("broadcasts") }
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                val chatsUnreadCount = conversations.sumOf { it.unreadCount }
+                val groupsUnreadCount = groupConversations.sumOf { it.unreadCount }
+                TabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = LocalAppColors.current.background,
+                    contentColor = KaspaTeal
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1C1C1E)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.RssFeed,
-                            contentDescription = null,
-                            tint = KaspaTeal,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "Broadcasts",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
+                    Tab(
+                        selected = pagerState.currentPage == 0,
+                        onClick = {
+                            if (!isSelectionMode) tabCoroutineScope.launch { pagerState.animateScrollToPage(0) }
+                        },
+                        text = {
+                            TabBadge(count = chatsUnreadCount) {
+                                Text(
+                                    stringResource(R.string.chats),
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelectionMode && isOnGroupsTab) LocalContentColor.current.copy(alpha = 0.25f) else LocalContentColor.current
+                                )
+                            }
+                        }
                     )
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(20.dp)
+                    Tab(
+                        selected = pagerState.currentPage == 1,
+                        onClick = {
+                            if (!isSelectionMode) tabCoroutineScope.launch { pagerState.animateScrollToPage(1) }
+                        },
+                        text = {
+                            TabBadge(count = groupsUnreadCount) {
+                                Text(
+                                    stringResource(R.string.group_chats),
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelectionMode && !isOnGroupsTab) LocalContentColor.current.copy(alpha = 0.25f) else LocalContentColor.current
+                                )
+                            }
+                        }
                     )
                 }
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = 72.dp),
-                    color = Color.DarkGray.copy(alpha = 0.5f)
-                )
+            }
+        },
+        floatingActionButton = {
+            // Same style/placement as Portfolio's add-transaction FAB (see PortfolioScreen.kt) —
+            // sits above the app-wide floating tab bar for free, since this screen's own content
+            // region is already reserved above it before this Scaffold is even composed.
+            FloatingActionButton(
+                onClick = { navController.navigate("create_chat") },
+                containerColor = KaspaTeal,
+                contentColor = Color.Black,
+                shape = CircleShape,
+                modifier = Modifier.size(64.dp)
+            ) {
+                Icon(Icons.Default.PersonAddAlt1, "Create chat", modifier = Modifier.size(28.dp))
             }
         },
         bottomBar = {
             if (isSelectionMode) {
-                Column(modifier = Modifier.background(Color.Black).navigationBarsPadding()) {
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                Column(modifier = Modifier.background(LocalAppColors.current.background).navigationBarsPadding()) {
+                    HorizontalDivider(color = LocalAppColors.current.textPrimary.copy(alpha = 0.1f))
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
                             onClick = {
-                                chatViewModel.markContactsAsRead(selectedContactIds)
+                                if (isOnGroupsTab) {
+                                    chatViewModel.markGroupsAsRead(selectedGroupIds)
+                                } else {
+                                    chatViewModel.markContactsAsRead(selectedContactIds)
+                                }
                                 isSelectionMode = false
                                 selectedContactIds = emptySet()
+                                selectedGroupIds = emptySet()
                             },
-                            enabled = selectedContactIds.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E)),
+                            enabled = if (isOnGroupsTab) selectedGroupIds.isNotEmpty() else selectedContactIds.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.MarkEmailRead, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Mark as Read", color = Color.White, fontSize = 13.sp)
+                            Icon(Icons.Default.MarkEmailRead, stringResource(R.string.read), tint = KaspaTeal, modifier = Modifier.size(18.dp))
                         }
                         Button(
                             onClick = {
-                                chatViewModel.markContactsAsUnread(selectedContactIds)
+                                if (isOnGroupsTab) {
+                                    chatViewModel.markGroupsAsUnread(selectedGroupIds)
+                                } else {
+                                    chatViewModel.markContactsAsUnread(selectedContactIds)
+                                }
                                 isSelectionMode = false
                                 selectedContactIds = emptySet()
+                                selectedGroupIds = emptySet()
                             },
-                            enabled = selectedContactIds.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E)),
+                            enabled = if (isOnGroupsTab) selectedGroupIds.isNotEmpty() else selectedContactIds.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.MarkEmailUnread, null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Mark as Unread", color = Color.White, fontSize = 13.sp)
+                            Icon(Icons.Default.MarkEmailUnread, stringResource(R.string.unread), tint = KaspaTeal, modifier = Modifier.size(18.dp))
+                        }
+                        Button(
+                            onClick = { showBulkDeleteConfirmation = true },
+                            enabled = if (isOnGroupsTab) selectedGroupIds.isNotEmpty() else selectedContactIds.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalAppColors.current.surfaceVariant),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Delete, stringResource(R.string.delete), tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
             }
         }
     ) { padding ->
-        Box(
+        // Tap-only (userScrollEnabled = false), not swipeable - a draggable pager here would
+        // fight the row-level swipe-to-delete/mark-read gestures on both the Chats and Group
+        // Chats lists. Tab taps still drive it via pagerState.animateScrollToPage above.
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = false,
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) { page ->
+        when (page) {
+            1 -> GroupListBody(
+                navController = navController,
+                groupConversations = filteredGroupConversations,
+                hasAnyGroups = groupConversations.isNotEmpty(),
+                searchQuery = searchQuery,
+                onDeleteGroup = { chatViewModel.deleteGroupChat(it) },
+                isSelectionMode = isSelectionMode,
+                selectedGroupIds = selectedGroupIds,
+                onToggleGroupSelected = { groupId ->
+                    selectedGroupIds = if (groupId in selectedGroupIds) {
+                        selectedGroupIds - groupId
+                    } else {
+                        selectedGroupIds + groupId
+                    }
+                },
+                onMarkGroupRead = { chatViewModel.markGroupsAsRead(listOf(it)) },
+                onMarkGroupUnread = { chatViewModel.markGroupsAsUnread(listOf(it)) }
+            )
+            else -> Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .pullRefresh(pullRefreshState)
         ) {
             if (conversations.isEmpty()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_kachat_logo),
-                        contentDescription = null,
-                        modifier = Modifier.size(120.dp),
-                        alpha = 0.5f // Dimmed logo like in screenshot
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    Text(
-                        text = "No Conversations Yet",
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "Start a new chat by adding a contact",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(32.dp))
-                    Button(
-                        onClick = { navController.navigate("create_chat") },
-                        colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(48.dp).padding(horizontal = 24.dp)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Shown here too (not just in the real conversation list below) so a
+                    // brand-new account with zero 1:1 chats doesn't lose access to Broadcasts
+                    // until their first conversation exists.
+                    if ("broadcasts" !in hiddenTabs) {
+                        BroadcastsEntryRow(onClick = { navController.navigate("broadcasts") })
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 100.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.PersonAddAlt1,
-                                contentDescription = null,
-                                tint = Color.Black
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_kachat_logo),
+                            contentDescription = null,
+                            modifier = Modifier.size(120.dp),
+                            alpha = 0.5f // Dimmed logo like in screenshot
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        Text(
+                            text = stringResource(R.string.no_conversations_yet),
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = LocalAppColors.current.textPrimary
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "Add Contact",
-                                color = Color.Black,
-                                fontWeight = FontWeight.Bold
-                            )
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.start_a_new_chat_by_adding),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = LocalAppColors.current.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(32.dp))
+                        Button(
+                            onClick = { navController.navigate("create_chat") },
+                            colors = ButtonDefaults.buttonColors(containerColor = KaspaTeal),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(48.dp).padding(horizontal = 24.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.PersonAddAlt1,
+                                    contentDescription = null,
+                                    tint = Color.Black
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.add_contact),
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -371,17 +487,17 @@ fun ChatsScreen(
                     modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)
                 ) {
                     Text(
-                        text = "No Matching Chats",
+                        text = stringResource(R.string.no_matching_chats),
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = LocalAppColors.current.textPrimary
                         )
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = "No chats match \"$searchQuery\"",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.Gray,
+                        color = LocalAppColors.current.textSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -392,6 +508,14 @@ fun ChatsScreen(
                 var contactToDelete by remember { mutableStateOf<String?>(null) }
 
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // Restored to its original placement: a row inside the Chats list itself (so
+                    // it reads as "just another chat"), not a standalone element above the tabs -
+                    // only shown while not searching, matching iOS.
+                    if ("broadcasts" !in hiddenTabs && searchQuery.isBlank()) {
+                        item {
+                            BroadcastsEntryRow(onClick = { navController.navigate("broadcasts") })
+                        }
+                    }
                     items(filteredConversations, key = { it.contact.id }) { convo ->
                         SwipeActionRow(
                             enabled = !isSelectionMode,
@@ -412,18 +536,18 @@ fun ChatsScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth().background(Color.Black)
+                                modifier = Modifier.fillMaxWidth().background(LocalAppColors.current.background)
                             ) {
                                 if (isSelectionMode) {
                                     Icon(
                                         imageVector = if (convo.contact.id in selectedContactIds) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                        contentDescription = "Select chat",
+                                        contentDescription = stringResource(R.string.select_chat),
                                         tint = if (convo.contact.id in selectedContactIds) KaspaTeal else Color.Gray,
                                         modifier = Modifier.padding(start = 16.dp).size(22.dp)
                                     )
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    ConversationRow(convo) {
+                                    ConversationRow(convo, latestReactionByContact[convo.contact.id], myAddress) {
                                         if (isSelectionMode) {
                                             selectedContactIds = if (convo.contact.id in selectedContactIds) {
                                                 selectedContactIds - convo.contact.id
@@ -442,19 +566,29 @@ fun ChatsScreen(
                             }
                         }
                     }
+                    item {
+                        val chatCount = conversations.size
+                        Text(
+                            text = "$chatCount ${if (chatCount == 1) "chat" else "chats"}",
+                            color = LocalAppColors.current.textSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                        )
+                    }
                 }
 
                 contactToDelete?.let { contactId ->
                     val label = filteredConversations.find { it.contact.id == contactId }
-                        ?.contact?.let { it.alias ?: it.id.takeLast(8) } ?: "this chat"
+                        ?.contact?.let { it.alias ?: com.kachat.app.util.KaspaAddress.shortDisplay(it.id) } ?: "this chat"
                     AlertDialog(
                         onDismissRequest = { contactToDelete = null },
-                        containerColor = Color(0xFF1C1C1E),
-                        title = { Text("Delete Chat with $label", color = Color.White) },
+                        containerColor = LocalAppColors.current.surface,
+                        title = { Text("Delete Chat with $label", color = LocalAppColors.current.textPrimary) },
                         text = {
                             Text(
-                                "This permanently deletes every message with them on this device. This cannot be undone — messaging them again starts a brand new conversation.",
-                                color = Color.Gray
+                                stringResource(R.string.this_permanently_deletes_every_message_with),
+                                color = LocalAppColors.current.textSecondary
                             )
                         },
                         confirmButton = {
@@ -462,27 +596,383 @@ fun ChatsScreen(
                                 chatViewModel.deleteChat(contactId)
                                 contactToDelete = null
                             }) {
-                                Text("Delete", color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { contactToDelete = null }) {
-                                Text("Cancel", color = Color.Gray)
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
                             }
                         }
                     )
                 }
+
+                if (showBulkDeleteConfirmation) {
+                    val count = if (isOnGroupsTab) selectedGroupIds.size else selectedContactIds.size
+                    AlertDialog(
+                        onDismissRequest = { showBulkDeleteConfirmation = false },
+                        containerColor = LocalAppColors.current.surface,
+                        title = {
+                            Text(
+                                if (isOnGroupsTab) "Delete $count Group${if (count == 1) "" else "s"}?" else "Delete $count Chat${if (count == 1) "" else "s"}?",
+                                color = LocalAppColors.current.textPrimary
+                            )
+                        },
+                        text = {
+                            Text(
+                                if (isOnGroupsTab) {
+                                    "This removes each selected group and its messages from this device. This cannot be undone, and other members won't be notified."
+                                } else {
+                                    "This permanently deletes every message in each selected chat, including from iCloud, so they're removed from your other devices too. This cannot be undone."
+                                },
+                                color = LocalAppColors.current.textSecondary
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (isOnGroupsTab) {
+                                    chatViewModel.deleteGroupChats(selectedGroupIds)
+                                } else {
+                                    chatViewModel.deleteChats(selectedContactIds)
+                                }
+                                showBulkDeleteConfirmation = false
+                                isSelectionMode = false
+                                selectedContactIds = emptySet()
+                                selectedGroupIds = emptySet()
+                            }) {
+                                Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showBulkDeleteConfirmation = false }) {
+                                Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                            }
+                        }
+                    )
+                }
+
             }
-            
+
             PullRefreshIndicator(
                 refreshing = isRefreshing,
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter),
-                backgroundColor = Color(0xFF1C1C1E),
+                backgroundColor = LocalAppColors.current.surface,
                 contentColor = KaspaTeal
             )
+
+        }
+        }
         }
     }
+}
+
+/** Small unread-count badge for the Chats/Group Chats tab labels - hidden entirely when count is 0.
+ *  An inline pill next to the label (matching iOS's `chatsTabButton`) rather than `BadgedBox`'s
+ *  corner-overlay style, which sat right on top of the label's last letter since Text has no
+ *  built-in padding for a badge to offset into. */
+@Composable
+private fun TabBadge(count: Int, content: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        content()
+        if (count > 0) {
+            Surface(color = Color(0xFFFF3B30), shape = RoundedCornerShape(50)) {
+                Text(
+                    if (count > 99) "99+" else count.toString(),
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
+}
+
+/** The "Broadcasts" row inside the Chats list - shown both in the real conversation list and the empty state, so it's reachable regardless of whether the user has any 1:1 chats yet. */
+@Composable
+private fun BroadcastsEntryRow(onClick: () -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(LocalAppColors.current.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.RssFeed,
+                    contentDescription = null,
+                    tint = KaspaTeal,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = stringResource(R.string.broadcasts),
+                style = MaterialTheme.typography.titleMedium,
+                color = LocalAppColors.current.textPrimary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = LocalAppColors.current.textSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 72.dp),
+            color = Color.DarkGray.copy(alpha = 0.5f)
+        )
+    }
+}
+
+/**
+ * Group Chats tab content embedded in `ChatsScreen`'s pager - list of joined groups with their
+ * latest message, matching the 1:1 Chats page's row/footer/empty-state shape. Owns its own
+ * delete-confirmation dialog - previously nested inside the 1:1 conversation list's `else`
+ * branch, which meant it silently couldn't render whenever there were zero 1:1 chats; now
+ * self-contained regardless of what the Chats page shows.
+ */
+@Composable
+fun GroupListBody(
+    navController: NavController,
+    groupConversations: List<GroupConversation>,
+    /** Whether the account has any groups at all, before search filtering - distinguishes a
+     *  genuinely empty account from a search that just matched nothing. */
+    hasAnyGroups: Boolean = groupConversations.isNotEmpty(),
+    searchQuery: String = "",
+    onDeleteGroup: (String) -> Unit,
+    isSelectionMode: Boolean = false,
+    selectedGroupIds: Set<String> = emptySet(),
+    onToggleGroupSelected: (String) -> Unit = {},
+    onMarkGroupRead: (String) -> Unit = {},
+    onMarkGroupUnread: (String) -> Unit = {}
+) {
+    var groupToDelete by remember { mutableStateOf<String?>(null) }
+
+    if (groupConversations.isEmpty() && hasAnyGroups && searchQuery.isNotBlank()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.no_matching_groups),
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = LocalAppColors.current.textPrimary
+                )
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "No groups match \"$searchQuery\"",
+                style = MaterialTheme.typography.bodyLarge,
+                color = LocalAppColors.current.textSecondary,
+                textAlign = TextAlign.Center
+            )
+        }
+    } else if (groupConversations.isEmpty()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Groups,
+                contentDescription = null,
+                tint = LocalAppColors.current.textSecondary,
+                modifier = Modifier.size(60.dp)
+            )
+            Spacer(Modifier.height(24.dp))
+            Text(
+                text = stringResource(R.string.no_group_chats_yet),
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = LocalAppColors.current.textPrimary
+                )
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.start_a_group_from_the_add),
+                style = MaterialTheme.typography.bodyLarge,
+                color = LocalAppColors.current.textSecondary,
+                textAlign = TextAlign.Center
+            )
+        }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(groupConversations, key = { it.group.groupId }) { convo ->
+                SwipeActionRow(
+                    enabled = !isSelectionMode,
+                    leadingIcon = if (convo.unreadCount > 0) Icons.Default.MarkEmailRead else Icons.Default.MarkEmailUnread,
+                    leadingLabel = if (convo.unreadCount > 0) "Read" else "Unread",
+                    leadingColor = KaspaTeal,
+                    onLeadingClick = {
+                        if (convo.unreadCount > 0) {
+                            onMarkGroupRead(convo.group.groupId)
+                        } else {
+                            onMarkGroupUnread(convo.group.groupId)
+                        }
+                    },
+                    trailingIcon = Icons.Default.Delete,
+                    trailingLabel = "Delete",
+                    trailingColor = Color(0xFFFF3B30),
+                    onTrailingClick = { groupToDelete = convo.group.groupId }
+                ) {
+                    // .background() is on this outer Column (covering the divider row below too),
+                    // not just the inner Row - SwipeActionRow's teal/red swipe-action strips
+                    // underneath are sized to this whole content block, and the divider's own
+                    // `padding(start = 88.dp)` leaves a gap it doesn't paint over on the left edge
+                    // (and only partially covers on the right, being semi-transparent) - without an
+                    // opaque background spanning the full block, those gaps showed the swipe colors
+                    // through as a stray line at the bottom of every row. Matches the regular Chats
+                    // tab's identical row, which already scopes its background this way.
+                    Column(modifier = Modifier.background(LocalAppColors.current.background)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (isSelectionMode) {
+                                        onToggleGroupSelected(convo.group.groupId)
+                                    } else {
+                                        navController.navigate("group_chat/${convo.group.groupId}")
+                                    }
+                                }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isSelectionMode) {
+                                Icon(
+                                    imageVector = if (convo.group.groupId in selectedGroupIds) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = stringResource(R.string.select_group),
+                                    tint = if (convo.group.groupId in selectedGroupIds) KaspaTeal else Color.Gray,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(LocalAppColors.current.surface),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Groups,
+                                    contentDescription = null,
+                                    tint = KaspaTeal,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = convo.group.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = LocalAppColors.current.textPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = groupMessagePreviewText(convo.lastMessage, parseGroupMembers(convo.group)) ?: "No messages yet",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Gray,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            if (convo.unreadCount > 0) {
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
+                                        .background(KaspaTeal, CircleShape)
+                                        .padding(horizontal = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = convo.unreadCount.toString(),
+                                        color = LocalAppColors.current.textPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 88.dp),
+                            color = Color.DarkGray.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+            item {
+                val groupCount = groupConversations.size
+                Text(
+                    text = "$groupCount ${if (groupCount == 1) "group" else "groups"}",
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                )
+            }
+        }
+    }
+
+    groupToDelete?.let { groupId ->
+        val groupName = groupConversations.firstOrNull { it.group.groupId == groupId }?.group?.name ?: "this group"
+        AlertDialog(
+            onDismissRequest = { groupToDelete = null },
+            containerColor = LocalAppColors.current.surface,
+            title = { Text("Delete \"$groupName\"", color = LocalAppColors.current.textPrimary) },
+            text = {
+                Text(
+                    stringResource(R.string.this_removes_the_group_and_its),
+                    color = LocalAppColors.current.textSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteGroup(groupId)
+                    groupToDelete = null
+                }) {
+                    Text(stringResource(R.string.delete), color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { groupToDelete = null }) {
+                    Text(stringResource(R.string.cancel), color = LocalAppColors.current.textSecondary)
+                }
+            }
+        )
+    }
+}
+
+/** Mirrors [messagePreviewText] for group messages. Resolves `@{address}` mentions back to a
+ *  display name using the roster's own (possibly stale) `displayName` snapshot rather than a
+ *  live contact/KNS lookup - not worth threading that all the way down for a one-line preview. */
+private fun groupMessagePreviewText(message: GroupMessage?, members: List<GroupMember> = emptyList()): String? {
+    val body = message?.content ?: return null
+    val resolve: (String) -> String = { address ->
+        members.firstOrNull { it.address == address }?.displayName?.takeIf { it.isNotBlank() } ?: address.takeLast(10)
+    }
+    val replyContent = MessageReply.parseOrNull(body)
+    if (replyContent != null) {
+        return "Replied to \"${GroupMentionCodec.decodeForDisplay(replyContent.replyToPreview, members, resolve)}\""
+    }
+    if (VoiceMessage.parseOrNull(body) != null) return "🎤 Audio message"
+    if (ImageMessage.parseOrNull(body) != null) return "📷 Photo"
+    return GroupMentionCodec.decodeForDisplay(body, members, resolve)
 }
 
 /**
@@ -499,6 +989,7 @@ private fun messagePreviewText(message: MessageEntity?, contactLabel: String): S
     }
     if (VoiceMessage.parseOrNull(body) != null) return "🎤 Audio message"
     if (ImageMessage.parseOrNull(body) != null) return "📷 Photo"
+    if (com.kachat.app.util.ChessMessage.parseOrNull(body) != null) return "♟️ Chess game"
     return body
 }
 
@@ -510,12 +1001,16 @@ private fun messagePreviewText(message: MessageEntity?, contactLabel: String): S
  * threshold, with no separate tap step).
  */
 @Composable
-private fun SwipeActionRow(
+fun SwipeActionRow(
     enabled: Boolean = true,
-    leadingIcon: ImageVector,
-    leadingLabel: String,
-    leadingColor: Color,
-    onLeadingClick: () -> Unit,
+    // Matches the content's own corner radius so the leading/trailing action color underneath
+    // gets clipped to the same rounded shape — otherwise its sharp corners peek out past the
+    // content's rounded ones even at rest (offsetX == 0), showing as a stray sliver of color.
+    cornerRadius: Dp = 0.dp,
+    leadingIcon: ImageVector? = null,
+    leadingLabel: String? = null,
+    leadingColor: Color = Color.Transparent,
+    onLeadingClick: () -> Unit = {},
     trailingIcon: ImageVector,
     trailingLabel: String,
     trailingColor: Color,
@@ -525,28 +1020,31 @@ private fun SwipeActionRow(
     val density = LocalDensity.current
     val actionWidthDp = 88.dp
     val actionWidthPx = with(density) { actionWidthDp.toPx() }
+    val hasLeading = leadingIcon != null
     var offsetX by remember { mutableStateOf(0f) }
 
     val draggableState = rememberDraggableState { delta ->
-        offsetX = (offsetX + delta).coerceIn(-actionWidthPx, actionWidthPx)
+        offsetX = (offsetX + delta).coerceIn(-actionWidthPx, if (hasLeading) actionWidthPx else 0f)
     }
 
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(cornerRadius))) {
         Row(modifier = Modifier.matchParentSize()) {
-            Box(
-                modifier = Modifier
-                    .width(actionWidthDp)
-                    .fillMaxHeight()
-                    .background(leadingColor)
-                    .clickable(enabled = offsetX > 1f) {
-                        onLeadingClick()
-                        offsetX = 0f
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(leadingIcon, contentDescription = leadingLabel, tint = Color.Black)
-                    Text(leadingLabel, color = Color.Black, style = MaterialTheme.typography.bodySmall)
+            if (hasLeading) {
+                Box(
+                    modifier = Modifier
+                        .width(actionWidthDp)
+                        .fillMaxHeight()
+                        .background(leadingColor)
+                        .clickable(enabled = offsetX > 1f) {
+                            onLeadingClick()
+                            offsetX = 0f
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(leadingIcon!!, contentDescription = leadingLabel, tint = Color.Black)
+                        Text(leadingLabel ?: "", color = Color.Black, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -562,8 +1060,8 @@ private fun SwipeActionRow(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(trailingIcon, contentDescription = trailingLabel, tint = Color.White)
-                    Text(trailingLabel, color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    Icon(trailingIcon, contentDescription = trailingLabel, tint = LocalAppColors.current.textPrimary)
+                    Text(trailingLabel, color = LocalAppColors.current.textPrimary, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -611,7 +1109,12 @@ private fun SwipeActionRow(
 }
 
 @Composable
-private fun ConversationRow(convo: Conversation, onClick: () -> Unit) {
+private fun ConversationRow(
+    convo: Conversation,
+    latestReaction: com.kachat.app.services.database.LatestReactionRow?,
+    myAddress: String?,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -628,15 +1131,33 @@ private fun ConversationRow(convo: Conversation, onClick: () -> Unit) {
         Spacer(Modifier.width(16.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            val contactLabel = convo.contact.alias ?: convo.contact.id.takeLast(8)
+            val contactLabel = convo.contact.alias ?: com.kachat.app.util.KaspaAddress.shortDisplay(convo.contact.id)
             Text(
                 text = contactLabel,
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
+                color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold
             )
+            // A reaction more recent than the last message gets shown instead - reactions never
+            // become messages (they're applied as a corner pill), so without this the preview
+            // would silently show a stale last message even when the truly most recent activity
+            // was someone reacting to something older.
+            val reactionPreview = latestReaction?.let { reaction ->
+                if (convo.lastMessage != null && convo.lastMessage.blockTimestamp >= reaction.blockTimestamp) {
+                    return@let null
+                }
+                val reactedByMe = reaction.reactorAddress == myAddress
+                val targetIsMine = reaction.targetDirection == "sent"
+                when {
+                    reactedByMe && targetIsMine -> "You reacted to your message"
+                    reactedByMe -> "You reacted to their message"
+                    targetIsMine -> "Reacted to your message"
+                    else -> "Reacted to their message"
+                }
+            }
             Text(
                 text = when {
+                    reactionPreview != null -> reactionPreview
                     convo.contact.conversationStatus == "pending" -> "🤝 ${messagePreviewText(convo.lastMessage, contactLabel) ?: "Wants to connect"}"
                     else -> messagePreviewText(convo.lastMessage, contactLabel) ?: "No messages yet"
                 },
@@ -658,7 +1179,7 @@ private fun ConversationRow(convo: Conversation, onClick: () -> Unit) {
             ) {
                 Text(
                     text = convo.unreadCount.toString(),
-                    color = Color.White,
+                    color = LocalAppColors.current.textPrimary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -674,7 +1195,7 @@ fun ContactAvatar(
     fallbackText: String,
     size: Dp,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Color(0xFF1C1C1E),
+    backgroundColor: Color = LocalAppColors.current.surface,
     fontSize: TextUnit = 16.sp
 ) {
     Box(

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.bitcoinj.crypto.ChildNumber
+import org.bitcoinj.crypto.DeterministicKey
 import org.bitcoinj.crypto.HDKeyDerivation
 import org.bitcoinj.crypto.MnemonicCode
 import java.security.KeyStore
@@ -36,6 +37,9 @@ class WalletManager @Inject constructor(
         private const val SECURE_PREFS_NAME = "kachat_secure_prefs"
         private const val PREF_ACCOUNTS = "accounts"
         private const val PREF_ACTIVE_ADDRESS = "active_address"
+        private const val PREF_HIDDEN_SPENDING_ADDRESSES = "hidden_spending_addresses"
+        private const val PREF_SPENDING_ADDRESS_LABELS = "spending_address_labels"
+        private const val PREF_SPENDING_UTXO_LABELS = "spending_utxo_labels"
 
         // bitcoinj's own `MnemonicCode.INSTANCE` static initializer loads its wordlist via
         // `Class.getResourceAsStream`, which is documented by bitcoinj itself as "Won't work on
@@ -57,7 +61,16 @@ class WalletManager @Inject constructor(
     data class Account(
         val name: String,
         val address: String,
-        val mnemonic: String
+        val mnemonic: String,
+        // Gson deserializes old-shape stored JSON (from before this field existed) with this
+        // defaulted to 0 — verified in WalletManagerTest's Gson round-trip test, since every
+        // existing on-device account depends on that being true. See deriveSpendingAddress.
+        val spendingAddressIndex: Int = 0,
+        // Highest spending-chain index the Manage Addresses screen has ever generated/shown —
+        // distinct from [spendingAddressIndex] (which is the address "Pay in Kaspa" currently
+        // sources from). Generating a new address raises this without changing which one is
+        // active; same Gson zero-default behavior as spendingAddressIndex above for old JSON.
+        val maxSpendingAddressIndex: Int = 0
     )
 
     private val gson = Gson()
@@ -120,6 +133,86 @@ class WalletManager @Inject constructor(
 
     fun getAllAccounts(): List<Account> = getAccounts()
 
+    /** One spending-chain address a user chose to hide from Manage Addresses — flat (walletAddress, index) keying, same pattern as Cold Storage's [ColdStorageManager] hidden addresses. Hiding never deletes anything; it's purely a display preference. */
+    private data class HiddenSpendingAddress(val walletAddress: String, val index: Int)
+
+    private fun getAllHiddenSpendingAddresses(): List<HiddenSpendingAddress> {
+        val json = sharedPrefs.getString(PREF_HIDDEN_SPENDING_ADDRESSES, null) ?: return emptyList()
+        val type = object : TypeToken<List<HiddenSpendingAddress>>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    private fun saveHiddenSpendingAddresses(hidden: List<HiddenSpendingAddress>) {
+        sharedPrefs.edit().putString(PREF_HIDDEN_SPENDING_ADDRESSES, gson.toJson(hidden)).apply()
+    }
+
+    /** Indices hidden under [walletAddress] — never deletes the address itself, just what Manage Addresses filters out. */
+    fun getHiddenSpendingIndices(walletAddress: String): Set<Int> =
+        getAllHiddenSpendingAddresses().filter { it.walletAddress == walletAddress }.map { it.index }.toSet()
+
+    fun setSpendingAddressHidden(walletAddress: String, index: Int, hidden: Boolean) {
+        val remaining = getAllHiddenSpendingAddresses().filterNot { it.walletAddress == walletAddress && it.index == index }
+        saveHiddenSpendingAddresses(if (hidden) remaining + HiddenSpendingAddress(walletAddress, index) else remaining)
+    }
+
+    /** A user-given nickname for one spending-chain address, shown in Manage Addresses in place of the default "Address #N" — same flat (walletAddress, index) keying as [HiddenSpendingAddress]. */
+    private data class SpendingAddressLabel(val walletAddress: String, val index: Int, val label: String)
+
+    private fun getAllSpendingAddressLabels(): List<SpendingAddressLabel> {
+        val json = sharedPrefs.getString(PREF_SPENDING_ADDRESS_LABELS, null) ?: return emptyList()
+        val type = object : TypeToken<List<SpendingAddressLabel>>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    private fun saveSpendingAddressLabels(labels: List<SpendingAddressLabel>) {
+        sharedPrefs.edit().putString(PREF_SPENDING_ADDRESS_LABELS, gson.toJson(labels)).apply()
+    }
+
+    /** Labels by index under [walletAddress] — indices with no custom label are simply absent. */
+    fun getSpendingAddressLabels(walletAddress: String): Map<Int, String> =
+        getAllSpendingAddressLabels().filter { it.walletAddress == walletAddress }.associate { it.index to it.label }
+
+    fun setSpendingAddressLabel(walletAddress: String, index: Int, label: String?) {
+        val remaining = getAllSpendingAddressLabels().filterNot { it.walletAddress == walletAddress && it.index == index }
+        saveSpendingAddressLabels(
+            if (!label.isNullOrBlank()) remaining + SpendingAddressLabel(walletAddress, index, label.trim()) else remaining
+        )
+    }
+
+    /**
+     * A user-given nickname for one specific UTXO at a spending address, keyed by address +
+     * "txId:index" outpoint key — mirrors [ColdStorageManager]'s identical per-UTXO label scheme
+     * (see that class's own copy of this pattern) so a spending address's UTXOs tab can be named
+     * the same way Cold Storage's already can. Keyed by address alone (no walletAddress), since
+     * a derived address string is already globally unique — same reasoning as
+     * [ColdStorageManager]'s version, which needs no account-scoping either.
+     */
+    private data class SpendingUtxoLabel(val address: String, val outpointKey: String, val label: String)
+
+    private fun getAllSpendingUtxoLabels(): List<SpendingUtxoLabel> {
+        val json = sharedPrefs.getString(PREF_SPENDING_UTXO_LABELS, null) ?: return emptyList()
+        val type = object : TypeToken<List<SpendingUtxoLabel>>() {}.type
+        return gson.fromJson(json, type)
+    }
+
+    private fun saveSpendingUtxoLabels(labels: List<SpendingUtxoLabel>) {
+        sharedPrefs.edit().putString(PREF_SPENDING_UTXO_LABELS, gson.toJson(labels)).apply()
+    }
+
+    fun getSpendingUtxoLabels(address: String): Map<String, String> =
+        getAllSpendingUtxoLabels().filter { it.address == address }.associate { it.outpointKey to it.label }
+
+    fun setSpendingUtxoLabel(address: String, outpointKey: String, label: String?) {
+        val remaining = getAllSpendingUtxoLabels().filterNot { it.address == address && it.outpointKey == outpointKey }
+        saveSpendingUtxoLabels(
+            if (!label.isNullOrBlank()) remaining + SpendingUtxoLabel(address, outpointKey, label.trim()) else remaining
+        )
+    }
+
+    /** Hex-encoded private key for one spending-chain address - see [getSpendingPrivateKeyBytes]. */
+    fun getSpendingPrivateKeyHex(index: Int): String =
+        getSpendingPrivateKeyBytes(index).joinToString("") { "%02x".format(it) }
+
     /**
      * Generate a new BIP39 mnemonic and store it securely.
      */
@@ -146,13 +239,28 @@ class WalletManager @Inject constructor(
      * Re-importing a mnemonic that's already saved overwrites that entry's name and moves it to
      * the top rather than creating a duplicate, matching iOS's `updateSavedAccounts` behavior
      * (`WalletManager.swift:501-509`: remove any existing entry with the same address, then
-     * re-insert at index 0).
+     * re-insert at index 0). Carries over the existing entry's `spendingAddressIndex`/
+     * `maxSpendingAddressIndex` rather than resetting them to their 0 defaults - this used to
+     * silently reset the "Manage Addresses" state (which spending address is primary, how many
+     * had been generated) to just address #0 any time the same account's seed phrase was
+     * re-imported, matching a bug found and fixed on iOS (`WalletManager.importWallet` there had
+     * the same "reconstruct a bare wallet, overwrite the real record" shape).
      */
     fun importWallet(mnemonic: List<String>, name: String) {
         MnemonicCode.INSTANCE.check(mnemonic)
         val address = deriveAddress(mnemonic)
+        val existing = getAccounts().firstOrNull { it.address == address }
         val accounts = getAccounts().filter { it.address != address }.toMutableList()
-        accounts.add(0, Account(name, address, mnemonic.joinToString(" ")))
+        accounts.add(
+            0,
+            Account(
+                name = name,
+                address = address,
+                mnemonic = mnemonic.joinToString(" "),
+                spendingAddressIndex = existing?.spendingAddressIndex ?: 0,
+                maxSpendingAddressIndex = existing?.maxSpendingAddressIndex ?: 0
+            )
+        )
         saveAccounts(accounts)
         setActiveAccount(address)
     }
@@ -177,21 +285,30 @@ class WalletManager @Inject constructor(
         refreshActiveAddressFlow()
     }
 
-    private fun deriveAddress(mnemonic: List<String>): String {
+    /**
+     * Shared HD path walk — `m/44'/111111'/{accountIndex}'/0/{addressIndex}`. The identity
+     * address/key (used everywhere except spending) is `accountIndex=0, addressIndex=0`, always.
+     * The spending-address chain lives at `accountIndex=1` — a distinct hardened branch, so it
+     * can never collide with the identity path no matter how far its own addressIndex advances.
+     */
+    private fun deriveKey(mnemonic: List<String>, accountIndex: Int = 0, addressIndex: Int = 0): DeterministicKey {
         val seed = MnemonicCode.toSeed(mnemonic, "")
         val masterKey = HDKeyDerivation.createMasterPrivateKey(seed)
-        
+
         val key44h = HDKeyDerivation.deriveChildKey(masterKey, ChildNumber(44, true))
         val keyKaspaH = HDKeyDerivation.deriveChildKey(key44h, ChildNumber(111111, true))
-        val keyAccount0h = HDKeyDerivation.deriveChildKey(keyKaspaH, ChildNumber(0, true))
-        val keyChain0 = HDKeyDerivation.deriveChildKey(keyAccount0h, ChildNumber(0, false))
-        val finalKey = HDKeyDerivation.deriveChildKey(keyChain0, ChildNumber(0, false))
+        val keyAccountH = HDKeyDerivation.deriveChildKey(keyKaspaH, ChildNumber(accountIndex, true))
+        val keyChain0 = HDKeyDerivation.deriveChildKey(keyAccountH, ChildNumber(0, false))
+        return HDKeyDerivation.deriveChildKey(keyChain0, ChildNumber(addressIndex, false))
+    }
 
-        val pubKey = finalKey.pubKey
+    private fun addressFromKey(key: DeterministicKey): String {
+        val pubKey = key.pubKey
         val xOnlyPubKey = if (pubKey.size == 33) pubKey.sliceArray(1..32) else pubKey
-
         return KaspaAddress.encode("kaspa", 0x00, xOnlyPubKey)
     }
+
+    private fun deriveAddress(mnemonic: List<String>): String = addressFromKey(deriveKey(mnemonic))
 
     /**
      * Returns the primary Kaspa address for the active wallet.
@@ -220,16 +337,84 @@ class WalletManager @Inject constructor(
 
     fun getPrivateKeyBytes(): ByteArray {
         val mnemonic = getActiveMnemonic()?.split(" ") ?: throw IllegalStateException("No active account")
-        val seed = MnemonicCode.toSeed(mnemonic, "")
-        val masterKey = HDKeyDerivation.createMasterPrivateKey(seed)
-        
-        val key44h = HDKeyDerivation.deriveChildKey(masterKey, ChildNumber(44, true))
-        val keyKaspaH = HDKeyDerivation.deriveChildKey(key44h, ChildNumber(111111, true))
-        val keyAccount0h = HDKeyDerivation.deriveChildKey(keyKaspaH, ChildNumber(0, true))
-        val keyChain0 = HDKeyDerivation.deriveChildKey(keyAccount0h, ChildNumber(0, false))
-        val finalKey = HDKeyDerivation.deriveChildKey(keyChain0, ChildNumber(0, false))
+        return deriveKey(mnemonic).privKeyBytes
+    }
 
-        return finalKey.privKeyBytes
+    // --- Spending address (accountIndex=1 branch) ---------------------------------------
+    // Separate from the identity address above for payment privacy: "Pay in Kaspa" sends
+    // sweep this address's entire balance and route change to a freshly derived next index
+    // (see KaspaWalletEngine.sendSpendingPayment), so KAS never sits in more than one
+    // spending-chain address at a time. Messaging (handshakes/chat messages) is untouched —
+    // still identity-address-sourced via getAddress()/getPrivateKeyBytes() above.
+
+    private fun activeMnemonicWords(): List<String> =
+        getActiveMnemonic()?.split(" ") ?: throw IllegalStateException("No active account")
+
+    fun deriveSpendingAddress(index: Int): String =
+        addressFromKey(deriveKey(activeMnemonicWords(), accountIndex = 1, addressIndex = index))
+
+    fun getSpendingPrivateKeyBytes(index: Int): ByteArray =
+        deriveKey(activeMnemonicWords(), accountIndex = 1, addressIndex = index).privKeyBytes
+
+    /** The spending address a "Pay in Kaspa" send should currently source funds from/top up. */
+    fun currentSpendingAddress(): String {
+        val index = getActiveAccount()?.spendingAddressIndex ?: throw IllegalStateException("No active account")
+        return deriveSpendingAddress(index)
+    }
+
+    /** Signing key for [currentSpendingAddress] — same index, so callers always get a matching pair. */
+    fun currentSpendingPrivateKeyBytes(): ByteArray {
+        val index = getActiveAccount()?.spendingAddressIndex ?: throw IllegalStateException("No active account")
+        return getSpendingPrivateKeyBytes(index)
+    }
+
+    /** Called only after a spending-address send is actually accepted by the network. */
+    fun advanceSpendingAddressIndex(address: String) {
+        val accounts = getAccounts().map {
+            if (it.address == address) {
+                val next = it.spendingAddressIndex + 1
+                it.copy(spendingAddressIndex = next, maxSpendingAddressIndex = maxOf(it.maxSpendingAddressIndex, next))
+            } else it
+        }
+        saveAccounts(accounts)
+    }
+
+    /** Sets an explicit index as the one "Pay in Kaspa" sources from — used by the wallet-import gap-limit scan, and by manually activating an address from the Manage Addresses screen. */
+    fun setSpendingAddressIndex(address: String, index: Int) {
+        val accounts = getAccounts().map {
+            if (it.address == address) {
+                it.copy(spendingAddressIndex = index, maxSpendingAddressIndex = maxOf(it.maxSpendingAddressIndex, index))
+            } else it
+        }
+        saveAccounts(accounts)
+    }
+
+    /** Derives one more spending-chain address for the Manage Addresses screen to show, without changing which one is currently active. Returns the new highest index. */
+    fun generateNextSpendingAddress(address: String): Int {
+        var newMax = 0
+        val accounts = getAccounts().map {
+            if (it.address == address) {
+                newMax = maxOf(it.maxSpendingAddressIndex, it.spendingAddressIndex) + 1
+                it.copy(maxSpendingAddressIndex = newMax)
+            } else it
+        }
+        saveAccounts(accounts)
+        return newMax
+    }
+
+    /**
+     * Raises [Account.maxSpendingAddressIndex] to at least [minIndex] without touching which
+     * address is currently active — used after a "Discover Addresses" scan turns up on-chain
+     * history past what the Manage Addresses screen currently shows (e.g. KAS sent directly to
+     * an address before it was ever generated locally).
+     */
+    fun ensureMaxSpendingAddressIndexAtLeast(address: String, minIndex: Int) {
+        val accounts = getAccounts().map {
+            if (it.address == address && minIndex > it.maxSpendingAddressIndex) {
+                it.copy(maxSpendingAddressIndex = minIndex)
+            } else it
+        }
+        saveAccounts(accounts)
     }
 
     /**

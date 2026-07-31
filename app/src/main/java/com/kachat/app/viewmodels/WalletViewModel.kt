@@ -6,19 +6,26 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kachat.app.models.PendingKnsCommit
 import com.kachat.app.repository.AppSettingsRepository
+import com.kachat.app.services.ColdStorageAddressDiscovery
 import com.kachat.app.services.KaspaWalletEngine
+import com.kachat.app.services.KnsInscriptionEngine
 import com.kachat.app.services.KnsProfileFields
 import com.kachat.app.services.KnsService
+import com.kachat.app.services.SpendingAddressDiscovery
+import com.kachat.app.services.UtxoEntry
 import com.kachat.app.services.WalletManager
 import com.kachat.app.services.WalletService
+import com.kachat.app.util.KaspaMass
 import com.kachat.app.util.ImagePrep
 import com.kachat.app.util.KaspaAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import javax.inject.Inject
 
@@ -29,11 +36,38 @@ class WalletViewModel @Inject constructor(
     private val walletService: WalletService,
     private val walletEngine: KaspaWalletEngine,
     private val knsService: KnsService,
-    private val settings: AppSettingsRepository
+    private val settings: AppSettingsRepository,
+    private val spendingAddressDiscovery: SpendingAddressDiscovery,
+    /** Reused purely for its address-string-keyed REST fetchers (`getTransactionHistory`/
+     *  `getUtxos`) - it has no Cold-Storage-account/kpub state, so it's just as valid a data
+     *  source here as it is for Cold Storage's own tx-history screen. */
+    private val coldStorageAddressDiscovery: ColdStorageAddressDiscovery
 ) : ViewModel() {
 
     private val _sendResult = MutableStateFlow<Result<String>?>(null)
     val sendResult: StateFlow<Result<String>?> = _sendResult.asStateFlow()
+
+    // Fires when the user taps a bottom tab that's already selected — lets that tab's screen
+    // dismiss its own transient UI (e.g. a full-screen QR overlay) instead of the tap being a
+    // dead no-op, since re-navigating to an already-selected destination doesn't recompose it.
+    // The counter makes every tap distinct even when re-tapping the same route repeatedly.
+    private val _tabReselectSignal = MutableStateFlow(0 to "")
+    val tabReselectSignal: StateFlow<Pair<Int, String>> = _tabReselectSignal.asStateFlow()
+
+    fun notifyTabReselected(route: String) {
+        _tabReselectSignal.value = (_tabReselectSignal.value.first + 1) to route
+    }
+
+    // A tab route's own screen can toggle an internal full-screen state (e.g. Cold Storage's QR
+    // scanner) without navigating to a new route — the floating bottom nav bar's visibility is
+    // otherwise purely route-based, so it would stay overlaid on top of a full-screen camera view.
+    // Screens raising this must always clear it again on dismiss (including back-press).
+    private val _hideBottomBar = MutableStateFlow(false)
+    val hideBottomBar: StateFlow<Boolean> = _hideBottomBar.asStateFlow()
+
+    fun setHideBottomBar(hide: Boolean) {
+        _hideBottomBar.value = hide
+    }
 
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
@@ -46,6 +80,25 @@ class WalletViewModel @Inject constructor(
 
     private val _onMnemonicGenerated = MutableStateFlow<String?>(null)
     val onMnemonicGenerated: StateFlow<String?> = _onMnemonicGenerated
+
+    // Armed whenever an account is added — both the create-a-new-wallet flow
+    // (`BackupMnemonicScreen.onComplete`) and the import flow (`ImportWalletScreen`'s `onImported`)
+    // — so the main app shows the Welcome Guide automatically. The guide always appears on
+    // create/import regardless of the "show setup guides" setting (that toggle only gates the
+    // replayable guide entries in Settings). Also re-armed by the guide's own language step to
+    // restart it in the newly-picked language. Transient/in-memory only — the first composable to
+    // notice it is expected to call `consumePendingWelcomeGuide()` right after presenting the
+    // guide, so this is a one-shot signal, not a persisted flag.
+    private val _pendingWelcomeGuide = MutableStateFlow(false)
+    val pendingWelcomeGuide: StateFlow<Boolean> = _pendingWelcomeGuide
+
+    fun markPendingWelcomeGuide() {
+        _pendingWelcomeGuide.value = true
+    }
+
+    fun consumePendingWelcomeGuide() {
+        _pendingWelcomeGuide.value = false
+    }
 
     private val _address = MutableStateFlow<String?>(null)
     val address: StateFlow<String?> = _address
@@ -68,6 +121,262 @@ class WalletViewModel @Inject constructor(
 
     val balanceSompi: StateFlow<Long> = walletService.balance
 
+    // --- Spending address (separate from the identity address above) --------------------
+    private val _spendingAddress = MutableStateFlow<String?>(null)
+    val spendingAddress: StateFlow<String?> = _spendingAddress
+
+    val spendingBalance: StateFlow<String> = walletService.spendingBalance.map {
+        val kAs = it.toDouble() / 100_000_000.0
+        "%.8f KAS".format(java.util.Locale.US, kAs)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "0.00000000 KAS")
+
+    val spendingBalanceSompi: StateFlow<Long> = walletService.spendingBalance
+
+    /** Re-derives the current spending address and refreshes its balance — safe to call anytime the Profile screen appears, since the underlying index only ever changes via a successful send. */
+    fun refreshSpendingAddress() {
+        _spendingAddress.value = try { walletManager.currentSpendingAddress() } catch (e: Exception) { null }
+        viewModelScope.launch { walletService.refreshSpendingBalance() }
+    }
+
+    /** Suspend variant of [refreshSpendingAddress]'s balance refresh - awaits the actual fetch
+     *  instead of firing it into [viewModelScope], for callers (the Profile screen's pull-to-
+     *  refresh) that need to know when it's actually done before dismissing a refresh spinner. */
+    suspend fun refreshSpendingBalanceAndAwait() {
+        walletService.refreshSpendingBalance()
+    }
+
+    // -------------------------------------------------------------------------
+    // Manage Addresses screen — every spending-chain address derived so far, so the user can
+    // find/copy an old one that might still hold a stray balance.
+    // -------------------------------------------------------------------------
+
+    private val _manageAddresses = MutableStateFlow<List<WalletService.SpendingAddressEntry>>(emptyList())
+    val manageAddresses: StateFlow<List<WalletService.SpendingAddressEntry>> = _manageAddresses.asStateFlow()
+
+    private val _manageAddressesLoading = MutableStateFlow(false)
+    val manageAddressesLoading: StateFlow<Boolean> = _manageAddressesLoading.asStateFlow()
+
+    fun loadManageAddresses() {
+        viewModelScope.launch {
+            _manageAddressesLoading.value = true
+            _manageAddresses.value = try { walletService.getSpendingAddressList() } catch (e: Exception) { emptyList() }
+            _manageAddressesLoading.value = false
+        }
+    }
+
+    /**
+     * Hiding is purely a display preference — the address and its label are untouched; it's just
+     * filtered out of the main Manage Addresses list. Unhiding is always allowed, but an address
+     * can't be hidden in the first place while it still holds a balance or is the primary
+     * ("Pay in Kaspa") spending address — both are cases you'd want to keep an eye on, not tuck away.
+     */
+    fun setManageAddressHidden(index: Int, hidden: Boolean) {
+        val entry = _manageAddresses.value.find { it.index == index } ?: return
+        if (hidden && (entry.balanceSompi > 0 || entry.isCurrent)) return
+        walletService.setSpendingAddressHidden(index, hidden)
+        _manageAddresses.value = _manageAddresses.value.map {
+            if (it.index == index) it.copy(hidden = hidden) else it
+        }
+    }
+
+    /** Sets or clears (blank/null) a nickname for one spending-chain address, shown in place of "Address #N". */
+    fun setManageAddressLabel(index: Int, label: String?) {
+        walletService.setSpendingAddressLabel(index, label)
+        _manageAddresses.value = _manageAddresses.value.map {
+            if (it.index == index) it.copy(label = label?.trim()?.takeIf { l -> l.isNotBlank() }) else it
+        }
+    }
+
+    /** Derives one more spending-chain address and reloads the list to show it. */
+    fun generateNewSpendingAddress() {
+        viewModelScope.launch {
+            walletService.generateNextSpendingAddress()
+            loadManageAddresses()
+        }
+    }
+
+    /**
+     * Makes the address at [index] the one "Pay in Kaspa" sources from going forward. The star
+     * and balance move in [manageAddresses] immediately, before the real network round-trips
+     * (switch + sweep) even finish, so the UI reads as live rather than stalling on them —
+     * [loadManageAddresses] then reconciles with the real on-chain state once they're done.
+     */
+    fun setActiveSpendingAddress(index: Int) {
+        val current = _manageAddresses.value
+        val previous = current.firstOrNull { it.isCurrent }
+        _manageAddresses.value = current.map { entry ->
+            when (entry.index) {
+                index -> entry.copy(isCurrent = true, balanceSompi = entry.balanceSompi + (previous?.balanceSompi ?: 0L))
+                previous?.index -> entry.copy(isCurrent = false, balanceSompi = 0L)
+                else -> entry
+            }
+        }
+
+        viewModelScope.launch {
+            walletService.setActiveSpendingAddress(index)
+            refreshSpendingAddress()
+            loadManageAddresses()
+        }
+    }
+
+    /**
+     * Sends KAS out of one specific spending-chain address (not necessarily the currently
+     * active one) to [toAddress] — unlike [WalletService.sendKaspa]/`onSendClicked` (identity)
+     * or the "Pay in Kaspa" sweep-all-and-rotate flow, this targets a single address by
+     * [index] and leaves any leftover balance right where it is (change returns to the same
+     * address rather than sweeping or rotating). Reuses [sendResult]/[isSending] — only one of
+     * these send dialogs can be open at a time, so sharing that state is fine.
+     */
+    fun withdrawFromSpendingAddress(
+        index: Int,
+        toAddress: String,
+        amountSompi: Long,
+        feeRateOverride: Long? = null,
+        manualUtxos: List<UtxoEntry>? = null
+    ) {
+        viewModelScope.launch {
+            _isSending.value = true
+            val fromAddress = walletManager.deriveSpendingAddress(index)
+            val result = walletEngine.sendKaspa(
+                toAddress = toAddress,
+                amountSompi = amountSompi,
+                fromAddress = fromAddress,
+                signingPrivateKey = walletManager.getSpendingPrivateKeyBytes(index),
+                changeAddress = fromAddress,
+                feeRateOverride = feeRateOverride,
+                manualUtxos = manualUtxos
+            )
+            _sendResult.value = result
+            _isSending.value = false
+            if (result.isSuccess) {
+                loadManageAddresses()
+            }
+        }
+    }
+
+    /** Coin control's data source for a spending address - see `SpendingAddressSendFlow`. Never
+     *  [coldStorageAddressDiscovery]/[spendingAddressUtxos] - those return a display-only DTO
+     *  with no scriptPublicKey, which signing needs. */
+    suspend fun fetchUtxosForCoinControl(address: String): List<UtxoEntry> = walletEngine.fetchUtxos(address)
+
+    /**
+     * Maximum sendable amount from a specific spending address - thin wrapper over
+     * [estimateMaxSendableAmount], resolving the index to an address first.
+     */
+    suspend fun estimateMaxSpendingAddressAmount(index: Int, feeRateOverride: Long? = null, manualUtxos: List<UtxoEntry>? = null): Long =
+        estimateMaxSendableAmount(walletManager.deriveSpendingAddress(index), feeRateOverride, manualUtxos)
+
+    /**
+     * Maximum sendable amount from any address this wallet holds the key for (spending-chain or
+     * the identity address) - mirrors [ColdStorageSendEngine.estimateMaxAmount]. With
+     * [manualUtxos] set (coin control active), "max" means max spendable from just that selected
+     * subset, resolved fresh by outpoint in case it's gone stale - not the whole address's
+     * balance. Shared by [SpendingAddressSendFlow]'s Max button regardless of which address it's
+     * sending from.
+     */
+    suspend fun estimateMaxSendableAmount(address: String, feeRateOverride: Long? = null, manualUtxos: List<UtxoEntry>? = null): Long {
+        val fetched = walletEngine.fetchUtxos(address)
+        if (fetched.isEmpty()) return 0L
+
+        val utxos = if (!manualUtxos.isNullOrEmpty()) {
+            val freshByOutpoint = fetched.associateBy { it.outpoint }
+            manualUtxos.mapNotNull { freshByOutpoint[it.outpoint] }
+        } else {
+            fetched
+        }
+        if (utxos.isEmpty()) return 0L
+
+        val totalBalance = utxos.sumOf { it.utxoEntry.amount }
+        val feeRateSompiPerGram = feeRateOverride?.coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+            ?: walletEngine.fetchQuotedFeeRateSompiPerGram()
+
+        val mass = KaspaMass.calculateMass(numInputs = maxOf(utxos.size, 1), outputScriptLens = listOf(34, 34), payloadSize = 0)
+        val fee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
+        return if (totalBalance > fee) totalBalance - fee else 0L
+    }
+
+    private val _spendingAddressTxHistory = MutableStateFlow<List<ColdStorageAddressDiscovery.AddressTransaction>>(emptyList())
+    val spendingAddressTxHistory: StateFlow<List<ColdStorageAddressDiscovery.AddressTransaction>> = _spendingAddressTxHistory.asStateFlow()
+    private val _loadingSpendingAddressTxHistory = MutableStateFlow(false)
+    val loadingSpendingAddressTxHistory: StateFlow<Boolean> = _loadingSpendingAddressTxHistory.asStateFlow()
+
+    private val _spendingAddressUtxos = MutableStateFlow<List<ColdStorageAddressDiscovery.AddressUtxo>>(emptyList())
+    val spendingAddressUtxos: StateFlow<List<ColdStorageAddressDiscovery.AddressUtxo>> = _spendingAddressUtxos.asStateFlow()
+    private val _loadingSpendingAddressUtxos = MutableStateFlow(false)
+    val loadingSpendingAddressUtxos: StateFlow<Boolean> = _loadingSpendingAddressUtxos.asStateFlow()
+
+    /** Transaction history for a single spending address - see `SpendingAddressTxHistoryScreen`.
+     *  Reuses [ColdStorageAddressDiscovery]'s address-string-keyed REST fetch (no Cold Storage
+     *  account state involved) rather than duplicating the same logic. */
+    fun loadSpendingAddressTxHistory(address: String) {
+        viewModelScope.launch {
+            _loadingSpendingAddressTxHistory.value = true
+            _spendingAddressTxHistory.value = coldStorageAddressDiscovery.getTransactionHistory(address, limit = 50)
+            _loadingSpendingAddressTxHistory.value = false
+        }
+    }
+
+    /** Live UTXOs for a single spending address - see `SpendingAddressTxHistoryScreen`. */
+    fun loadSpendingAddressUtxos(address: String) {
+        viewModelScope.launch {
+            _loadingSpendingAddressUtxos.value = true
+            _spendingAddressUtxos.value = coldStorageAddressDiscovery.getUtxos(address)
+            _loadingSpendingAddressUtxos.value = false
+        }
+    }
+
+    private val _discoveringAddresses = MutableStateFlow(false)
+    val discoveringAddresses: StateFlow<Boolean> = _discoveringAddresses.asStateFlow()
+
+    /**
+     * Re-runs the same gap-limit on-chain scan used on wallet import, to pick up any spending
+     * address with real history beyond what's currently shown (e.g. KAS sent to one directly,
+     * before the Manage Addresses screen ever generated it locally). [onResult] receives how
+     * many used addresses the scan found in total (0 if none).
+     */
+    fun discoverSpendingAddresses(onResult: (Int) -> Unit) {
+        if (_discoveringAddresses.value) return
+        viewModelScope.launch {
+            _discoveringAddresses.value = true
+            try {
+                val discoveredCount = spendingAddressDiscovery.discoverIndex()
+                if (discoveredCount > 0) {
+                    walletManager.ensureMaxSpendingAddressIndexAtLeast(walletManager.getAddress(), discoveredCount - 1)
+                }
+                loadManageAddresses()
+                onResult(discoveredCount)
+            } finally {
+                _discoveringAddresses.value = false
+            }
+        }
+    }
+
+    enum class ConsolidateStatus { IDLE, RUNNING, SUCCESS, FAILED }
+    data class ConsolidateUiState(val status: ConsolidateStatus = ConsolidateStatus.IDLE, val sweptCount: Int = 0, val errorMessage: String? = null)
+
+    private val _consolidateState = MutableStateFlow(ConsolidateUiState())
+    val consolidateState: StateFlow<ConsolidateUiState> = _consolidateState.asStateFlow()
+
+    /** Sweeps every other spending-chain address's balance into the currently active one. */
+    fun consolidateSpendingAddresses() {
+        if (_consolidateState.value.status == ConsolidateStatus.RUNNING) return
+        viewModelScope.launch {
+            _consolidateState.value = ConsolidateUiState(status = ConsolidateStatus.RUNNING)
+            try {
+                val count = walletService.consolidateSpendingAddressesToCurrent()
+                _consolidateState.value = ConsolidateUiState(status = ConsolidateStatus.SUCCESS, sweptCount = count)
+                refreshSpendingAddress()
+                loadManageAddresses()
+            } catch (e: Exception) {
+                _consolidateState.value = ConsolidateUiState(status = ConsolidateStatus.FAILED, errorMessage = e.message ?: "Consolidation failed")
+            }
+        }
+    }
+
+    fun resetConsolidateState() {
+        _consolidateState.value = ConsolidateUiState()
+    }
+
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn
 
@@ -77,6 +386,18 @@ class WalletViewModel @Inject constructor(
             _accountName.value = walletManager.getAccountName()
             _accounts.value = walletManager.getAllAccounts()
             refreshBalance()
+            refreshSpendingAddress()
+
+            // A cold start should land back in whichever account was already active, not the
+            // Welcome screen's saved-accounts list, since nothing about closing and reopening the
+            // app implies the user wants to switch or re-confirm anything — unless they've
+            // explicitly turned on biometrics for account login, in which case that tap-to-unlock
+            // gate (see OnboardingScreen's SavedAccountCard) is the whole point and must still fire.
+            viewModelScope.launch {
+                if (!settings.biometricAccountLoginEnabled.first()) {
+                    _isLoggedIn.value = true
+                }
+            }
         }
     }
 
@@ -86,12 +407,22 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    /** Suspend variant of [refreshBalance] - awaits the actual balance fetch instead of firing it
+     *  into [viewModelScope] and returning immediately, for callers (the KNS create-profile
+     *  wizard's funding gate, now checking the identity/chatting address since all KNS activity
+     *  is funded and settled there) that need to know the balance is current before deciding
+     *  whether to proceed. */
+    suspend fun refreshBalanceAndAwait() {
+        walletService.refreshBalance()
+    }
+
     fun login(address: String? = null) {
         if (address != null) {
             walletManager.setActiveAccount(address)
             _address.value = walletManager.getAddress()
             _accountName.value = walletManager.getAccountName()
             refreshBalance()
+            refreshSpendingAddress()
         }
         if (walletManager.hasWallet()) {
             _isLoggedIn.value = true
@@ -102,14 +433,19 @@ class WalletViewModel @Inject constructor(
         _isLoggedIn.value = false
     }
 
-    /** Renames the active account — edited from the Profile screen's "Name" section. */
-    fun renameActiveAccount(newName: String) {
+    /**
+     * Renames any saved account by address — edited from the Welcome screen's saved-accounts
+     * list, not just the currently active one, since you can rename an account you're not
+     * logged into.
+     */
+    fun renameAccount(address: String, newName: String) {
         val trimmed = newName.trim()
-        val currentAddress = _address.value
-        if (trimmed.isEmpty() || currentAddress == null) return
-        walletManager.renameAccount(currentAddress, trimmed)
-        _accountName.value = trimmed
+        if (trimmed.isEmpty()) return
+        walletManager.renameAccount(address, trimmed)
         _accounts.value = walletManager.getAllAccounts()
+        if (_address.value == address) {
+            _accountName.value = trimmed
+        }
     }
 
     fun createWallet(name: String, wordCount: Int = 12) {
@@ -160,6 +496,20 @@ class WalletViewModel @Inject constructor(
                 _accounts.value = walletManager.getAllAccounts()
                 refreshBalance()
                 _importWalletState.value = ImportWalletUiState(status = ImportWalletStatus.SUCCESS)
+
+                // Recovers this mnemonic's real spending-address index if it was already used
+                // with this feature before (a different install, or after a wipe) — runs after
+                // reporting import success so it doesn't add scan latency to that UX; a fresh
+                // mnemonic just confirms index 0, which is already the default.
+                val importedAddress = walletManager.getAddress()
+                launch {
+                    try {
+                        val recoveredIndex = spendingAddressDiscovery.discoverIndex()
+                        walletManager.setSpendingAddressIndex(importedAddress, recoveredIndex)
+                    } catch (e: Exception) {
+                        android.util.Log.w("WalletViewModel", "Spending address discovery failed", e)
+                    }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("WalletViewModel", "importWallet failed", e)
                 _importWalletState.value = ImportWalletUiState(
@@ -180,15 +530,17 @@ class WalletViewModel @Inject constructor(
     }
 
     /**
-     * Sends Kaspa to a given address.
+     * Sends Kaspa to a given address (from the identity address). [manualUtxos] threads through
+     * coin control the same way [withdrawFromSpendingAddress] already does for spending-chain
+     * addresses - see [SpendingAddressSendFlow]'s shared coin-control UI.
      */
-    fun onSendClicked(address: String, amountSompi: Long) {
+    fun onSendClicked(address: String, amountSompi: Long, feeRateOverride: Long? = null, manualUtxos: List<UtxoEntry>? = null) {
         viewModelScope.launch {
             _isSending.value = true
-            val result = walletEngine.sendKaspa(address, amountSompi)
+            val result = walletEngine.sendKaspa(address, amountSompi, feeRateOverride = feeRateOverride, manualUtxos = manualUtxos)
             _sendResult.value = result
             _isSending.value = false
-            
+
             if (result.isSuccess) {
                 refreshBalance()
             }
@@ -201,6 +553,20 @@ class WalletViewModel @Inject constructor(
 
     fun getActiveMnemonic(): String? = walletManager.getActiveMnemonic()
     fun getPrivateKeyHex(): String = walletManager.getPrivateKeyHex()
+
+    /** Hex-encoded private key for one spending-chain address — powers the per-address "Export" screen. */
+    fun getSpendingPrivateKeyHex(index: Int): String = walletManager.getSpendingPrivateKeyHex(index)
+
+    fun getSpendingUtxoLabels(address: String): Map<String, String> = walletManager.getSpendingUtxoLabels(address)
+
+    fun setSpendingUtxoLabel(address: String, outpointKey: String, label: String?) {
+        walletManager.setSpendingUtxoLabel(address, outpointKey, label)
+    }
+
+    /** Forward KNS domain resolution for any recipient-address field (Withdraw dialogs, the
+     *  spending-address send flow) - lets typing "name.kas" resolve to a Kaspa address the same
+     *  way Create Chat's own address field already does. */
+    suspend fun resolveKnsDomain(domain: String): String? = knsService.resolve(domain)
 
     // -------------------------------------------------------------------------
     // KNS domain inscription — real on-chain commit/reveal, see WalletService.inscribeDomain
@@ -226,13 +592,22 @@ class WalletViewModel @Inject constructor(
         assets.firstOrNull { it.asset == activeName }?.assetId ?: assets.firstOrNull()?.assetId
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
+    /** Full refresh: domains + primary + the active domain's profile (the "active" domain can
+     * change as a result of setting a new primary, transferring one away, or inscribing a new
+     * one, so all three of those call this - not [refreshOwnedDomainsAndAwait]). */
     fun refreshOwnedDomains() {
         viewModelScope.launch {
-            val currentAddress = address.value ?: return@launch
-            _ownedDomainAssets.value = knsService.getOwnedDomains(currentAddress)
-            _primaryDomainName.value = knsService.getExplicitPrimaryDomain(currentAddress)
+            refreshOwnedDomainsAndAwait()
             refreshKnsProfile()
         }
+    }
+
+    /** Domains + primary only, no profile fetch - used by the Domains screen's pull-to-refresh,
+     * which never displays `knsProfile`, so fetching it on every pull was a wasted network call. */
+    suspend fun refreshOwnedDomainsAndAwait() {
+        val currentAddress = address.value ?: return
+        _ownedDomainAssets.value = knsService.getOwnedDomains(currentAddress)
+        _primaryDomainName.value = knsService.getExplicitPrimaryDomain(currentAddress)
     }
 
     data class SetPrimaryDomainUiState(val assetId: String? = null, val inFlight: Boolean = false, val errorMessage: String? = null)
@@ -323,7 +698,7 @@ class WalletViewModel @Inject constructor(
     val transferDomainState: StateFlow<TransferDomainUiState> = _transferDomainState.asStateFlow()
 
     /** Submits the real, irreversible on-chain transfer — only proceeds using the already-resolved+validated recipient address, never the raw typed input. */
-    fun transferDomain(fullDomain: String, assetId: String) {
+    fun transferDomain(fullDomain: String, assetId: String, priorityFeeSompi: Long = KnsInscriptionEngine.REVEAL_PRIORITY_FEE_SOMPI) {
         val resolvedAddress = _transferRecipientPreview.value?.resolvedAddress ?: return
         val current = _transferDomainState.value.status
         if (current != KnsInscribeUiStatus.IDLE && current != KnsInscribeUiStatus.SUCCESS && current != KnsInscribeUiStatus.FAILED) return
@@ -331,7 +706,7 @@ class WalletViewModel @Inject constructor(
         viewModelScope.launch {
             _transferDomainState.value = TransferDomainUiState(status = KnsInscribeUiStatus.SUBMITTING_COMMIT)
             try {
-                val result = walletService.transferDomain(fullDomain, assetId, resolvedAddress) { step ->
+                val result = walletService.transferDomain(fullDomain, assetId, resolvedAddress, priorityFeeSompi) { step ->
                     _transferDomainState.value = _transferDomainState.value.copy(status = step.toUiStatus())
                 }
                 _transferDomainState.value = TransferDomainUiState(status = KnsInscribeUiStatus.SUCCESS, result = result)
@@ -384,18 +759,41 @@ class WalletViewModel @Inject constructor(
     private val _pendingBannerUri = MutableStateFlow<Uri?>(null)
     val pendingBannerUri: StateFlow<Uri?> = _pendingBannerUri.asStateFlow()
 
+    /** True once the user taps "Remove" on an existing (already on-chain) avatar/banner - distinct
+     * from simply having no pending pick, since it means Save should explicitly clear the field
+     * rather than leave it untouched. Reset by picking a new image or leaving the screen. */
+    private val _avatarCleared = MutableStateFlow(false)
+    val avatarCleared: StateFlow<Boolean> = _avatarCleared.asStateFlow()
+
+    private val _bannerCleared = MutableStateFlow(false)
+    val bannerCleared: StateFlow<Boolean> = _bannerCleared.asStateFlow()
+
     fun setPendingAvatar(uri: Uri?) {
         _pendingAvatarUri.value = uri
+        if (uri != null) _avatarCleared.value = false
     }
 
     fun setPendingBanner(uri: Uri?) {
         _pendingBannerUri.value = uri
+        if (uri != null) _bannerCleared.value = false
+    }
+
+    fun clearExistingAvatar() {
+        _pendingAvatarUri.value = null
+        _avatarCleared.value = true
+    }
+
+    fun clearExistingBanner() {
+        _pendingBannerUri.value = null
+        _bannerCleared.value = true
     }
 
     fun resetEditProfileState() {
         _editProfileState.value = EditProfileUiState()
         _pendingAvatarUri.value = null
         _pendingBannerUri.value = null
+        _avatarCleared.value = false
+        _bannerCleared.value = false
     }
 
     /**
@@ -417,24 +815,46 @@ class WalletViewModel @Inject constructor(
             _pendingAvatarUri.value?.let { uri ->
                 _editProfileState.value = _editProfileState.value.copy(step = EditProfileStep.UPLOADING_AVATAR)
                 try {
-                    val bytes = ImagePrep.prepareForUpload(appContext, uri)
+                    val bytes = withContext(Dispatchers.Default) { ImagePrep.prepareForUpload(appContext, uri) }
                     walletService.uploadKnsProfileImage(assetId, "avatar", bytes)
                     results.add(EditProfileFieldResult("avatarUrl", true))
                 } catch (e: Exception) {
                     results.add(EditProfileFieldResult("avatarUrl", false, e.message))
                 }
-            }
+                // Published incrementally (not just once at the end) so the details screen can
+                // show a live per-field checkmark as each one actually finishes.
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
+            } ?: if (_avatarCleared.value && !currentProfile?.avatarUrl.isNullOrEmpty()) {
+                _editProfileState.value = _editProfileState.value.copy(step = EditProfileStep.SUBMITTING_FIELD, currentFieldLabel = "avatarUrl")
+                try {
+                    walletService.updateKnsProfileField(assetId, "avatarUrl", "")
+                    results.add(EditProfileFieldResult("avatarUrl", true))
+                } catch (e: Exception) {
+                    results.add(EditProfileFieldResult("avatarUrl", false, e.message))
+                }
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
+            } else Unit
 
             _pendingBannerUri.value?.let { uri ->
                 _editProfileState.value = _editProfileState.value.copy(step = EditProfileStep.UPLOADING_BANNER)
                 try {
-                    val bytes = ImagePrep.prepareForUpload(appContext, uri)
+                    val bytes = withContext(Dispatchers.Default) { ImagePrep.prepareForUpload(appContext, uri) }
                     walletService.uploadKnsProfileImage(assetId, "banner", bytes)
                     results.add(EditProfileFieldResult("bannerUrl", true))
                 } catch (e: Exception) {
                     results.add(EditProfileFieldResult("bannerUrl", false, e.message))
                 }
-            }
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
+            } ?: if (_bannerCleared.value && !currentProfile?.bannerUrl.isNullOrEmpty()) {
+                _editProfileState.value = _editProfileState.value.copy(step = EditProfileStep.SUBMITTING_FIELD, currentFieldLabel = "bannerUrl")
+                try {
+                    walletService.updateKnsProfileField(assetId, "bannerUrl", "")
+                    results.add(EditProfileFieldResult("bannerUrl", true))
+                } catch (e: Exception) {
+                    results.add(EditProfileFieldResult("bannerUrl", false, e.message))
+                }
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
+            } else Unit
 
             for ((fieldKey, rawValue) in textFields) {
                 val trimmed = rawValue.trim()
@@ -447,11 +867,14 @@ class WalletViewModel @Inject constructor(
                 } catch (e: Exception) {
                     results.add(EditProfileFieldResult(fieldKey, false, e.message))
                 }
+                _editProfileState.value = _editProfileState.value.copy(fieldResults = results.toList())
             }
 
             refreshKnsProfile()
             _pendingAvatarUri.value = null
             _pendingBannerUri.value = null
+            _avatarCleared.value = false
+            _bannerCleared.value = false
 
             val finalStep = when {
                 results.isEmpty() -> EditProfileStep.SUCCESS
@@ -489,6 +912,81 @@ class WalletViewModel @Inject constructor(
 
     val pendingKnsCommit: StateFlow<PendingKnsCommit?> = settings.pendingKnsCommit
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
+
+    /** Route strings, in the user's chosen bottom-tab order — see AppSettingsRepository.tabOrder. */
+    val tabOrder: StateFlow<List<String>> = settings.tabOrder
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), AppSettingsRepository.DEFAULT_TAB_ORDER)
+
+    val kaspaExplorer: StateFlow<com.kachat.app.models.KaspaExplorer> = settings.kaspaExplorer
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), com.kachat.app.models.KaspaExplorer.default)
+
+    fun setTabOrder(routes: List<String>) {
+        viewModelScope.launch { settings.setTabOrder(routes) }
+    }
+
+    /** Bottom-tab routes the user has hidden from the nav bar via Settings > Customization > Menu. */
+    val hiddenTabs: StateFlow<Set<String>> = settings.hiddenTabs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptySet())
+
+    fun setTabHidden(route: String, hidden: Boolean) {
+        viewModelScope.launch { settings.setTabHidden(route, hidden) }
+    }
+
+    val darkModeEnabled: StateFlow<Boolean> = settings.darkModeEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    fun setDarkModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settings.setDarkModeEnabled(enabled) }
+    }
+
+    /** Settings > Customization > Currency — lowercase ISO 4217 code (e.g. "usd", "eur"). Global,
+     *  not per-account (see [AppSettingsRepository.currency]). */
+    val currency: StateFlow<String> = settings.currency
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "usd")
+
+    fun setCurrency(code: String) {
+        viewModelScope.launch { settings.setCurrency(code) }
+    }
+
+    /** Settings > Security — whether viewing the seed phrase requires device authentication first. */
+    val biometricSeedPhraseEnabled: StateFlow<Boolean> = settings.biometricSeedPhraseEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    fun setBiometricSeedPhraseEnabled(enabled: Boolean) {
+        viewModelScope.launch { settings.setBiometricSeedPhraseEnabled(enabled) }
+    }
+
+    /** Settings > Security — whether unlocking a saved account after logout requires device authentication first. */
+    val biometricAccountLoginEnabled: StateFlow<Boolean> = settings.biometricAccountLoginEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    fun setBiometricAccountLoginEnabled(enabled: Boolean) {
+        viewModelScope.launch { settings.setBiometricAccountLoginEnabled(enabled) }
+    }
+
+    /** Settings > Security — whether the "Export" button on a spending address's own screen requires device authentication first. */
+    val biometricSpendingKeyEnabled: StateFlow<Boolean> = settings.biometricSpendingKeyEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    fun setBiometricSpendingKeyEnabled(enabled: Boolean) {
+        viewModelScope.launch { settings.setBiometricSpendingKeyEnabled(enabled) }
+    }
+
+    /**
+     * Settings > Customization — whether the "Setup Guide" re-entry points (the Profile screen's
+     * "Welcome Guide" row, the "Edit KNS Profile" screen's "Setup Guide" section) are shown.
+     * Scoped to the currently active account's address (see [AppSettingsRepository.showSetupGuides]),
+     * so it re-derives whenever [address] changes rather than sticking to whichever account was
+     * active when this StateFlow was first collected.
+     */
+    val showSetupGuides: StateFlow<Boolean> = address
+        .flatMapLatest { addr -> if (addr != null) settings.showSetupGuides(addr) else flowOf(true) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    fun setShowSetupGuides(enabled: Boolean) {
+        val addr = _address.value ?: return
+        viewModelScope.launch { settings.setShowSetupGuides(addr, enabled) }
+    }
 
     private var previewJob: Job? = null
 

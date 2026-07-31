@@ -26,35 +26,62 @@ class AppSettingsRepository @Inject constructor(
 ) {
 
     companion object {
+        // Matches Screens.kt's QUICK_REACTION_EMOJIS / iOS's AppSettings.defaultQuickReactionEmojis.
+        val DEFAULT_QUICK_REACTION_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+
         // Network
         val KEY_NETWORK          = stringPreferencesKey("network")           // "mainnet" | "testnet"
         val KEY_INDEXER_URL      = stringPreferencesKey("indexer_url")
         val KEY_KNS_API_URL      = stringPreferencesKey("kns_api_url")
         val KEY_KASPA_REST_URL   = stringPreferencesKey("kaspa_rest_url")
+        // A user-pinned "host:port" gRPC node - when non-blank, NodePoolManager stops
+        // discovery (seeds/DNS/peer-gossip) entirely and only ever connects to this address,
+        // Kaspium-style. Empty string = disabled (normal pool discovery).
+        val KEY_TRUSTED_NODE_ADDRESS = stringPreferencesKey("trusted_node_address")
+        // User-saved node addresses for quick copy/paste into the Kaspa Node field above -
+        // Gson-encoded list, same pattern as KEY_PENDING_KNS_COMMIT below.
+        val KEY_SAVED_NODE_ADDRESSES = stringPreferencesKey("saved_node_addresses")
 
         // Defaults matching the iOS app
         const val DEFAULT_NETWORK        = "mainnet"
-        const val DEFAULT_INDEXER_URL    = "https://indexer.kasia.fyi"
+        const val DEFAULT_INDEXER_URL    = "https://indexer.kasia.wtf"
+        // Retired default - kasia.fyi doesn't run the group-chat REST endpoints
+        // (/group-messages/..., /group-control/...), only kasia.wtf does. See `indexerUrl`'s
+        // one-time migration off this value below.
+        const val LEGACY_DEFAULT_INDEXER_URL = "https://indexer.kasia.fyi"
         const val DEFAULT_KNS_API_URL    = "https://api.knsdomains.org/mainnet/api/v1"
         const val DEFAULT_KASPA_REST_URL = "https://api.kaspa.org"
+        // KaChat ships pinned to Kaspium's public node out of the box, rather than defaulting
+        // to full seed/DNS/peer-gossip discovery - the "Use Default" button in Connection
+        // Settings resets back to this same address after a user has typed something else.
+        // This is Kaspium's own currently-live default (see their node_settings_notifier.dart's
+        // "temporary Toccata node override" - node.kaspium.io's cert had expired, so Kaspium's
+        // app itself now points here instead) - TLS-secured, hence "grpcs://" (see
+        // KaspadConnection.kt's parseNodeAddress).
+        const val DEFAULT_TRUSTED_NODE_ADDRESS = "grpcs://toccata.kaspium.io"
 
         // Wallet (just a flag — actual keys live in Keystore)
         val KEY_HAS_WALLET       = booleanPreferencesKey("has_wallet")
         val KEY_ACTIVE_ADDRESS   = stringPreferencesKey("active_address")
         
-        val KEY_ESTIMATE_FEES    = booleanPreferencesKey("estimate_fees")
-        val KEY_HIDE_AUTO_PAYMENT_CHATS = booleanPreferencesKey("hide_auto_payment_chats")
-        val KEY_SHOW_CONTACT_BALANCE = booleanPreferencesKey("show_contact_balance")
         // How hard chat photos get compressed before sending — mirrors iOS's
         // `chatPhotoQualityPreset` setting. Only affects photos sent, not received.
         val KEY_CHAT_PHOTO_QUALITY_PRESET = stringPreferencesKey("chat_photo_quality_preset")
-        // Whether photos from contacts you haven't added/messaged yet stay hidden behind a
-        // "Show Photo" tap by default — mirrors iOS's `requirePhotoApprovalForNewContacts`.
-        // Default true, unlike most toggles here, since this is opt-out protection.
-        val KEY_REQUIRE_PHOTO_APPROVAL = booleanPreferencesKey("require_photo_approval_new_contacts")
+        // Which block explorer website "Go to Explorer" links open in.
+        val KEY_KASPA_EXPLORER = stringPreferencesKey("kaspa_explorer")
         // Flat, chain-wide set of txIds the user has manually revealed a hidden photo for —
         // mirrors iOS's `PhotoRevealStore`. Not per-wallet: txIds are unique on-chain already.
         val KEY_REVEALED_PHOTO_TX_IDS = stringSetPreferencesKey("revealed_photo_tx_ids")
+
+        // Per-group hidden/muted member sets - each entry is "{groupId}|{address}", flattened
+        // into one Set<String> rather than a nested map since DataStore preferences only have
+        // flat native collection types. Mirrors iOS's GroupChatService.groupHiddenMembers/
+        // groupMutedMembers (there, a real [String: Set<String>] via UserDefaults-JSON).
+        val KEY_GROUP_HIDDEN_MEMBERS = stringSetPreferencesKey("group_hidden_members")
+        val KEY_GROUP_MUTED_MEMBERS  = stringSetPreferencesKey("group_muted_members")
+        // Group ids with "Only Notify if I'm Mentioned" on - mirrors iOS's
+        // GroupChatService.groupMentionsOnlyNotifications.
+        val KEY_GROUP_MENTIONS_ONLY  = stringSetPreferencesKey("group_mentions_only")
 
         // Notifications — mirrors iOS's notificationMode/sound/vibration settings, minus
         // the remote-push mode (there's no FCM/APNs-equivalent registration wired up yet,
@@ -66,6 +93,12 @@ class AppSettingsRepository @Inject constructor(
         // System contacts sync — matches iOS's "Sync system contacts"/"Autocreate system contacts".
         val KEY_SYNC_SYSTEM_CONTACTS = booleanPreferencesKey("sync_system_contacts")
         val KEY_AUTOCREATE_SYSTEM_CONTACTS = booleanPreferencesKey("autocreate_system_contacts")
+
+        val KEY_SHOW_FEE_ESTIMATE = booleanPreferencesKey("show_fee_estimate")
+
+        // Customizable double-tap quick-reaction set - see QUICK_REACTION_EMOJIS's default and
+        // QuickReactionBar (Screens.kt) / QuickReactionBarView (iOS) for where this is read.
+        val KEY_QUICK_REACTION_EMOJIS = stringPreferencesKey("quick_reaction_emojis")
 
         // A single in-flight KNS commit awaiting its reveal — see PendingKnsCommit.
         val KEY_PENDING_KNS_COMMIT = stringPreferencesKey("pending_kns_commit")
@@ -86,6 +119,31 @@ class AppSettingsRepository @Inject constructor(
         // it as a tracking pixel to learn a viewer's IP/timing/fingerprint just from them opening
         // a channel — this toggle is what gates that.
         val KEY_BROADCAST_SHOW_KNS_AVATARS = booleanPreferencesKey("broadcast_show_kns_avatars")
+        // User's custom bottom-tab order (press-and-hold to drag/reorder), comma-joined route
+        // strings e.g. "portfolio,chats,swap,profile" — a stringSetPreferencesKey can't
+        // be used here since Set has no defined iteration order, and order is the entire point.
+        val KEY_TAB_ORDER = stringPreferencesKey("tab_order")
+        // Kept in sync with KaChatApp.kt's bottomNavItems default order. "settings" is deliberately
+        // absent - it isn't a tab (matches iOS), it's reached one tap in from Profile's gear icon.
+        val DEFAULT_TAB_ORDER = listOf("portfolio", "cold_storage", "chats", "swap", "profile")
+        // Which bottom-tab routes the user has hidden from the nav bar (Settings > Customization >
+        // Menu) — "chats"/"profile" are never allowed in here, only "portfolio"/"cold_storage"/
+        // "swap". A route absent from this set is visible.
+        val KEY_HIDDEN_TABS = stringSetPreferencesKey("hidden_tabs")
+        // Settings > Customization > Dark Mode. True (dark) is the default so existing installs'
+        // appearance is unchanged — every screen was designed dark-only until this toggle existed.
+        val KEY_DARK_MODE_ENABLED = booleanPreferencesKey("dark_mode_enabled")
+        // Settings > Security. Both on by default — the seed phrase and account login were gated
+        // behind device authentication unconditionally before these toggles existed.
+        val KEY_BIOMETRIC_SEED_PHRASE_ENABLED = booleanPreferencesKey("biometric_seed_phrase_enabled")
+        val KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED = booleanPreferencesKey("biometric_account_login_enabled")
+        val KEY_BIOMETRIC_SPENDING_KEY_ENABLED = booleanPreferencesKey("biometric_spending_key_enabled")
+        // One-time ChangeNOW terms/liability disclaimer shown the first time Swap is opened.
+        val KEY_SWAP_DISCLAIMER_AGREED = booleanPreferencesKey("swap_disclaimer_agreed")
+        // Settings > Customization > Currency. Fiat currency for Portfolio's live KAS price/value
+        // display - lowercase ISO 4217 code, doubling as the literal CoinGecko `vs_currency` value
+        // (see CoinGeckoApi). Global, not per-account, matching darkModeEnabled/hiddenTabs.
+        val KEY_CURRENCY = stringPreferencesKey("currency")
     }
 
     // -------------------------------------------------------------------------
@@ -96,8 +154,12 @@ class AppSettingsRepository @Inject constructor(
         it[KEY_NETWORK] ?: DEFAULT_NETWORK
     }
 
+    // Transforms away the retired kasia.fyi default on read (rather than requiring a one-time
+    // write-back migration) - anyone who saved settings before the indexer moved to kasia.wtf
+    // would otherwise stay stuck on kasia.fyi forever, which 404s on every group-chat REST call.
     val indexerUrl: Flow<String> = dataStore.data.map {
-        it[KEY_INDEXER_URL] ?: DEFAULT_INDEXER_URL
+        val stored = it[KEY_INDEXER_URL]
+        if (stored == null || stored == LEGACY_DEFAULT_INDEXER_URL) DEFAULT_INDEXER_URL else stored
     }
 
     val knsApiUrl: Flow<String> = dataStore.data.map {
@@ -108,6 +170,24 @@ class AppSettingsRepository @Inject constructor(
         it[KEY_KASPA_REST_URL] ?: DEFAULT_KASPA_REST_URL
     }
 
+    // Falls back to DEFAULT_TRUSTED_NODE_ADDRESS only when the key has never been written at
+    // all (a fresh install) - once the user explicitly saves "" (clearing it via the Kaspa Node
+    // field), that's a real stored value distinct from "never touched", so it correctly stays
+    // empty (normal discovery) instead of snapping back to the default on every read.
+    val trustedNodeAddress: Flow<String> = dataStore.data.map {
+        it[KEY_TRUSTED_NODE_ADDRESS] ?: DEFAULT_TRUSTED_NODE_ADDRESS
+    }
+
+    val savedNodeAddresses: Flow<List<com.kachat.app.models.SavedNodeAddress>> = dataStore.data.map { prefs ->
+        prefs[KEY_SAVED_NODE_ADDRESSES]?.let { json ->
+            try {
+                Gson().fromJson(json, Array<com.kachat.app.models.SavedNodeAddress>::class.java).toList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
+    }
+
     val hasWallet: Flow<Boolean> = dataStore.data.map {
         it[KEY_HAS_WALLET] ?: false
     }
@@ -116,24 +196,12 @@ class AppSettingsRepository @Inject constructor(
         it[KEY_ACTIVE_ADDRESS]
     }
 
-    val estimateFees: Flow<Boolean> = dataStore.data.map {
-        it[KEY_ESTIMATE_FEES] ?: true
-    }
-
-    val hideAutoCreatedPaymentChats: Flow<Boolean> = dataStore.data.map {
-        it[KEY_HIDE_AUTO_PAYMENT_CHATS] ?: false
-    }
-
-    val showContactBalance: Flow<Boolean> = dataStore.data.map {
-        it[KEY_SHOW_CONTACT_BALANCE] ?: true
-    }
-
     val chatPhotoQualityPreset: Flow<com.kachat.app.models.ChatPhotoQualityPreset> = dataStore.data.map {
         com.kachat.app.models.ChatPhotoQualityPreset.fromName(it[KEY_CHAT_PHOTO_QUALITY_PRESET])
     }
 
-    val requirePhotoApprovalForNewContacts: Flow<Boolean> = dataStore.data.map {
-        it[KEY_REQUIRE_PHOTO_APPROVAL] ?: true
+    val kaspaExplorer: Flow<com.kachat.app.models.KaspaExplorer> = dataStore.data.map {
+        com.kachat.app.models.KaspaExplorer.fromName(it[KEY_KASPA_EXPLORER])
     }
 
     val revealedPhotoTxIds: Flow<Set<String>> = dataStore.data.map {
@@ -147,6 +215,26 @@ class AppSettingsRepository @Inject constructor(
     val broadcastShowKnsAvatars: Flow<Boolean> = dataStore.data.map {
         it[KEY_BROADCAST_SHOW_KNS_AVATARS] ?: true
     }
+
+    /** Route strings, in display order — see KEY_TAB_ORDER. Falls back to the app's default tab order (as defined in KaChatApp.kt's bottomNavItems) until the user first drags a tab. */
+    val tabOrder: Flow<List<String>> = dataStore.data.map { prefs ->
+        prefs[KEY_TAB_ORDER]?.split(",")?.filter { it.isNotBlank() } ?: DEFAULT_TAB_ORDER
+    }
+
+    val hiddenTabs: Flow<Set<String>> = dataStore.data.map { it[KEY_HIDDEN_TABS] ?: emptySet() }
+
+    val darkModeEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_DARK_MODE_ENABLED] ?: true }
+
+    /** Lowercase ISO 4217 code (e.g. "usd", "eur") - see KEY_CURRENCY. */
+    val currency: Flow<String> = dataStore.data.map { it[KEY_CURRENCY] ?: "usd" }
+
+    val biometricSeedPhraseEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_SEED_PHRASE_ENABLED] ?: true }
+    val biometricAccountLoginEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] ?: true }
+    /** Gates the "Export" button on a spending address's own screen - separate from
+     *  [biometricSeedPhraseEnabled] since revealing one address's own derived key is lower-stakes
+     *  than the wallet's whole seed phrase, but still sensitive enough to gate independently. */
+    val biometricSpendingKeyEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC_SPENDING_KEY_ENABLED] ?: true }
+    val swapDisclaimerAgreed: Flow<Boolean> = dataStore.data.map { it[KEY_SWAP_DISCLAIMER_AGREED] ?: false }
 
     val notificationsEnabled: Flow<Boolean> = dataStore.data.map {
         it[KEY_NOTIFICATIONS_ENABLED] ?: true
@@ -162,6 +250,49 @@ class AppSettingsRepository @Inject constructor(
 
     val syncSystemContactsEnabled: Flow<Boolean> = dataStore.data.map {
         it[KEY_SYNC_SYSTEM_CONTACTS] ?: false
+    }
+
+    val showFeeEstimate: Flow<Boolean> = dataStore.data.map {
+        it[KEY_SHOW_FEE_ESTIMATE] ?: true
+    }
+
+    /** Falls back to [DEFAULT_QUICK_REACTION_EMOJIS] (matches the default in `Screens.kt`'s
+     *  `QUICK_REACTION_EMOJIS` / iOS's `AppSettings.defaultQuickReactionEmojis`) if never
+     *  customized, or if a stored value somehow isn't exactly 6 entries. */
+    val quickReactionEmojis: Flow<List<String>> = dataStore.data.map { prefs ->
+        val stored = prefs[KEY_QUICK_REACTION_EMOJIS]?.let { json ->
+            try {
+                Gson().fromJson(json, Array<String>::class.java).toList()
+            } catch (e: Exception) {
+                null
+            }
+        }
+        stored?.takeIf { it.size == 6 } ?: DEFAULT_QUICK_REACTION_EMOJIS
+    }
+
+    val groupHiddenMembers: Flow<Set<String>> = dataStore.data.map { it[KEY_GROUP_HIDDEN_MEMBERS] ?: emptySet() }
+    val groupMutedMembers: Flow<Set<String>> = dataStore.data.map { it[KEY_GROUP_MUTED_MEMBERS] ?: emptySet() }
+    val groupMentionsOnly: Flow<Set<String>> = dataStore.data.map { it[KEY_GROUP_MENTIONS_ONLY] ?: emptySet() }
+
+    suspend fun hideGroupMember(groupId: String, address: String) = dataStore.edit {
+        it[KEY_GROUP_HIDDEN_MEMBERS] = (it[KEY_GROUP_HIDDEN_MEMBERS] ?: emptySet()) + "$groupId|$address"
+    }
+
+    suspend fun unhideGroupMember(groupId: String, address: String) = dataStore.edit {
+        it[KEY_GROUP_HIDDEN_MEMBERS] = (it[KEY_GROUP_HIDDEN_MEMBERS] ?: emptySet()) - "$groupId|$address"
+    }
+
+    suspend fun muteGroupMember(groupId: String, address: String) = dataStore.edit {
+        it[KEY_GROUP_MUTED_MEMBERS] = (it[KEY_GROUP_MUTED_MEMBERS] ?: emptySet()) + "$groupId|$address"
+    }
+
+    suspend fun unmuteGroupMember(groupId: String, address: String) = dataStore.edit {
+        it[KEY_GROUP_MUTED_MEMBERS] = (it[KEY_GROUP_MUTED_MEMBERS] ?: emptySet()) - "$groupId|$address"
+    }
+
+    suspend fun setGroupMentionsOnly(groupId: String, enabled: Boolean) = dataStore.edit {
+        val current = it[KEY_GROUP_MENTIONS_ONLY] ?: emptySet()
+        it[KEY_GROUP_MENTIONS_ONLY] = if (enabled) current + groupId else current - groupId
     }
 
     val autoCreateSystemContactsEnabled: Flow<Boolean> = dataStore.data.map {
@@ -209,6 +340,17 @@ class AppSettingsRepository @Inject constructor(
         it[handshakeSyncCursorKey(address)]
     }
 
+    /**
+     * Per-account toggle for whether the "Setup Guide" re-entry points (the Profile screen's
+     * "Welcome Guide" row and the "Edit KNS Profile" screen's "Setup Guide" section) are shown.
+     * Keyed per-address like [paymentSyncBaseline] so switching accounts on the same device
+     * doesn't carry the choice over. Defaults to `true` (unset key) to match pre-existing
+     * behavior for anyone who had these guides visible before this toggle existed.
+     */
+    fun showSetupGuides(address: String): Flow<Boolean> = dataStore.data.map {
+        it[showSetupGuidesKey(address)] ?: true
+    }
+
     // -------------------------------------------------------------------------
     // Write helpers (suspend — call from coroutine / ViewModel)
     // -------------------------------------------------------------------------
@@ -217,19 +359,50 @@ class AppSettingsRepository @Inject constructor(
     suspend fun setIndexerUrl(value: String) = dataStore.edit { it[KEY_INDEXER_URL] = value }
     suspend fun setKnsApiUrl(value: String) = dataStore.edit { it[KEY_KNS_API_URL] = value }
     suspend fun setKaspaRestUrl(value: String) = dataStore.edit { it[KEY_KASPA_REST_URL] = value }
+    suspend fun setTrustedNodeAddress(value: String) = dataStore.edit { it[KEY_TRUSTED_NODE_ADDRESS] = value }
+    suspend fun addSavedNodeAddress(entry: com.kachat.app.models.SavedNodeAddress) = dataStore.edit { prefs ->
+        val current = prefs[KEY_SAVED_NODE_ADDRESSES]?.let { json ->
+            try {
+                Gson().fromJson(json, Array<com.kachat.app.models.SavedNodeAddress>::class.java).toList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
+        prefs[KEY_SAVED_NODE_ADDRESSES] = Gson().toJson(current + entry)
+    }
+    suspend fun removeSavedNodeAddress(id: String) = dataStore.edit { prefs ->
+        val current = prefs[KEY_SAVED_NODE_ADDRESSES]?.let { json ->
+            try {
+                Gson().fromJson(json, Array<com.kachat.app.models.SavedNodeAddress>::class.java).toList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
+        prefs[KEY_SAVED_NODE_ADDRESSES] = Gson().toJson(current.filterNot { it.id == id })
+    }
     suspend fun setHasWallet(value: Boolean) = dataStore.edit { it[KEY_HAS_WALLET] = value }
     suspend fun setActiveAddress(value: String) = dataStore.edit { it[KEY_ACTIVE_ADDRESS] = value }
-    suspend fun setEstimateFees(value: Boolean) = dataStore.edit { it[KEY_ESTIMATE_FEES] = value }
-    suspend fun setHideAutoCreatedPaymentChats(value: Boolean) = dataStore.edit { it[KEY_HIDE_AUTO_PAYMENT_CHATS] = value }
-    suspend fun setShowContactBalance(value: Boolean) = dataStore.edit { it[KEY_SHOW_CONTACT_BALANCE] = value }
     suspend fun setChatPhotoQualityPreset(value: com.kachat.app.models.ChatPhotoQualityPreset) = dataStore.edit { it[KEY_CHAT_PHOTO_QUALITY_PRESET] = value.name }
-    suspend fun setRequirePhotoApprovalForNewContacts(value: Boolean) = dataStore.edit { it[KEY_REQUIRE_PHOTO_APPROVAL] = value }
+    suspend fun setKaspaExplorer(value: com.kachat.app.models.KaspaExplorer) = dataStore.edit { it[KEY_KASPA_EXPLORER] = value.name }
     suspend fun revealPhoto(txId: String) = dataStore.edit {
         it[KEY_REVEALED_PHOTO_TX_IDS] = (it[KEY_REVEALED_PHOTO_TX_IDS] ?: emptySet()) + txId
     }
     suspend fun setBroadcastPopularEnabled(value: Boolean) = dataStore.edit { it[KEY_BROADCAST_POPULAR_ENABLED] = value }
     suspend fun setBroadcastShowKnsAvatars(value: Boolean) = dataStore.edit { it[KEY_BROADCAST_SHOW_KNS_AVATARS] = value }
+    suspend fun setTabOrder(routes: List<String>) = dataStore.edit { it[KEY_TAB_ORDER] = routes.joinToString(",") }
+    suspend fun setTabHidden(route: String, hidden: Boolean) = dataStore.edit { prefs ->
+        val current = prefs[KEY_HIDDEN_TABS] ?: emptySet()
+        prefs[KEY_HIDDEN_TABS] = if (hidden) current + route else current - route
+    }
+    suspend fun setDarkModeEnabled(value: Boolean) = dataStore.edit { it[KEY_DARK_MODE_ENABLED] = value }
+    suspend fun setCurrency(value: String) = dataStore.edit { it[KEY_CURRENCY] = value }
+    suspend fun setBiometricSeedPhraseEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_SEED_PHRASE_ENABLED] = value }
+    suspend fun setBiometricAccountLoginEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_ACCOUNT_LOGIN_ENABLED] = value }
+    suspend fun setBiometricSpendingKeyEnabled(value: Boolean) = dataStore.edit { it[KEY_BIOMETRIC_SPENDING_KEY_ENABLED] = value }
+    suspend fun setSwapDisclaimerAgreed(value: Boolean) = dataStore.edit { it[KEY_SWAP_DISCLAIMER_AGREED] = value }
     suspend fun setNotificationsEnabled(value: Boolean) = dataStore.edit { it[KEY_NOTIFICATIONS_ENABLED] = value }
+    suspend fun setShowFeeEstimate(value: Boolean) = dataStore.edit { it[KEY_SHOW_FEE_ESTIMATE] = value }
+    suspend fun setQuickReactionEmojis(value: List<String>) = dataStore.edit { it[KEY_QUICK_REACTION_EMOJIS] = Gson().toJson(value) }
     suspend fun setNotificationSoundEnabled(value: Boolean) = dataStore.edit { it[KEY_NOTIFICATION_SOUND] = value }
     suspend fun setNotificationVibrationEnabled(value: Boolean) = dataStore.edit { it[KEY_NOTIFICATION_VIBRATION] = value }
     suspend fun setSyncSystemContactsEnabled(value: Boolean) = dataStore.edit { it[KEY_SYNC_SYSTEM_CONTACTS] = value }
@@ -240,7 +413,9 @@ class AppSettingsRepository @Inject constructor(
     suspend fun clearPendingKnsCommit() = dataStore.edit { it.remove(KEY_PENDING_KNS_COMMIT) }
     suspend fun setPaymentSyncBaseline(address: String, value: Long) = dataStore.edit { it[paymentSyncBaselineKey(address)] = value }
     suspend fun setHandshakeSyncCursor(address: String, value: Long) = dataStore.edit { it[handshakeSyncCursorKey(address)] = value }
+    suspend fun setShowSetupGuides(address: String, value: Boolean) = dataStore.edit { it[showSetupGuidesKey(address)] = value }
 
     private fun paymentSyncBaselineKey(address: String) = longPreferencesKey("payment_sync_baseline_$address")
     private fun handshakeSyncCursorKey(address: String) = longPreferencesKey("handshake_sync_cursor_$address")
+    private fun showSetupGuidesKey(address: String) = booleanPreferencesKey("show_setup_guides_$address")
 }

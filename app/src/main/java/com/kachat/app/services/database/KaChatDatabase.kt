@@ -8,9 +8,16 @@ import com.kachat.app.models.BroadcastChannelEntity
 import com.kachat.app.models.BroadcastMessageEntity
 import com.kachat.app.models.ContactEntity
 import com.kachat.app.models.DeletedContactEntity
+import com.kachat.app.models.GroupEntity
+import com.kachat.app.models.GroupMessageEntity
+import com.kachat.app.models.GroupSyncCursorEntity
 import com.kachat.app.models.HiddenBroadcastSenderEntity
 import com.kachat.app.models.MessageEntity
 import com.kachat.app.models.MessageSyncCursorEntity
+import com.kachat.app.models.PortfolioEntity
+import com.kachat.app.models.PortfolioTransactionEntity
+import com.kachat.app.models.ReactionEntity
+import com.kachat.app.models.SwapTransactionEntity
 
 /**
  * Room database — local persistence layer.
@@ -28,14 +35,26 @@ import com.kachat.app.models.MessageSyncCursorEntity
         HiddenBroadcastSenderEntity::class,
         DeletedContactEntity::class,
         MessageSyncCursorEntity::class,
+        PortfolioTransactionEntity::class,
+        PortfolioEntity::class,
+        SwapTransactionEntity::class,
+        GroupEntity::class,
+        GroupMessageEntity::class,
+        GroupSyncCursorEntity::class,
+        ReactionEntity::class,
     ],
-    version = 19,
+    version = 31,
     exportSchema = true
 )
 abstract class KaChatDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun contactDao(): ContactDao
     abstract fun broadcastDao(): BroadcastDao
+    abstract fun portfolioDao(): PortfolioDao
+    abstract fun portfolioDefinitionDao(): PortfolioDefinitionDao
+    abstract fun swapDao(): SwapDao
+    abstract fun groupDao(): GroupDao
+    abstract fun reactionDao(): ReactionDao
 
     companion object {
         /**
@@ -103,19 +122,36 @@ abstract class KaChatDatabase : RoomDatabase() {
         }
 
         /**
-         * v17 -> v18: adds `contacts.photoAutoDisplayOverride` (nullable [PhotoAutoDisplayMode]
+         * v17 -> v18: adds `portfolio_transactions` — the KAS portfolio tracker's manually-entered
+         * buy/sell ledger (see [PortfolioTransactionEntity]). Purely additive, same as v16->v17;
+         * table shape copied verbatim from Room's generated schema (`app/schemas/.../18.json`) and
+         * validated against real SQLite before being written here.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `portfolio_transactions` (" +
+                        "`id` TEXT NOT NULL, `type` TEXT NOT NULL, `amountSompi` INTEGER NOT NULL, " +
+                        "`fiatValue` REAL NOT NULL, `timestampMillis` INTEGER NOT NULL, `notes` TEXT, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
+        /**
+         * v18 -> v19: adds `contacts.photoAutoDisplayOverride` (nullable [PhotoAutoDisplayMode]
          * name, null = automatic) backing the per-contact photo auto-display picker in Chat Info.
          * A single nullable column addition, so a plain `ALTER TABLE ... ADD COLUMN` suffices —
          * no rebuild-the-table dance needed (that was only required for the v15->v16 column drop).
          */
-        val MIGRATION_17_18 = object : Migration(17, 18) {
+        val MIGRATION_18_19 = object : Migration(18, 19) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `contacts` ADD COLUMN `photoAutoDisplayOverride` TEXT DEFAULT NULL")
             }
         }
 
         /**
-         * v18 -> v19: adds `deleted_contacts.deletedAtTxIds`, a comma-joined tie-breaker set of the
+         * v19 -> v20: adds `deleted_contacts.deletedAtTxIds`, a comma-joined tie-breaker set of the
          * transaction ids that shared the tombstone's exact `deletedAt` block_time — see
          * [DeletedContactEntity.deletedAtTxIds]'s doc comment. Fixes a real bug: a plain
          * `blockTime &lt;= deletedAt` comparison could wrongly filter out a genuinely new interaction
@@ -127,9 +163,174 @@ abstract class KaChatDatabase : RoomDatabase() {
          * tombstoned transaction that happens to be re-checked won't get the txId-match protection
          * pre-upgrade — it still gets caught by the more common `blockTime &lt; deletedAt` branch.
          */
-        val MIGRATION_18_19 = object : Migration(18, 19) {
+        val MIGRATION_19_20 = object : Migration(19, 20) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `deleted_contacts` ADD COLUMN `deletedAtTxIds` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * v20 -> v21: adds `contacts.notificationOverride` (nullable [com.kachat.app.models.ContactNotificationMode]
+         * name, null = follow Settings > Notifications) backing the per-contact "Incoming
+         * Notifications" picker in Chat Info — same shape of change as v18->v19's
+         * `photoAutoDisplayOverride`, so the same plain `ALTER TABLE ... ADD COLUMN` suffices.
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `contacts` ADD COLUMN `notificationOverride` TEXT DEFAULT NULL")
+            }
+        }
+
+        /**
+         * v21 -> v22: adds `swap_transactions` — local history of ChangeNOW-powered swaps this
+         * device has started (see [SwapTransactionEntity]). Purely additive, same shape of change
+         * as v16->v17/v17->v18's new tables.
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `swap_transactions` (" +
+                        "`id` TEXT NOT NULL, `fromTicker` TEXT NOT NULL, `fromNetwork` TEXT NOT NULL, " +
+                        "`toTicker` TEXT NOT NULL, `toNetwork` TEXT NOT NULL, `fromAmount` TEXT NOT NULL, " +
+                        "`toAmount` TEXT NOT NULL, `payinAddress` TEXT NOT NULL, `payoutAddress` TEXT NOT NULL, " +
+                        "`status` TEXT NOT NULL, `createdAtMillis` INTEGER NOT NULL, `kasSendTxId` TEXT, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
+        /**
+         * v22 -> v23: adds `swap_transactions.addedToPortfolio` so the Swap History detail view's
+         * "Add to Portfolio" action can only fire once per swap (otherwise reopening a finished
+         * swap and tapping it again would double-count the KAS in the portfolio's holdings math).
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `swap_transactions` ADD COLUMN `addedToPortfolio` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v23 -> v24: adds `groups` and `group_messages` — group chat metadata and message
+         * cache (see [GroupEntity]/[GroupMessageEntity]). Purely additive, same shape of change
+         * as the v16->v17/v17->v18/v21->v22 new-table migrations. Secret key material (group
+         * seed/root epoch/blinding key) deliberately isn't here — it lives in
+         * [com.kachat.app.services.GroupSecretStore]'s own encrypted prefs, not this database.
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `groups` (" +
+                        "`groupId` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                        "`adminAddress` TEXT NOT NULL, `adminXOnlyPubKeyHex` TEXT NOT NULL, `currentEpoch` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, `isAdmin` INTEGER NOT NULL, `membersJson` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`groupId`, `walletAddress`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `group_messages` (" +
+                        "`txId` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `groupId` TEXT NOT NULL, " +
+                        "`senderAddress` TEXT, `senderIdHex` TEXT NOT NULL, `epoch` INTEGER NOT NULL, " +
+                        "`msgIdHex` TEXT NOT NULL, `contentEncryptedHex` TEXT NOT NULL, `blockTimestamp` INTEGER NOT NULL, " +
+                        "`isOutgoing` INTEGER NOT NULL, `deliveryStatus` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`txId`, `walletAddress`))"
+                )
+            }
+        }
+
+        /**
+         * v24 -> v25: adds `group_sync_cursors`, tracking how far into the indexer's new
+         * `group-messages/by-blinded-group-id`/`group-control/by-sender` streams this wallet has
+         * synced (see [GroupSyncCursorEntity]) - group chat catch-up, mirroring
+         * `message_sync_cursors` (v16->v17) for 1:1 contextual messages. Purely additive.
+         */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `group_sync_cursors` (" +
+                        "`syncKey` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `lastBlockTime` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`syncKey`, `walletAddress`))"
+                )
+            }
+        }
+
+        /**
+         * v25 -> v26: adds `group_sync_cursors.cursor` - the indexer's opaque lossless pagination
+         * cursor, replacing plain `block_time` for group catch-up sync (multiple items can share
+         * a `block_time`, which a numeric-only cursor can't disambiguate - see
+         * docs/GROUP_CHAT_API.md). `lastBlockTime` is left in place unused rather than dropped;
+         * nothing was ever shipped against the v25-only shape.
+         */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `group_sync_cursors` ADD COLUMN `cursor` TEXT DEFAULT NULL")
+            }
+        }
+
+        /** Backs the Group Chats tab's unread badge - see GroupEntity.lastReadAt's doc comment. */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `lastReadAt` INTEGER DEFAULT NULL")
+            }
+        }
+
+        /**
+         * Scopes the portfolio ledger per wallet - see PortfolioTransactionEntity's doc comment.
+         * Existing rows get walletAddress='' (a non-null default, since SQLite's ALTER TABLE ADD
+         * COLUMN NOT NULL requires one on a non-empty table) and are claimed for a real address
+         * lazily by PortfolioRepository, not here - a Migration only has the raw database, not
+         * WalletManager's active-account state.
+         */
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `walletAddress` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * Adds the "up to 5 named portfolios per wallet" split - see PortfolioEntity's doc
+         * comment. New `portfolios` table plus a `portfolioId` column on `portfolio_transactions`
+         * (existing rows get '', a non-null default for the same ALTER TABLE reason as
+         * MIGRATION_27_28's `walletAddress`) - claimed for the wallet's default portfolio lazily
+         * by PortfolioRepository/PortfolioManager, not here.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `portfolios` (
+                        `id` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `name` TEXT NOT NULL,
+                        `sortOrder` INTEGER NOT NULL, `createdAtMillis` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`))"""
+                )
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `portfolioId` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * Adds "Add Kaspa Address" auto-import support - see PortfolioTransactionEntity's doc
+         * comment. Both columns are genuinely nullable (not a migrated-in requirement like the
+         * two ALTER TABLEs above), so no lazy-claim step is needed here or in PortfolioRepository.
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `sourceAddress` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `portfolio_transactions` ADD COLUMN `sourceTxId` TEXT DEFAULT NULL")
+            }
+        }
+
+        /**
+         * Adds `reactions` - tapback-style reactions sent/received for both 1:1 and group
+         * messages (one row per (targetTxId, walletAddress, reactorAddress); see
+         * [com.kachat.app.models.ReactionEntity]). Purely additive, no data to backfill.
+         */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `reactions` (
+                        `targetTxId` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `reactorAddress` TEXT NOT NULL,
+                        `emoji` TEXT NOT NULL, `reactionTxId` TEXT, `blockTimestamp` INTEGER NOT NULL,
+                        `contactId` TEXT, `groupId` TEXT,
+                        PRIMARY KEY(`targetTxId`, `walletAddress`, `reactorAddress`))"""
+                )
             }
         }
     }

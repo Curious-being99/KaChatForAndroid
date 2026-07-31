@@ -3,6 +3,10 @@
 /app/build/
 /build/
 /local.properties
+/.kotlin/
+
+# macOS
+.DS_Store
 
 # Memory Dumps
 *.hprof

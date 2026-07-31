@@ -80,4 +80,95 @@ object KaspaUtxoSelector {
             requiredAmount = requiredAmount
         )
     }
+
+    /**
+     * Coin control: prices and validates a user-picked, fixed set of UTXOs instead of greedily
+     * growing one. Same "close enough" leeway and always-price-a-change-output policy as
+     * [selectUtxosAndCalculateFee].
+     */
+    fun selectManualUtxosAndCalculateFee(
+        utxos: List<UtxoEntry>,
+        amountSompi: Long,
+        feeRateSompiPerGram: Long,
+        recipientScriptLen: Int,
+        changeScriptLen: Int
+    ): SelectionResult {
+        val totalSelected = utxos.sumOf { it.utxoEntry.amount }
+        val outputScriptLens = if (amountSompi > 0) listOf(recipientScriptLen, changeScriptLen) else listOf(changeScriptLen)
+        val mass = KaspaMass.calculateMass(numInputs = utxos.size, outputScriptLens = outputScriptLens, payloadSize = 0)
+        val estimatedFee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
+
+        var finalAmount = amountSompi
+        var requiredAmount = amountSompi + estimatedFee
+        if (totalSelected < requiredAmount) {
+            if (totalSelected > estimatedFee && (requiredAmount - totalSelected) < 2000) {
+                finalAmount = totalSelected - estimatedFee
+                requiredAmount = totalSelected
+            }
+        }
+        val changeAmount = totalSelected - finalAmount - estimatedFee
+
+        return SelectionResult(
+            selectedUtxos = utxos,
+            totalSelected = totalSelected,
+            estimatedFee = estimatedFee,
+            finalAmount = finalAmount,
+            changeAmount = changeAmount,
+            requiredAmount = requiredAmount
+        )
+    }
+
+    /**
+     * For the spending-address "sweep everything on every send" design (see
+     * KaspaWalletEngine.sendSpendingPayment): unlike [selectUtxosAndCalculateFee], which stops
+     * as soon as it's picked *enough* large UTXOs to cover the amount+fee, this always spends
+     * every given UTXO — so a spending address never ends a send holding a leftover fragment
+     * behind. In steady state this address only ever holds the single change UTXO from its own
+     * last spend (or a top-up), so this doesn't cost anything extra in practice — it only
+     * differs from the greedy selector when the address happens to hold more than one UTXO
+     * (e.g. multiple top-ups before a spend).
+     */
+    fun selectAllUtxosAndCalculateFee(
+        utxos: List<UtxoEntry>,
+        amountSompi: Long,
+        feeRateSompiPerGram: Long,
+        payloadBytes: ByteArray?,
+        recipientScriptLen: Int,
+        changeScriptLen: Int
+    ): SelectionResult {
+        val selectedUtxos = utxos.toList()
+        val totalSelected = selectedUtxos.sumOf { it.utxoEntry.amount }
+        val payloadSize = payloadBytes?.size ?: 0
+        val outputScriptLens = if (amountSompi > 0) listOf(recipientScriptLen, changeScriptLen) else listOf(changeScriptLen)
+
+        val mass = KaspaMass.calculateMass(
+            numInputs = selectedUtxos.size,
+            outputScriptLens = outputScriptLens,
+            payloadSize = payloadSize
+        )
+        val estimatedFee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
+
+        var finalAmount = amountSompi
+        var requiredAmount = amountSompi + estimatedFee
+
+        // Same "max send" dust tolerance as the greedy selector — if the sweep is short by a
+        // negligible amount, take the fee out of the payment rather than failing the send.
+        if (totalSelected < requiredAmount) {
+            if (totalSelected > estimatedFee && (requiredAmount - totalSelected) < 2000) {
+                finalAmount = totalSelected - estimatedFee
+                requiredAmount = totalSelected
+            }
+        }
+
+        val changeAmount = totalSelected - finalAmount - estimatedFee
+
+        return SelectionResult(
+            selectedUtxos = selectedUtxos,
+            totalSelected = totalSelected,
+            estimatedFee = estimatedFee,
+            finalAmount = finalAmount,
+            changeAmount = changeAmount,
+            requiredAmount = requiredAmount
+        )
+    }
 }

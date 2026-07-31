@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 19,
-    "identityHash": "5d59b53f232f6fd0702c8634177d8260",
+    "identityHash": "fcf3791222749ead4d3c46bfc60d21a6",
     "entities": [
       {
         "tableName": "messages",
@@ -332,7 +332,7 @@
       },
       {
         "tableName": "deleted_contacts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contactId` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `deletedAt` INTEGER NOT NULL, `deletedAtTxIds` TEXT NOT NULL, PRIMARY KEY(`contactId`, `walletAddress`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contactId` TEXT NOT NULL, `walletAddress` TEXT NOT NULL, `deletedAt` INTEGER NOT NULL, PRIMARY KEY(`contactId`, `walletAddress`))",
         "fields": [
           {
             "fieldPath": "contactId",
@@ -350,12 +350,6 @@
             "fieldPath": "deletedAt",
             "columnName": "deletedAt",
             "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "deletedAtTxIds",
-            "columnName": "deletedAtTxIds",
-            "affinity": "TEXT",
             "notNull": true
           }
         ],
@@ -408,12 +402,62 @@
         },
         "indices": [],
         "foreignKeys": []
+      },
+      {
+        "tableName": "portfolio_transactions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `type` TEXT NOT NULL, `amountSompi` INTEGER NOT NULL, `fiatValue` REAL NOT NULL, `timestampMillis` INTEGER NOT NULL, `notes` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountSompi",
+            "columnName": "amountSompi",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fiatValue",
+            "columnName": "fiatValue",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampMillis",
+            "columnName": "timestampMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5d59b53f232f6fd0702c8634177d8260')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fcf3791222749ead4d3c46bfc60d21a6')"
     ]
   }
 }

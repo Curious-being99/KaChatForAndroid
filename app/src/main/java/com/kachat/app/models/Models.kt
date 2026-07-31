@@ -32,6 +32,27 @@ data class MessageEntity(
 )
 
 /**
+ * A reaction (tapback) sent or received on a message — 1:1 ([contactId] set) or group ([groupId]
+ * set), never both. One row per (message, reactor): picking a new emoji replaces the previous
+ * row's [emoji] rather than adding a second row, and removing a reaction deletes the row outright
+ * (see [com.kachat.app.services.database.ReactionDao]). [targetTxId] is the reacted-to message's
+ * transaction id — the only identifier both parties/platforms agree on, since a local row id
+ * isn't shared cross-platform. [reactionTxId] is the reaction message's own transaction id, kept
+ * for reference/debugging (not used for dedup — the primary key already prevents duplicates).
+ */
+@Entity(tableName = "reactions", primaryKeys = ["targetTxId", "walletAddress", "reactorAddress"])
+data class ReactionEntity(
+    val targetTxId: String,
+    val walletAddress: String,
+    val reactorAddress: String,
+    val emoji: String,
+    val reactionTxId: String?,
+    val blockTimestamp: Long,
+    val contactId: String? = null,
+    val groupId: String? = null
+)
+
+/**
  * Tracks how far into one contact's `contextual-messages/by-sender` stream this wallet has
  * already synced, per alias (a contact may be messaging under more than one — see
  * `ChatRepository.syncContextualMessages`'s legacy/deterministic alias loop). The indexer's
@@ -72,7 +93,8 @@ data class ContactEntity(
     val systemContactId: String? = null,    // Phone contact's LOOKUP_KEY, once linked via "Link from Contacts" — takes priority over KNS auto-rename
     val systemContactName: String? = null,  // Name snapshot at link time, for the "Linked: X" row
     val systemContactLinkSource: String? = null, // "manual" | "autoCreated" — only "autoCreated" shadow contacts get deleted if Autocreate is turned off
-    val photoAutoDisplayOverride: String? = null // PhotoAutoDisplayMode.name, null = automatic (see ChatRepository.shouldAutoDisplayPhotos)
+    val photoAutoDisplayOverride: String? = null, // PhotoAutoDisplayMode.name, null = automatic (see ChatRepository.shouldAutoDisplayPhotos)
+    val notificationOverride: String? = null // ContactNotificationMode.name, null = follow Settings > Notifications (see NotificationHelper.show)
 )
 
 /**
@@ -153,5 +175,18 @@ data class PendingKnsCommit(
     val commitAmountSompi: Long,
     val revealAmountSompi: Long,
     val revealTargetAddress: String,
-    val operationType: String // "domain" | "profile" — for the recovery prompt's wording only
+    val operationType: String, // "domain" | "profile" — for the recovery prompt's wording only
+    // Nullable so Gson leaves it null (falls back to the identity address) when deserializing a
+    // commit persisted before this field existed, rather than failing to parse it entirely.
+    val changeAddress: String? = null
+)
+
+/**
+ * A user-saved "host:port" node address, kept purely for quick copy/paste into the
+ * trusted-node field in Connection Settings - not itself used for connections.
+ */
+data class SavedNodeAddress(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val label: String,
+    val address: String
 )

@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.kachat.app.MainActivity
 import com.kachat.app.R
+import com.kachat.app.models.ContactNotificationMode
 import com.kachat.app.repository.AppSettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,9 @@ class NotificationHelper @Inject constructor(
 
     // Same idea for broadcast channels — set by BroadcastViewModel's startLiveViewing/stopLiveViewing.
     private val activeChannelName = MutableStateFlow<String?>(null)
+
+    // Same idea for group chats — set by GroupChatViewModel as GroupChatThreadScreen opens/closes.
+    private val activeGroupId = MutableStateFlow<String?>(null)
 
     init {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -64,9 +68,18 @@ class NotificationHelper @Inject constructor(
         activeChannelName.value = channelName
     }
 
-    suspend fun show(contactId: String, title: String, text: String) {
+    fun setActiveGroup(groupId: String?) {
+        activeGroupId.value = groupId
+    }
+
+    /** Lets `GroupRepository` check this without needing its own copy of the state - used to keep
+     *  a group marked read in real time while its thread is on screen, not just once on open. */
+    fun isViewingGroup(groupId: String): Boolean = activeGroupId.value == groupId
+
+    suspend fun show(contactId: String, title: String, text: String, notificationOverride: ContactNotificationMode? = null) {
         if (activeContactId.value == contactId) return // already looking at this conversation
         if (!settings.notificationsEnabled.first()) return
+        if (notificationOverride == ContactNotificationMode.OFF) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -82,7 +95,13 @@ class NotificationHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val soundEnabled = settings.notificationSoundEnabled.first()
+        // Off/No Sound/Sound override wins over the global sound setting; vibration always
+        // follows the global setting regardless — the override is specifically about sound.
+        val soundEnabled = when (notificationOverride) {
+            ContactNotificationMode.SOUND -> true
+            ContactNotificationMode.NO_SOUND -> false
+            else -> settings.notificationSoundEnabled.first()
+        }
         val vibrationEnabled = settings.notificationVibrationEnabled.first()
         val channelId = channelFor(soundEnabled, vibrationEnabled)
         val notification = NotificationCompat.Builder(context, channelId)
@@ -145,10 +164,51 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    /** Per-group opt-in notification for a new `gcomm` message or a "you were added" `gctl_root` join — see [EXTRA_GROUP_ID]/GroupRepository. */
+    suspend fun showGroup(groupId: String, title: String, text: String) {
+        if (activeGroupId.value == groupId) return // already looking at this group's thread
+        if (!settings.notificationsEnabled.first()) return
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_GROUP_ID, groupId)
+        }
+        // Stable per-group request code, same reasoning as the per-contact/per-channel ones above.
+        val notificationId = groupId.hashCode()
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val soundEnabled = settings.notificationSoundEnabled.first()
+        val vibrationEnabled = settings.notificationVibrationEnabled.first()
+        val channelId = channelFor(soundEnabled, vibrationEnabled)
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_kachat_logo)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSilent(!soundEnabled && !vibrationEnabled)
+            .setVibrate(if (vibrationEnabled) longArrayOf(0, 250, 250, 250) else longArrayOf(0))
+            .apply { if (!soundEnabled) setSound(null) }
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+        } catch (e: SecurityException) {
+            // POST_NOTIFICATIONS not granted — skip rather than crash.
+        }
+    }
+
     companion object {
         const val CHANNEL_ID = "kachat_messages_sound_vibrate"
         const val EXTRA_CONTACT_ID = "contact_id"
         const val EXTRA_CHANNEL_NAME = "channel_name"
+        const val EXTRA_GROUP_ID = "group_id"
 
         // (channelId, soundEnabled, vibrationEnabled)
         private val CHANNELS = listOf(

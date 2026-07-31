@@ -8,10 +8,16 @@ import com.kachat.app.models.MessageEntity
 import com.kachat.app.repository.ChatRepository
 import com.kachat.app.util.KaspaAddress
 import com.kachat.app.util.MessageProtocol
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,14 +40,29 @@ class WalletService @Inject constructor(
     private val _balance = MutableStateFlow(0L)
     val balance: StateFlow<Long> = _balance.asStateFlow()
 
+    private val _spendingBalance = MutableStateFlow(0L)
+    val spendingBalance: StateFlow<Long> = _spendingBalance.asStateFlow()
+
     /** Amount sent with a handshake transaction: 0.2 KAS (matches iOS `handshakeAmount`). */
     private val HANDSHAKE_AMOUNT_SOMPI = 20_000_000L
 
     data class SendResult(val txId: String, val payloadHex: String)
 
+    /**
+     * The REST API client is built asynchronously off [AppSettingsRepository]'s persisted URL
+     * (see [NetworkService.observeSettings]), so right after a cold app launch it can still be
+     * null for the first tens-of-milliseconds while that first DataStore read resolves. Every
+     * caller here used to just no-op on null with no retry, so a refresh that raced this window
+     * (as [WalletViewModel]'s own init block always does) silently never happened, leaving
+     * balance/UTXOs stale until some later, unrelated action happened to call this again — this
+     * waits briefly instead, bounded so a genuinely broken custom endpoint doesn't hang forever.
+     */
+    private suspend fun readyApi(): KaspaRestApi? =
+        networkService.kaspaRestApi.value ?: withTimeoutOrNull(10_000) { networkService.kaspaRestApi.filterNotNull().first() }
+
     suspend fun refreshBalance() {
         val address = try { walletManager.getAddress() } catch (e: Exception) { return }
-        val api = networkService.kaspaRestApi.value ?: return
+        val api = readyApi() ?: return
 
         try {
             val response = api.getBalance(address)
@@ -51,12 +72,27 @@ class WalletService @Inject constructor(
         }
     }
 
+    suspend fun refreshSpendingBalance() {
+        val address = try { walletManager.currentSpendingAddress() } catch (e: Exception) { return }
+        val api = readyApi() ?: return
+
+        try {
+            val response = api.getBalance(address)
+            _spendingBalance.value = response.balance
+        } catch (e: Exception) {
+            Log.e("WalletService", "Error refreshing spending balance", e)
+        }
+    }
+
     /**
-     * Orchestrates a Kaspa payment: Fetch UTXOs -> Build -> Sign -> Broadcast.
+     * Orchestrates a Kaspa payment: Fetch UTXOs -> Build -> Sign -> Broadcast. Identity-address
+     * sourced — used internally by [sendKasiaMessage]/[sendBroadcast]/[sendHandshake] below (all
+     * unqualified same-class calls to this exact method) as well as anything else that needs a
+     * plain identity-sourced send. "Pay in Kaspa" does NOT go through this — see [payInKaspa].
      * @return The transaction ID if successful.
      */
-    suspend fun sendKaspa(toAddress: String, amountSompi: Long, payloadBytes: ByteArray? = null): String {
-        val result = walletEngine.sendKaspa(toAddress, amountSompi, payloadBytes)
+    suspend fun sendKaspa(toAddress: String, amountSompi: Long, payloadBytes: ByteArray? = null, feeRateOverride: Long? = null): String {
+        val result = walletEngine.sendKaspa(toAddress, amountSompi, payloadBytes, feeRateOverride = feeRateOverride)
 
         if (result.isSuccess) {
             refreshBalance()
@@ -67,6 +103,132 @@ class WalletService @Inject constructor(
     }
 
     /**
+     * "Pay in Kaspa" — orchestrates a payment sourced from the spending address, not the
+     * identity address (see [KaspaWalletEngine.sendSpendingPayment]). The only send path that
+     * doesn't go through [sendKaspa] above; messaging/handshakes are unaffected.
+     * @return The transaction ID if successful.
+     */
+    suspend fun payInKaspa(toAddress: String, amountSompi: Long, feeRateOverride: Long? = null): String {
+        val result = walletEngine.sendSpendingPayment(toAddress, amountSompi, feeRateOverride)
+
+        if (result.isSuccess) {
+            refreshSpendingBalance()
+            return result.getOrThrow()
+        } else {
+            throw result.exceptionOrNull() ?: Exception("Unknown error during Kaspa send")
+        }
+    }
+
+    data class SpendingAddressEntry(
+        val index: Int,
+        val address: String,
+        val balanceSompi: Long,
+        val everUsed: Boolean,
+        val isCurrent: Boolean,
+        val hidden: Boolean = false,
+        val label: String? = null
+    )
+
+    /**
+     * Every spending-chain address derived/shown so far for the active account — index 0 through
+     * the higher of the current active index and the highest one the Manage Addresses screen has
+     * generated — each with its live balance and whether it's ever had any on-chain history
+     * (so the UI can steer the user away from reusing an already-used address).
+     */
+    suspend fun getSpendingAddressList(): List<SpendingAddressEntry> {
+        val account = walletManager.getActiveAccount() ?: return emptyList()
+        val maxIndex = maxOf(account.spendingAddressIndex, account.maxSpendingAddressIndex)
+        val api = readyApi() ?: return emptyList()
+        val hiddenIndices = walletManager.getHiddenSpendingIndices(account.address)
+        val labels = walletManager.getSpendingAddressLabels(account.address)
+        // Each address's balance+history is an independent network round-trip — fetching them
+        // concurrently instead of one-by-one is what keeps this fast enough to feel live as the
+        // list grows past a couple of generated addresses.
+        return coroutineScope {
+            (0..maxIndex).map { index ->
+                async {
+                    val address = walletManager.deriveSpendingAddress(index)
+                    val balance = try { api.getBalance(address).balance } catch (e: Exception) { 0L }
+                    val everUsed = try { api.getTransactions(address, limit = 1).isNotEmpty() } catch (e: Exception) { false }
+                    SpendingAddressEntry(
+                        index, address, balance, everUsed,
+                        isCurrent = index == account.spendingAddressIndex,
+                        hidden = index in hiddenIndices,
+                        label = labels[index]
+                    )
+                }
+            }.awaitAll()
+        }
+    }
+
+    /** Toggles whether one spending-chain address is hidden from the main Manage Addresses list — see [WalletManager.setSpendingAddressHidden]. */
+    fun setSpendingAddressHidden(index: Int, hidden: Boolean) {
+        val account = walletManager.getActiveAccount() ?: return
+        walletManager.setSpendingAddressHidden(account.address, index, hidden)
+    }
+
+    /** Sets or clears (blank/null) a user nickname for one spending-chain address — see [WalletManager.setSpendingAddressLabel]. */
+    fun setSpendingAddressLabel(index: Int, label: String?) {
+        val account = walletManager.getActiveAccount() ?: return
+        walletManager.setSpendingAddressLabel(account.address, index, label)
+    }
+
+    /** Derives one more spending-chain address for the Manage Addresses screen, without changing which one "Pay in Kaspa" currently sources from. */
+    fun generateNextSpendingAddress(): Int {
+        val address = walletManager.getAddress()
+        return walletManager.generateNextSpendingAddress(address)
+    }
+
+    /**
+     * Makes [index] the address "Pay in Kaspa" sources from going forward. If the address that
+     * was active before this switches away from has any balance, it's swept over to the newly
+     * active one automatically — otherwise it'd be left stranded outside the one place the UI
+     * expects spendable KAS to live.
+     */
+    suspend fun setActiveSpendingAddress(index: Int) {
+        val identityAddress = walletManager.getAddress()
+        val previousIndex = walletManager.getActiveAccount()?.spendingAddressIndex
+        walletManager.setSpendingAddressIndex(identityAddress, index)
+
+        if (previousIndex != null && previousIndex != index) {
+            val previousAddress = walletManager.deriveSpendingAddress(previousIndex)
+            val api = networkService.kaspaRestApi.value
+            val previousBalance = try { api?.getBalance(previousAddress)?.balance ?: 0L } catch (e: Exception) { 0L }
+            if (previousBalance > 0) {
+                val newAddress = walletManager.deriveSpendingAddress(index)
+                walletEngine.sweepSpendingAddress(previousIndex, newAddress)
+            }
+        }
+    }
+
+    /**
+     * Sweeps every other spending-chain address's balance into the currently active one — for
+     * when KAS ended up scattered across several old addresses (e.g. from payments received
+     * directly, or before switching which one is starred) and the user wants it all back in one
+     * spendable place. Each address with a balance is its own real transaction; returns how many
+     * were actually swept.
+     */
+    suspend fun consolidateSpendingAddressesToCurrent(): Int {
+        val account = walletManager.getActiveAccount() ?: return 0
+        val currentIndex = account.spendingAddressIndex
+        val maxIndex = maxOf(account.spendingAddressIndex, account.maxSpendingAddressIndex)
+        val api = readyApi() ?: return 0
+        val currentAddress = walletManager.deriveSpendingAddress(currentIndex)
+
+        var sweptCount = 0
+        for (index in 0..maxIndex) {
+            if (index == currentIndex) continue
+            val address = walletManager.deriveSpendingAddress(index)
+            val balance = try { api.getBalance(address).balance } catch (e: Exception) { 0L }
+            if (balance > 0 && walletEngine.sweepSpendingAddress(index, currentAddress).isSuccess) {
+                sweptCount++
+            }
+        }
+        refreshSpendingBalance()
+        return sweptCount
+    }
+
+    /**
      * Sends an encrypted on-chain message (Kasia "comm" protocol) as a self-stash
      * transaction. No handshake is required first: if we've already completed a real
      * handshake with this contact we keep using that legacy alias, otherwise we tag
@@ -74,7 +236,7 @@ class WalletService @Inject constructor(
      * the recipient can independently derive the exact same value and find it without
      * ever seeing a handshake (see [WalletManager.theirDeterministicAlias]).
      */
-    suspend fun sendKasiaMessage(toContactId: String, text: String): SendResult {
+    suspend fun sendKasiaMessage(toContactId: String, text: String, feeRateOverride: Long? = null): SendResult {
         val recipientPubKey = KaspaAddress.decode(toContactId).second
         val contact = chatRepository.getContact(toContactId)
 
@@ -87,7 +249,7 @@ class WalletService @Inject constructor(
         val encrypted = MessageProtocol.encrypt(text, recipientPubKey)
         val payloadBytes = MessageProtocol.buildCommPayload(alias, encrypted)
 
-        val txId = sendKaspa(toAddress = walletManager.getAddress(), amountSompi = 0, payloadBytes = payloadBytes)
+        val txId = sendKaspa(toAddress = walletManager.getAddress(), amountSompi = 0, payloadBytes = payloadBytes, feeRateOverride = feeRateOverride)
         return SendResult(txId, payloadBytes.toHexString())
     }
 
@@ -96,9 +258,9 @@ class WalletService @Inject constructor(
      * shape as [sendKasiaMessage] but never encrypted (broadcasts are plaintext by design, since
      * they're public one-to-many channels rather than a 1:1 conversation — matches Kasia).
      */
-    suspend fun sendBroadcast(channel: String, content: String): SendResult {
+    suspend fun sendBroadcast(channel: String, content: String, feeRateOverride: Long? = null): SendResult {
         val payloadBytes = MessageProtocol.buildBcastPayload(channel, content)
-        val txId = sendKaspa(toAddress = walletManager.getAddress(), amountSompi = 0, payloadBytes = payloadBytes)
+        val txId = sendKaspa(toAddress = walletManager.getAddress(), amountSompi = 0, payloadBytes = payloadBytes, feeRateOverride = feeRateOverride)
         return SendResult(txId, payloadBytes.toHexString())
     }
 
@@ -146,9 +308,13 @@ class WalletService @Inject constructor(
                 )
         )
 
-        // So the sender also sees a "Request to communicate" bubble in their own
-        // thread, matching the real reference apps — previously only the recipient
-        // ever got a local record of the handshake.
+        // So the sender also sees a bubble for their own handshake in their own thread,
+        // matching the real reference apps — previously only the recipient ever got a local
+        // record of the handshake. A response (accepting an incoming request) reads as
+        // "[Handshake completed]" instead of the generic outreach text, since by definition
+        // accepting means the connection is now live, not still pending - matches the
+        // "🤝 Handshake completed" pill already shown for the other side of a completed
+        // handshake (see MessageBubble's `showCompleted`/`pillText`).
         chatRepository.insertMessage(
             MessageEntity(
                 id = txId,
@@ -156,7 +322,7 @@ class WalletService @Inject constructor(
                 walletAddress = walletManager.getAddress(),
                 type = MessageProtocol.TYPE_HANDSHAKE,
                 direction = "sent",
-                plaintextBody = "[Request to communicate]",
+                plaintextBody = if (isResponse) "[Handshake completed]" else "[Request to communicate]",
                 encryptedPayload = payloadBytes.toHexString(),
                 amountSompi = HANDSHAKE_AMOUNT_SOMPI,
                 blockTimestamp = System.currentTimeMillis()
@@ -236,16 +402,23 @@ class WalletService @Inject constructor(
         val payloadJson = Gson().toJson(KnsCreateDomainPayload(op = "create", p = "domain", v = label)).toByteArray()
         val revealTarget = if (availability.isReservedDomain) myAddress else MAINNET_REVENUE_ADDRESS
 
+        // KNS activity is funded and settled entirely on the identity/chatting address chain -
+        // no spending-address split, so nothing ends up scattered across two addresses.
+        val identityPrivateKey = walletManager.getPrivateKeyBytes()
+
         onStep(KnsInscribeStep.SUBMITTING_COMMIT)
         val commit = knsInscriptionEngine.buildAndSubmitCommit(
             payloadJson = payloadJson,
             commitAmountSompi = commitSompi,
             revealAmountSompi = revealSompi,
             revealTargetAddress = revealTarget,
-            operationType = "domain"
+            operationType = "domain",
+            fundingAddress = myAddress,
+            fundingPrivateKey = identityPrivateKey,
+            ownerPrivateKey = identityPrivateKey
         )
         onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, revealTarget)
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, revealTarget, myAddress, identityPrivateKey)
 
         onStep(KnsInscribeStep.VERIFYING)
         val verified = verifyDomainOwnership(fullDomain, myAddress)
@@ -278,9 +451,13 @@ class WalletService @Inject constructor(
         val trimmedAssetId = assetId.trim()
         require(trimmedAssetId.isNotEmpty()) { "Missing KNS asset id" }
         val trimmedValue = value.trim()
-        val myAddress = walletManager.getAddress()
 
         val payloadJson = Gson().toJson(KnsAddProfilePayload(op = "addProfile", id = trimmedAssetId, key = fieldKey, value = trimmedValue)).toByteArray()
+
+        // KNS activity is funded and settled entirely on the identity/chatting address chain -
+        // no spending-address split, so nothing ends up scattered across two addresses.
+        val myAddress = walletManager.getAddress()
+        val identityPrivateKey = walletManager.getPrivateKeyBytes()
 
         onStep(KnsInscribeStep.SUBMITTING_COMMIT)
         val commit = knsInscriptionEngine.buildAndSubmitCommit(
@@ -288,10 +465,13 @@ class WalletService @Inject constructor(
             commitAmountSompi = PROFILE_COMMIT_SOMPI,
             revealAmountSompi = PROFILE_REVEAL_SOMPI,
             revealTargetAddress = myAddress,
-            operationType = "profile"
+            operationType = "profile",
+            fundingAddress = myAddress,
+            fundingPrivateKey = identityPrivateKey,
+            ownerPrivateKey = identityPrivateKey
         )
         onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, myAddress)
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, myAddress, myAddress, identityPrivateKey)
 
         onStep(KnsInscribeStep.VERIFYING)
         val verified = verifyProfileField(trimmedAssetId, fieldKey, trimmedValue)
@@ -316,7 +496,7 @@ class WalletService @Inject constructor(
      * as a backend safety net: rejects sending to your own address, a different network's
      * address, or a domain you no longer actually own.
      */
-    suspend fun transferDomain(fullDomain: String, assetId: String, toAddress: String, onStep: (KnsInscribeStep) -> Unit = {}): TransferDomainResult {
+    suspend fun transferDomain(fullDomain: String, assetId: String, toAddress: String, priorityFeeSompi: Long = KnsInscriptionEngine.REVEAL_PRIORITY_FEE_SOMPI, onStep: (KnsInscribeStep) -> Unit = {}): TransferDomainResult {
         val trimmedAssetId = assetId.trim()
         require(trimmedAssetId.isNotEmpty()) { "Missing KNS asset id" }
         val myAddress = walletManager.getAddress()
@@ -330,16 +510,24 @@ class WalletService @Inject constructor(
 
         val payloadJson = Gson().toJson(KnsTransferDomainPayload(op = "transfer", p = "domain", id = trimmedAssetId, to = toAddress)).toByteArray()
 
+        // KNS activity is funded and settled entirely on the identity/chatting address chain -
+        // no spending-address split, same as inscribeDomain/updateKnsProfileField. Ownership
+        // itself moves via the payload's "to" field, authorized by the current owner's signature.
+        val identityPrivateKey = walletManager.getPrivateKeyBytes()
+
         onStep(KnsInscribeStep.SUBMITTING_COMMIT)
         val commit = knsInscriptionEngine.buildAndSubmitCommit(
             payloadJson = payloadJson,
             commitAmountSompi = TRANSFER_COMMIT_SOMPI,
             revealAmountSompi = TRANSFER_REVEAL_SOMPI,
             revealTargetAddress = myAddress,
-            operationType = "transfer"
+            operationType = "transfer",
+            fundingAddress = myAddress,
+            fundingPrivateKey = identityPrivateKey,
+            ownerPrivateKey = identityPrivateKey
         )
         onStep(KnsInscribeStep.SUBMITTING_REVEAL)
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, myAddress)
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, myAddress, myAddress, identityPrivateKey, priorityFeeSompi)
 
         onStep(KnsInscribeStep.VERIFYING)
         val verified = verifyDomainOwnership(fullDomain, toAddress)
@@ -389,7 +577,15 @@ class WalletService @Inject constructor(
             commitAmountSompi = pending.commitAmountSompi,
             revealAmountSompi = pending.revealAmountSompi
         )
-        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(commit, pending.revealTargetAddress)
+        // changeAddress falls back to the identity address for a commit persisted before that
+        // field existed — the reveal signature is always the identity key regardless (it has to
+        // match the redeem script's embedded pubkey from when the commit was originally built).
+        val revealTxId = knsInscriptionEngine.buildAndSubmitReveal(
+            commit,
+            pending.revealTargetAddress,
+            pending.changeAddress ?: walletManager.getAddress(),
+            walletManager.getPrivateKeyBytes()
+        )
         refreshBalance()
         return revealTxId
     }
