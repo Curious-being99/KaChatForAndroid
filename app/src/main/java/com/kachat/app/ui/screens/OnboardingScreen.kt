@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -604,26 +603,25 @@ internal fun parseSeedPhraseWords(raw: String): List<String> =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onProceed: () -> Unit) {
-    var seedPhraseText by remember { mutableStateOf("") }
     var accountName by remember { mutableStateOf("Imported Account") }
+    var wordCount by remember { mutableIntStateOf(24) }
+    // Fixed-capacity backing store; only the first [wordCount] entries are used.
+    var words by remember { mutableStateOf(List(24) { "" }) }
+    var activeSlot by remember { mutableIntStateOf(0) }
     val importState by viewModel.importWalletState.collectAsState()
-    val clipboardManager = LocalClipboardManager.current
+    val wordList = remember { viewModel.bip39Words }
 
-    val words = remember(seedPhraseText) { parseSeedPhraseWords(seedPhraseText) }
-    val wordCount = words.size
-    val isValidCount = wordCount == 12 || wordCount == 24
-    val canImport = isValidCount && accountName.isNotBlank()
+    val slots = words.take(wordCount)
+    val filled = slots.count { it.isNotEmpty() && wordList.contains(it.lowercase()) }
+    val allValid = slots.size == wordCount && slots.all { it.isNotEmpty() && wordList.contains(it.lowercase()) }
+    val canImport = allValid && accountName.isNotBlank()
 
     Surface(color = LocalAppColors.current.background, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
-                // Already scrollable, but without imePadding() the keyboard can still cover the
-                // "Account Name" field and "Import Account" button on devices where edge-to-edge
-                // means windowSoftInputMode="adjustResize" alone doesn't shrink the window.
+                .padding(horizontal = 24.dp, vertical = 16.dp)
                 .imePadding()
-                .verticalScroll(rememberScrollState())
         ) {
             IconButton(
                 onClick = onBack,
@@ -639,86 +637,24 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onProceed
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = stringResource(R.string.import_account),
-                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 color = LocalAppColors.current.textPrimary
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.seed_phrase),
-                    color = LocalAppColors.current.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "$wordCount words",
-                    color = if (isValidCount) Color(0xFF4CD964) else Color.Gray,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            TextField(
-                value = seedPhraseText,
-                onValueChange = { seedPhraseText = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp)
-                    .clip(RoundedCornerShape(12.dp)),
-                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
-                placeholder = { Text(stringResource(R.string.enter_your_12_or_24_word), color = LocalAppColors.current.textSecondary) },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrect = false),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = LocalAppColors.current.surface,
-                    unfocusedContainerColor = LocalAppColors.current.surface,
-                    focusedTextColor = LocalAppColors.current.textPrimary,
-                    unfocusedTextColor = LocalAppColors.current.textPrimary,
-                    cursorColor = KaspaTeal,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
-                )
-            )
-
-            if (seedPhraseText.isNotBlank() && !isValidCount) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.please_enter_exactly_12_or_24),
-                    color = Color(0xFFFF3B30),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            TextButton(onClick = { clipboardManager.getText()?.text?.let { seedPhraseText = it } }) {
-                Icon(Icons.Default.ContentPaste, contentDescription = null, tint = KaspaTeal, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.paste_from_clipboard), color = KaspaTeal, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
+            // Account name — the only field that uses the OS keyboard; it isn't sensitive.
             Text(
                 text = stringResource(R.string.account_name),
                 color = LocalAppColors.current.textPrimary,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleSmall
             )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
+            Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = accountName,
                 onValueChange = { accountName = it },
@@ -737,10 +673,71 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onProceed
                 singleLine = true
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Word-count selector
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = wordCount == 24,
+                    onClick = { wordCount = 24 },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = LocalAppColors.current.surfaceVariant,
+                        activeContentColor = LocalAppColors.current.textPrimary,
+                        inactiveContainerColor = LocalAppColors.current.surface,
+                        inactiveContentColor = LocalAppColors.current.textSecondary
+                    )
+                ) { Text(stringResource(R.string.n_24_words_recommended), fontSize = 12.sp) }
+                SegmentedButton(
+                    selected = wordCount == 12,
+                    onClick = { wordCount = 12; if (activeSlot >= 12) activeSlot = 11 },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = LocalAppColors.current.surfaceVariant,
+                        activeContentColor = LocalAppColors.current.textPrimary,
+                        inactiveContainerColor = LocalAppColors.current.surface,
+                        inactiveContentColor = LocalAppColors.current.textSecondary
+                    )
+                ) { Text(stringResource(R.string.n_12_words), fontSize = 12.sp) }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.seed_phrase),
+                    color = LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "$filled/$wordCount",
+                    color = if (allValid) Color(0xFF4CD964) else LocalAppColors.current.textSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Custom in-app keyboard + numbered slot grid + autocomplete (no OS keyboard, no paste)
+            SeedPhraseKeyboard(
+                wordCount = wordCount,
+                words = words,
+                activeSlot = activeSlot,
+                wordList = wordList,
+                modifier = Modifier.weight(1f),
+                onWordsChange = { words = it },
+                onActiveSlotChange = { activeSlot = it }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
-                onClick = { if (viewModel.prepareImport(accountName, words)) onProceed() },
+                onClick = { if (viewModel.prepareImport(accountName, slots)) onProceed() },
                 enabled = canImport,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -755,8 +752,6 @@ fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onProceed
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 

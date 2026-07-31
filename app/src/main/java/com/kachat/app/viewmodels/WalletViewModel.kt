@@ -567,6 +567,12 @@ class WalletViewModel @Inject constructor(
         _importWalletState.value = ImportWalletUiState()
     }
 
+    /** BIP39 English wordlist (2048 words) for the in-app import keyboard's autocomplete. */
+    val bip39Words: List<String> by lazy { walletManager.bip39WordList() }
+
+    /** True if [word] is an exact BIP39 English word. */
+    fun isBip39Word(word: String): Boolean = walletManager.isValidMnemonicWord(word)
+
     fun clearMnemonic() {
         _mnemonic.value = null
         _onMnemonicGenerated.value = null

@@ -266,6 +266,13 @@ class WalletManager @Inject constructor(
         false
     }
 
+    /** The BIP39 English wordlist (2048 words), for the in-app import keyboard's autocomplete. */
+    fun bip39WordList(): List<String> = MnemonicCode.INSTANCE.wordList
+
+    /** True if [word] is an exact BIP39 English word. */
+    fun isValidMnemonicWord(word: String): Boolean =
+        MnemonicCode.INSTANCE.wordList.contains(word.lowercase())
+
     /**
      * Import an existing wallet from a BIP39 mnemonic phrase. Throws [org.bitcoinj.crypto.MnemonicException]
      * if the phrase's checksum/wordlist is invalid — the caller is expected to catch this and show
