@@ -262,7 +262,7 @@ class ChatRepository @Inject constructor(
     }
 
     /** Replaces any previous reaction [reactorAddress] left on [targetTxId] with [emoji] - one reaction per (message, reactor). */
-    suspend fun upsertReaction(targetTxId: String, reactorAddress: String, contactId: String, emoji: String, reactionTxId: String?, blockTimestamp: Long) {
+    suspend fun upsertReaction(targetTxId: String, reactorAddress: String, contactId: String, emoji: String, reactionTxId: String?, blockTimestamp: Long, deliveryStatus: String = "sent", failedAction: String? = null) {
         database.reactionDao().upsertReaction(
             ReactionEntity(
                 targetTxId = targetTxId,
@@ -271,7 +271,9 @@ class ChatRepository @Inject constructor(
                 emoji = emoji,
                 reactionTxId = reactionTxId,
                 blockTimestamp = blockTimestamp,
-                contactId = contactId
+                contactId = contactId,
+                deliveryStatus = deliveryStatus,
+                failedAction = failedAction
             )
         )
     }

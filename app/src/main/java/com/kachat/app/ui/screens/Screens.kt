@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -994,10 +995,14 @@ fun ChatThreadScreen(
                                 onRetry = { chatViewModel.retrySendMessage(msg) },
                                 onReply = { chatViewModel.startReplyTo(msg) },
                                 reactions = reactionsByTxId[msg.id] ?: emptyList(),
+                                myReactorAddress = myAddress,
                                 onReact = { emoji ->
                                     val existing = reactionsByTxId[msg.id]?.find { it.reactorAddress == myAddress }
                                     val action = if (existing?.emoji == emoji) "remove" else "add"
                                     chatViewModel.sendReaction(contactId, msg.id, emoji, action)
+                                },
+                                onRetryReaction = { reaction ->
+                                    chatViewModel.retryReaction(contactId, reaction.targetTxId, reaction.emoji, reaction.failedAction ?: "add")
                                 },
                                 onSavePhoto = savePhotoIfPermitted,
                                 revealOffsetPx = revealOffsetPx,
@@ -1213,7 +1218,11 @@ fun MessageBubble(
      *  rendered on its corner and to know whether tapping an emoji in the quick-reaction bar
      *  should add/replace or remove the caller's own reaction. */
     reactions: List<ReactionEntity> = emptyList(),
+    /** The local wallet's address, to find *my* reaction so the pill can show its status. */
+    myReactorAddress: String? = null,
     onReact: (String) -> Unit = {},
+    /** Retries the local user's failed reaction on this message (see its `failedAction`). */
+    onRetryReaction: (ReactionEntity) -> Unit = {},
     onSavePhoto: (ByteArray, String) -> Unit = { _, _ -> },
     revealOffsetPx: Animatable<Float, AnimationVector1D> = remember { Animatable(0f) },
     maxRevealOffsetPx: Float = 1f,
@@ -1629,11 +1638,18 @@ fun MessageBubble(
             if (reactions.isNotEmpty()) {
                 ReactionPill(
                     reactions = reactions,
+                    myAddress = myReactorAddress,
                     modifier = Modifier
                         .align(if (isSent) Alignment.BottomStart else Alignment.BottomEnd)
                         .offset(y = 10.dp)
                 )
             }
+        }
+
+        // The reaction pill is offset ~10dp below the bubble Box above, and offset reserves no
+        // layout space, so reserve it here - otherwise the pill overlaps the message below it.
+        if (reactions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // Placed as its own sibling (not inside the Box above) so it stacks cleanly below the
@@ -1645,14 +1661,31 @@ fun MessageBubble(
         }
 
         if (isSent) {
-            Row(modifier = Modifier.padding(top = 4.dp)) {
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 when (message.deliveryStatus) {
-                    "failed" -> Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = stringResource(R.string.failed_to_send),
-                        tint = Color(0xFFFF3B30),
-                        modifier = Modifier.size(12.dp)
-                    )
+                    "failed" -> {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = stringResource(R.string.failed_to_send),
+                            tint = Color(0xFFFF3B30),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        // Tappable "Retry" next to the red error icon (also reachable via the
+                        // long-press menu) so a failed send can be resent with one tap.
+                        if (ChatViewModel.shouldShowRetryOption(message)) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.retry),
+                                color = Color(0xFFFF3B30),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onRetry() }
+                            )
+                        }
+                    }
                     "pending" -> Icon(
                         imageVector = Icons.Default.Schedule,
                         contentDescription = stringResource(R.string.sending),
@@ -1667,6 +1700,21 @@ fun MessageBubble(
                     )
                 }
             }
+        }
+
+        // A reaction (not the message) that failed to send: red "Retry" under the message, paired
+        // with the error icon shown on the reaction pill. Shown for reactions on any message (yours
+        // or the contact's), so it isn't gated by isSent like the message-status row above.
+        reactions.firstOrNull { it.deliveryStatus == "failed" }?.let { failedReaction ->
+            Text(
+                text = stringResource(R.string.retry),
+                color = Color(0xFFFF3B30),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clickable { onRetryReaction(failedReaction) }
+            )
         }
         }
         if (isSent) {
@@ -4002,8 +4050,15 @@ fun SpendingAddressSendFlow(
             recipientInput = fromAddress
             isEstimatingMax = true
             try {
-                val maxSompi = viewModel.estimateMaxSendableAmount(fromAddress, feeRateOverrideSompi, manualUtxos)
-                fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                // Consolidation is bounded by Kaspa's per-transaction mass cap, so pin the send to
+                // one transaction's worth of UTXOs (largest-first, ≤MAX_INPUTS_PER_TRANSACTION) and
+                // estimate Max over exactly those. This is why Max works even when the address has
+                // more UTXOs than a single tx can hold - it consolidates one batch; repeat to reduce.
+                val chunk = viewModel.maxConsolidatableChunk(fromAddress, feeRateOverrideSompi)
+                if (chunk != null) {
+                    manualUtxos = chunk.second
+                    fiatAmountState.setMaxKas(chunk.first / 100_000_000.0, fiatPriceInCurrency)
+                }
             } catch (e: Exception) {
                 // Leave the field untouched on failure - same as the Max button itself.
             } finally {
@@ -4256,8 +4311,18 @@ fun SpendingAddressSendFlow(
                                     coroutineScope.launch {
                                         isEstimatingMax = true
                                         try {
-                                            val maxSompi = viewModel.estimateMaxSendableAmount(fromAddress, feeRateOverrideSompi, manualUtxos)
-                                            fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                            if (isCompoundMode) {
+                                                // One mass-safe transaction's worth (largest-first, ≤cap), pinned as
+                                                // the input set - see the compound LaunchedEffect above.
+                                                val chunk = viewModel.maxConsolidatableChunk(fromAddress, feeRateOverrideSompi)
+                                                if (chunk != null) {
+                                                    manualUtxos = chunk.second
+                                                    fiatAmountState.setMaxKas(chunk.first / 100_000_000.0, fiatPriceInCurrency)
+                                                }
+                                            } else {
+                                                val maxSompi = viewModel.estimateMaxSendableAmount(fromAddress, feeRateOverrideSompi, manualUtxos)
+                                                fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
+                                            }
                                         } catch (e: Exception) {
                                             // Leave the field untouched on failure - same as Cold Storage/iOS.
                                         } finally {
@@ -5484,12 +5549,27 @@ fun QuickReactionBar(
 
 /** Small rounded pill overlapping a bubble's bottom outer corner, showing the distinct emoji reacted with (and a count when more than one person used the same one). */
 @Composable
-fun ReactionPill(reactions: List<ReactionEntity>, modifier: Modifier = Modifier) {
+fun ReactionPill(reactions: List<ReactionEntity>, modifier: Modifier = Modifier, myAddress: String? = null) {
     val counts = remember(reactions) { reactions.groupingBy { it.emoji }.eachCount() }
+    // Status of the local user's own reaction: "pending" → no icon, "sent" → green checkmark once it
+    // goes through, "failed" → red error icon + red outline (the tappable Retry is under the message).
+    // Only the local user's reaction ever pends/fails; everyone else's is always "sent".
+    val myReaction = remember(reactions, myAddress) { reactions.firstOrNull { it.reactorAddress == myAddress } }
+    // The green "sent" checkmark is a recent confirmation, not a permanent badge - drop it once the
+    // reaction is older than 10 minutes. Computed each recomposition (not remembered) so it clears
+    // on the next refresh past the window. Pending/failed are always shown.
+    val myStatus = myReaction?.let { r ->
+        when (r.deliveryStatus) {
+            "failed" -> "failed"
+            "sent" -> if (System.currentTimeMillis() - r.blockTimestamp < 600_000L) "sent" else null
+            else -> null
+        }
+    }
     Surface(
         color = LocalAppColors.current.surfaceVariant,
         shape = RoundedCornerShape(50),
         shadowElevation = 2.dp,
+        border = if (myStatus == "failed") BorderStroke(1.dp, Color(0xFFFF3B30).copy(alpha = 0.6f)) else null,
         modifier = modifier
     ) {
         Row(
@@ -5497,6 +5577,20 @@ fun ReactionPill(reactions: List<ReactionEntity>, modifier: Modifier = Modifier)
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            when (myStatus) {
+                "failed" -> Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = stringResource(R.string.failed_to_send),
+                    tint = Color(0xFFFF3B30),
+                    modifier = Modifier.size(11.dp)
+                )
+                "sent" -> Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF4CD964),
+                    modifier = Modifier.size(11.dp)
+                )
+            }
             counts.forEach { (emoji, count) ->
                 Text(emoji, fontSize = 13.sp)
                 if (count > 1) {

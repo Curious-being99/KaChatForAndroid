@@ -644,14 +644,31 @@ private fun ChessChatRow(message: MessageEntity, onRetry: () -> Unit) {
             }
         }
         if (isSent) {
-            Row(modifier = Modifier.padding(top = 2.dp)) {
+            Row(
+                modifier = Modifier.padding(top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 when (message.deliveryStatus) {
-                    "failed" -> Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = stringResource(R.string.failed_to_send),
-                        tint = Color(0xFFFF3B30),
-                        modifier = Modifier.size(11.dp)
-                    )
+                    "failed" -> {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = stringResource(R.string.failed_to_send),
+                            tint = Color(0xFFFF3B30),
+                            modifier = Modifier.size(11.dp)
+                        )
+                        // Tappable "Retry" next to the red error icon, matching the full-screen
+                        // move-status row's Retry affordance.
+                        if (ChatViewModel.shouldShowRetryOption(message)) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.retry),
+                                color = Color(0xFFFF3B30),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onRetry() }
+                            )
+                        }
+                    }
                     "pending" -> Icon(
                         imageVector = Icons.Default.Schedule,
                         contentDescription = stringResource(R.string.sending),

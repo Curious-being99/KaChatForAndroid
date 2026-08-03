@@ -49,7 +49,14 @@ data class ReactionEntity(
     val reactionTxId: String?,
     val blockTimestamp: Long,
     val contactId: String? = null,
-    val groupId: String? = null
+    val groupId: String? = null,
+    // Send status of the local user's own reaction: "sent" = delivered (also the value for every
+    // received reaction), "failed" = the reaction tx never sent. Drives the error icon on the pill
+    // and the Retry under the message.
+    val deliveryStatus: String = "sent",
+    // When "failed", whether the failed change was an "add" or "remove" — so Retry re-attempts the
+    // correct action.
+    val failedAction: String? = null
 )
 
 /**

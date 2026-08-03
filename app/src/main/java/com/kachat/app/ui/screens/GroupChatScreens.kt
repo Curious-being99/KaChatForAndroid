@@ -653,6 +653,9 @@ fun GroupChatThreadScreen(
                                 val action = if (existing?.emoji == emoji) "remove" else "add"
                                 chatViewModel.sendGroupReaction(groupId, message.txId, emoji, action)
                             },
+                            onRetryReaction = { reaction ->
+                                chatViewModel.retryGroupReaction(groupId, reaction.targetTxId, reaction.emoji, reaction.failedAction ?: "add")
+                            },
                             onJumpToReply = jumpToReply,
                             isHighlighted = message.txId == highlightedMessageId,
                             resolveMentionName = resolveDisplayName,
@@ -908,6 +911,8 @@ private fun GroupMessageBubble(
     onReply: () -> Unit = {},
     reactions: List<com.kachat.app.models.ReactionEntity> = emptyList(),
     onReact: (String) -> Unit = {},
+    /** Retries the local user's failed reaction on this message (see its `failedAction`). */
+    onRetryReaction: (com.kachat.app.models.ReactionEntity) -> Unit = {},
     /** Tapping the reply quote (if any) jumps to and highlights the original message. */
     onJumpToReply: (String) -> Unit = {},
     isHighlighted: Boolean = false,
@@ -1085,9 +1090,26 @@ private fun GroupMessageBubble(
             }
 
             if (isSent) {
-                Row(modifier = Modifier.padding(top = 4.dp)) {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     when (message.deliveryStatus) {
-                        "failed" -> Icon(Icons.Default.Error, contentDescription = stringResource(R.string.failed_to_send), tint = Color(0xFFFF3B30), modifier = Modifier.size(12.dp))
+                        "failed" -> {
+                            Icon(Icons.Default.Error, contentDescription = stringResource(R.string.failed_to_send), tint = Color(0xFFFF3B30), modifier = Modifier.size(12.dp))
+                            // Tappable "Retry" next to the red error icon (also in the long-press
+                            // menu) so a failed send can be resent with one tap.
+                            if (canRetry) {
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.retry),
+                                    color = Color(0xFFFF3B30),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable { onRetry() }
+                                )
+                            }
+                        }
                         "pending" -> Icon(Icons.Default.Schedule, contentDescription = stringResource(R.string.sending), tint = LocalAppColors.current.textSecondary, modifier = Modifier.size(12.dp))
                         else -> Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CD964), modifier = Modifier.size(12.dp))
                     }
@@ -1143,9 +1165,30 @@ private fun GroupMessageBubble(
                 Box(modifier = Modifier.fillMaxWidth()) {
                     ReactionPill(
                         reactions = reactions,
+                        myAddress = myAddress,
                         modifier = Modifier
                             .align(if (isSent) Alignment.CenterStart else Alignment.CenterEnd)
                             .offset(y = 10.dp)
+                    )
+                }
+                // The pill is offset ~10dp down (offset reserves no layout space), so reserve it
+                // here - otherwise the pill overlaps the content/next message below it.
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            // A reaction (not the message) that failed to send: red "Retry" under the message,
+            // paired with the error icon on the reaction pill. Shown for reactions on any message.
+            reactions.firstOrNull { it.deliveryStatus == "failed" }?.let { failedReaction ->
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.retry),
+                        color = Color(0xFFFF3B30),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .align(if (isSent) Alignment.CenterStart else Alignment.CenterEnd)
+                            .padding(top = 2.dp)
+                            .clickable { onRetryReaction(failedReaction) }
                     )
                 }
             }

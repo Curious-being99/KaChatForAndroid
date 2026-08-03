@@ -990,6 +990,11 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** Retries a group reaction whose send previously failed - re-attempts the stored add/remove. */
+    fun retryGroupReaction(groupId: String, targetTxId: String, emoji: String, action: String) {
+        sendGroupReaction(groupId, targetTxId, emoji, action)
+    }
+
     // -------------------------------------------------------------------------
     // Group hide/mute/mentions-only - mirrors iOS's GroupChatService equivalents.
     // -------------------------------------------------------------------------
@@ -1407,7 +1412,9 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val myAddress = walletManager.getAddress()
             if (action == "add") {
-                chatRepository.upsertReaction(targetTxId, myAddress, contactId, emoji, null, System.currentTimeMillis())
+                // Optimistically pending (no icon) - flips to sent (green checkmark) once the send
+                // succeeds below, or failed (red error + Retry) in the catch.
+                chatRepository.upsertReaction(targetTxId, myAddress, contactId, emoji, null, System.currentTimeMillis(), deliveryStatus = "pending")
             } else {
                 chatRepository.removeReaction(targetTxId, myAddress)
             }
@@ -1419,8 +1426,17 @@ class ChatViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e("ChatViewModel", "Error sending reaction", e)
+                // Flag failed so the pill shows the red error icon and a Retry appears under the
+                // message. A failed "remove" restores the optimistically-deleted reaction (marked
+                // failed) so it isn't silently lost; Retry re-attempts the change.
+                chatRepository.upsertReaction(targetTxId, myAddress, contactId, emoji, null, System.currentTimeMillis(), deliveryStatus = "failed", failedAction = action)
             }
         }
+    }
+
+    /** Retries a 1:1 reaction whose send previously failed - re-attempts the stored add/remove. */
+    fun retryReaction(contactId: String, targetTxId: String, emoji: String, action: String) {
+        sendReaction(contactId, targetTxId, emoji, action)
     }
 
     // -------------------------------------------------------------------------

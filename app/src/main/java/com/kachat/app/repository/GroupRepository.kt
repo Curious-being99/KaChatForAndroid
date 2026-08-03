@@ -426,10 +426,13 @@ class GroupRepository @Inject constructor(
         val payload = MessageReaction.encode(targetTxId, emoji, action)
 
         if (action == "add") {
+            // Optimistically pending (no icon) - flips to sent (green checkmark) on submit below, or
+            // failed (red error + Retry) in the catch.
             database.reactionDao().upsertReaction(
                 ReactionEntity(
                     targetTxId = targetTxId, walletAddress = walletAddress, reactorAddress = walletAddress,
-                    emoji = emoji, reactionTxId = null, blockTimestamp = System.currentTimeMillis(), groupId = groupId
+                    emoji = emoji, reactionTxId = null, blockTimestamp = System.currentTimeMillis(), groupId = groupId,
+                    deliveryStatus = "pending"
                 )
             )
         } else {
@@ -448,15 +451,30 @@ class GroupRepository @Inject constructor(
         val blindedGroupId = GroupCipher.deriveBlindedGroupId(blindingKey, senderXOnlyPub)
         val payloadString = GroupCipher.buildGroupMessagePayload(blindedGroupId, bag.currentEpoch, senderId, senderXOnlyPub, msgId, ciphertext, signature)
 
-        val txId = walletService.sendKaspa(toAddress = walletAddress, amountSompi = 0, payloadBytes = payloadString.toByteArray(Charsets.UTF_8))
+        try {
+            val txId = walletService.sendKaspa(toAddress = walletAddress, amountSompi = 0, payloadBytes = payloadString.toByteArray(Charsets.UTF_8))
 
-        if (action == "add") {
+            if (action == "add") {
+                // Default deliveryStatus "sent" also clears any prior failed flag (e.g. this was a Retry).
+                database.reactionDao().upsertReaction(
+                    ReactionEntity(
+                        targetTxId = targetTxId, walletAddress = walletAddress, reactorAddress = walletAddress,
+                        emoji = emoji, reactionTxId = txId, blockTimestamp = System.currentTimeMillis(), groupId = groupId
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            // Flag failed so the pill shows the red error icon and a Retry appears under the message.
+            // A failed "remove" restores the optimistically-deleted reaction (marked failed) so it
+            // isn't silently lost; Retry re-attempts the change.
             database.reactionDao().upsertReaction(
                 ReactionEntity(
                     targetTxId = targetTxId, walletAddress = walletAddress, reactorAddress = walletAddress,
-                    emoji = emoji, reactionTxId = txId, blockTimestamp = System.currentTimeMillis(), groupId = groupId
+                    emoji = emoji, reactionTxId = null, blockTimestamp = System.currentTimeMillis(), groupId = groupId,
+                    deliveryStatus = "failed", failedAction = action
                 )
             )
+            throw e
         }
     }
 

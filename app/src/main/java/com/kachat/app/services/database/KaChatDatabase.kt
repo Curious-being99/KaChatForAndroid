@@ -43,7 +43,7 @@ import com.kachat.app.models.SwapTransactionEntity
         GroupSyncCursorEntity::class,
         ReactionEntity::class,
     ],
-    version = 31,
+    version = 32,
     exportSchema = true
 )
 abstract class KaChatDatabase : RoomDatabase() {
@@ -331,6 +331,18 @@ abstract class KaChatDatabase : RoomDatabase() {
                         `contactId` TEXT, `groupId` TEXT,
                         PRIMARY KEY(`targetTxId`, `walletAddress`, `reactorAddress`))"""
                 )
+            }
+        }
+
+        /**
+         * Adds reaction send-status columns so a reaction that fails to send can show the red error
+         * icon + Retry (see [com.kachat.app.models.ReactionEntity]). Purely additive; existing rows
+         * default to "sent".
+         */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `reactions` ADD COLUMN `deliveryStatus` TEXT NOT NULL DEFAULT 'sent'")
+                db.execSQL("ALTER TABLE `reactions` ADD COLUMN `failedAction` TEXT DEFAULT NULL")
             }
         }
     }
