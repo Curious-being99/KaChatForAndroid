@@ -58,7 +58,7 @@
     <string name="cancel">Cancel</string>
     <string name="coin_control">Coin Control</string>
     <string name="compound_utxos">Compound UTXOs</string>
-    <string name="compound_utxos_description">Combine all UTXOs at this address into a single UTXO.</string>
+    <string name="compound_utxos_description">Combine this address\'s UTXOs to reduce the inputs a future send needs. A single transaction can only merge so many at once, so if this address has a very large number, tap Compound again after it confirms to keep reducing.</string>
     <string name="cancel_photo">Cancel photo</string>
     <string name="cancel_recording">Cancel recording</string>
     <string name="cancel_reply">Cancel reply</string>

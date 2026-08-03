@@ -101,10 +101,18 @@ class KaspaWalletEngine @Inject constructor(
 
             val api = networkService.kaspaRestApi.value ?: return Result.failure(IllegalStateException("Network service unavailable"))
 
-            // 2. Fetch UTXOs from node, reconciled against our own not-yet-indexed sends.
-            val utxos = reconcileUtxos(fromAddress, api.getUtxos(fromAddress))
+            // 2. Fetch UTXOs from node, reconciled against our own not-yet-indexed sends, then drop
+            //    immature coinbase (mining rewards can't be spent until matured — see
+            //    filterSpendableCoinbase). Mature coinbase and all non-coinbase UTXOs are kept.
+            val reconciled = reconcileUtxos(fromAddress, api.getUtxos(fromAddress))
+            val utxos = filterSpendableCoinbase(reconciled)
             if (utxos.isEmpty()) {
-                return Result.failure(IllegalStateException("Insufficient funds: No UTXOs found"))
+                val msg = if (reconciled.any { it.utxoEntry.isCoinbase }) {
+                    "These are mining (coinbase) rewards that haven't matured yet. Each becomes spendable a short time (about 1–2 minutes) after it's mined — try again shortly."
+                } else {
+                    "Insufficient funds: No UTXOs found"
+                }
+                return Result.failure(IllegalStateException(msg))
             }
 
             // 3. Fetch network fee rate (sompi per mass-gram) — always at least the
@@ -152,6 +160,14 @@ class KaspaWalletEngine @Inject constructor(
             }
             if (selectionResult.totalSelected < selectionResult.requiredAmount) {
                 return Result.failure(IllegalStateException("Insufficient funds: Needed ${selectionResult.requiredAmount}, have ${selectionResult.totalSelected}"))
+            }
+            // A transaction over Kaspa's mass cap gets rejected by the node. Refuse an over-cap input
+            // set up front with an actionable message instead of building a doomed transaction. The
+            // compound flow feeds inputs in chunks of MAX_INPUTS_PER_TRANSACTION, so it always passes.
+            if (selectionResult.selectedUtxos.size > KaspaUtxoSelector.MAX_INPUTS_PER_TRANSACTION) {
+                return Result.failure(IllegalStateException(
+                    "This send needs more than ${KaspaUtxoSelector.MAX_INPUTS_PER_TRANSACTION} inputs. Compound (consolidate) this address's UTXOs first, then try again."
+                ))
             }
 
             // 5. Create transaction outputs (recipient + change).
@@ -312,9 +328,29 @@ class KaspaWalletEngine @Inject constructor(
     suspend fun fetchUtxos(address: String): List<UtxoEntry> {
         val api = networkService.kaspaRestApi.value ?: return emptyList()
         return try {
-            reconcileUtxos(address, api.getUtxos(address))
+            filterSpendableCoinbase(reconcileUtxos(address, api.getUtxos(address)))
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * Coinbase (mining-reward) UTXOs are only spendable once matured: `blockDaaScore +
+     * COINBASE_MATURITY < virtualDaaScore` (matches Kaspa consensus, Kaspium, and the iOS app).
+     * Non-coinbase UTXOs are always spendable. The virtual DAA score is only fetched when coinbase
+     * is actually present, so ordinary (non-mining) addresses pay no extra round trip. If the score
+     * can't be fetched, coinbase is kept and the node arbitrates — no worse than before this filter.
+     */
+    private suspend fun filterSpendableCoinbase(utxos: List<UtxoEntry>): List<UtxoEntry> {
+        if (utxos.none { it.utxoEntry.isCoinbase }) return utxos
+        val virtualDaaScore = try {
+            nodePoolManager.getBroadcastConnection().getBlockDagInfo().virtualDaaScore
+        } catch (e: Exception) {
+            Log.w("KaspaWalletEngine", "Could not fetch virtualDaaScore for coinbase maturity; keeping all UTXOs", e)
+            return utxos
+        }
+        return utxos.filter { u ->
+            !u.utxoEntry.isCoinbase || (u.utxoEntry.blockDaaScore + COINBASE_MATURITY < virtualDaaScore)
         }
     }
 
@@ -339,6 +375,11 @@ class KaspaWalletEngine @Inject constructor(
     )
 
     companion object {
+        /** Kaspa coinbase (mining-reward) maturity, in DAA-score units. Matches Kaspa consensus,
+         *  Kaspium, and the iOS app. A coinbase UTXO is spendable once
+         *  `blockDaaScore + COINBASE_MATURITY < virtualDaaScore`. */
+        const val COINBASE_MATURITY = 1000L
+
         internal fun outpointKey(outpoint: Outpoint) = "${outpoint.transactionId}:${outpoint.index}"
 
         /**

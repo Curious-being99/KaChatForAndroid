@@ -16,6 +16,7 @@ import com.kachat.app.services.UtxoEntry
 import com.kachat.app.services.WalletManager
 import com.kachat.app.services.WalletService
 import com.kachat.app.util.KaspaMass
+import com.kachat.app.util.KaspaUtxoSelector
 import com.kachat.app.util.ImagePrep
 import com.kachat.app.util.KaspaAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -293,6 +294,32 @@ class WalletViewModel @Inject constructor(
         val mass = KaspaMass.calculateMass(numInputs = maxOf(utxos.size, 1), outputScriptLens = listOf(34, 34), payloadSize = 0)
         val fee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
         return if (totalBalance > fee) totalBalance - fee else 0L
+    }
+
+    /**
+     * The largest set of UTXOs that fit in a single mass-safe transaction (up to
+     * [KaspaUtxoSelector.MAX_INPUTS_PER_TRANSACTION], largest-first), plus the max self-send amount
+     * for exactly that set. Kaspa caps a transaction's mass (~89 inputs), so the compound UI's "Max"
+     * reflects *one transaction's worth* of consolidatable value instead of the whole (over-mass)
+     * balance — the user consolidates that chunk, then repeats to reduce further. Returns the chunk
+     * so the send pins exactly those inputs; null if nothing is spendable. Mirrors iOS's
+     * ChatService.maxConsolidatableChunk. [address]'s UTXOs come back already maturity-filtered
+     * (matured coinbase + non-coinbase) via [KaspaWalletEngine.fetchUtxos].
+     */
+    suspend fun maxConsolidatableChunk(address: String, feeRateOverride: Long? = null): Pair<Long, List<UtxoEntry>>? {
+        val fetched = walletEngine.fetchUtxos(address)
+        if (fetched.isEmpty()) return null
+        val chunk = fetched.sortedByDescending { it.utxoEntry.amount }
+            .take(KaspaUtxoSelector.MAX_INPUTS_PER_TRANSACTION)
+        if (chunk.isEmpty()) return null
+
+        val totalBalance = chunk.sumOf { it.utxoEntry.amount }
+        val feeRateSompiPerGram = feeRateOverride?.coerceAtLeast(KaspaMass.MINIMUM_FEE_RATE_SOMPI_PER_GRAM)
+            ?: walletEngine.fetchQuotedFeeRateSompiPerGram()
+        val mass = KaspaMass.calculateMass(numInputs = chunk.size, outputScriptLens = listOf(34, 34), payloadSize = 0)
+        val fee = KaspaMass.calculateFee(mass, feeRateSompiPerGram)
+        val maxAmount = if (totalBalance > fee) totalBalance - fee else 0L
+        return maxAmount to chunk
     }
 
     private val _spendingAddressTxHistory = MutableStateFlow<List<ColdStorageAddressDiscovery.AddressTransaction>>(emptyList())

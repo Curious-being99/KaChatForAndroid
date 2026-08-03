@@ -8,6 +8,15 @@ import com.kachat.app.services.UtxoEntry
  * extracted so the logic exists in exactly one place rather than being duplicated per builder.
  */
 object KaspaUtxoSelector {
+    /**
+     * Max inputs in a single transaction. Kaspa caps a transaction's mass (~100,000 grams); each
+     * input costs ~1,118 grams (dominated by 1,000g sig-op mass), so ~89 inputs is the hard ceiling
+     * — 80 leaves headroom for outputs/payload. Consolidating an address with more UTXOs than this
+     * must be done one mass-safe transaction at a time (see WalletViewModel.maxConsolidatableChunk).
+     * Matches iOS's KasiaTransactionBuilder.maxInputsPerTransaction.
+     */
+    const val MAX_INPUTS_PER_TRANSACTION = 80
+
     data class SelectionResult(
         val selectedUtxos: List<UtxoEntry>,
         val totalSelected: Long,
