@@ -1,6 +1,7 @@
 package com.kachat.app
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -37,6 +38,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Phones lock to portrait; tablets (sw>=600dp, see res/values-sw600dp/bools.xml) rotate
+        // freely - mirroring iOS (iPhone portrait-only, iPad any orientation).
+        requestedOrientation = if (resources.getBoolean(R.bool.lock_portrait)) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
         enableEdgeToEdge()
         pendingContactId = intent?.getStringExtra(NotificationHelper.EXTRA_CONTACT_ID)
         pendingChannelName = intent?.getStringExtra(NotificationHelper.EXTRA_CHANNEL_NAME)
