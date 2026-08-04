@@ -217,6 +217,22 @@ class ColdStorageSendEngine @Inject constructor(
         }
     }
 
+    data class CompoundInputs(val utxos: List<UtxoEntry>, val hasMore: Boolean)
+
+    /**
+     * Cold-storage "Compound UTXOs" is a single self-send that merges as many of this address's
+     * UTXOs as one KasSigner-signable transaction can hold. A KSPT transaction is capped at
+     * [KsptCodec.MAX_INPUTS] (8) inputs, so this returns the largest up-to-8 spendable UTXOs at
+     * [fromAddress] (largest-first, so each round sheds the most value and converges fastest),
+     * plus whether more than that many remain. Merging 8 -> 1 per round means an address with N
+     * UTXOs takes ceil((N-1)/7) rounds; the caller repeats Compound until a single UTXO is left.
+     */
+    suspend fun compoundInputs(fromAddress: String): CompoundInputs {
+        val sorted = fetchUtxos(fromAddress).sortedByDescending { it.utxoEntry.amount }
+        val capped = sorted.take(KsptCodec.MAX_INPUTS)
+        return CompoundInputs(capped, sorted.size > KsptCodec.MAX_INPUTS)
+    }
+
     /** Live quoted fee rate (sompi per mass-gram) — whichever is higher, the network's current
      *  "normal" bucket quote or the protocol minimum. Falls back to the minimum on any request
      *  failure. Shared by [buildUnsignedTransaction]'s default, [estimateMaxAmount]'s default,

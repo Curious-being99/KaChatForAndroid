@@ -365,6 +365,9 @@ class ColdStorageViewModel @Inject constructor(
 
     suspend fun fetchUtxosForCoinControl(fromAddress: String): List<UtxoEntry> = sendEngine.fetchUtxos(fromAddress)
 
+    suspend fun compoundInputs(fromAddress: String): ColdStorageSendEngine.CompoundInputs =
+        sendEngine.compoundInputs(fromAddress)
+
     suspend fun previewAutomaticSelection(fromAddress: String, amountSompi: Long, feeRateSompiPerGram: Long): ColdStorageSendEngine.AutomaticSelectionPreview? =
         sendEngine.previewAutomaticSelection(fromAddress, amountSompi, feeRateSompiPerGram)
 

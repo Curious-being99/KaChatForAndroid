@@ -89,6 +89,8 @@
     <string name="confirm_transfer">Confirm Transfer</string>
     <string name="connect_to_a_node">Connect to a Node</string>
     <string name="consolidating_this_address">Consolidating This Address</string>
+    <string name="compound_single_round_note">Merges all of this address\'s UTXOs into a single one, so future sends need fewer inputs.</string>
+    <string name="compound_more_rounds_note">This address has more than %1$d UTXOs. KasSigner can sign at most %1$d inputs per transaction, so this merges the largest %1$d into one. Run Compound again afterward to keep combining the rest.</string>
     <string name="connected_only_to_this_node">Connected only to this node</string>
     <string name="connection_settings">Connection Settings</string>
     <string name="connection_status">Connection Status</string>

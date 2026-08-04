@@ -1074,6 +1074,10 @@ private fun ColdSendFlow(
     // exact input set the user picked instead.
     var manualUtxos by remember { mutableStateOf<List<UtxoEntry>?>(null) }
     var showCoinControl by remember { mutableStateOf(false) }
+    // Compound mode only: true when this address holds more UTXOs than one KasSigner transaction
+    // can merge at once (KsptCodec.MAX_INPUTS), so the user must run Compound again after this
+    // round. Drives the "repeat to finish" note.
+    var compoundHasMoreRounds by remember { mutableStateOf(false) }
     var feeTier by remember { mutableStateOf(ColdFeeTier.NORMAL) }
     var customExtraFeeSompi by remember { mutableStateOf<Long?>(null) }
     var showFeeEditor by remember { mutableStateOf(false) }
@@ -1095,7 +1099,15 @@ private fun ColdSendFlow(
             toAddress = fromAddress
             isEstimatingMax = true
             try {
-                val maxSompi = viewModel.estimateMaxAmount(fromAddress, liveFeeRateSompiPerGram, manualUtxos)
+                // Fix the input set to the largest <=8 UTXOs — the most one KasSigner-signable
+                // transaction can hold — then Max the amount for exactly that set. Without this
+                // cap, Max spans every UTXO at the address and the build fails with "too many
+                // inputs" the moment it holds more than 8. `compoundHasMoreRounds` records whether
+                // another round is needed afterward.
+                val compound = viewModel.compoundInputs(fromAddress)
+                manualUtxos = compound.utxos
+                compoundHasMoreRounds = compound.hasMore
+                val maxSompi = viewModel.estimateMaxAmount(fromAddress, liveFeeRateSompiPerGram, compound.utxos)
                 fiatAmountState.setMaxKas(maxSompi / 100_000_000.0, fiatPriceInCurrency)
             } catch (e: Exception) {
                 // Leave the field untouched on failure — same as the Max button itself.
@@ -1299,6 +1311,15 @@ private fun ColdSendFlow(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (compoundHasMoreRounds)
+                                stringResource(R.string.compound_more_rounds_note, KsptCodec.MAX_INPUTS)
+                            else
+                                stringResource(R.string.compound_single_round_note),
+                            color = LocalAppColors.current.textSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     } else {
                         OutlinedTextField(
                             value = toAddress,
@@ -1448,25 +1469,30 @@ private fun ColdSendFlow(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { showCoinControl = true },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(stringResource(R.string.coin_control), color = LocalAppColors.current.textPrimary)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                manualUtxos?.let { "${it.size} ${if (it.size == 1) stringResource(R.string.utxo) else stringResource(R.string.utxos)}" }
-                                    ?: stringResource(R.string.automatic),
-                                color = LocalAppColors.current.textSecondary
-                            )
-                            Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                null,
-                                tint = LocalAppColors.current.textSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
+                    // Compound auto-manages its own input set (largest <=8, KasSigner's per-tx
+                    // limit), so manual coin control is hidden there — it only applies to a normal
+                    // send.
+                    if (!isCompoundMode) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { showCoinControl = true },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(stringResource(R.string.coin_control), color = LocalAppColors.current.textPrimary)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    manualUtxos?.let { "${it.size} ${if (it.size == 1) stringResource(R.string.utxo) else stringResource(R.string.utxos)}" }
+                                        ?: stringResource(R.string.automatic),
+                                    color = LocalAppColors.current.textSecondary
+                                )
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    null,
+                                    tint = LocalAppColors.current.textSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
 
