@@ -432,6 +432,9 @@ private fun WelcomeGuideFundingStep(chattingAddress: String?, onNext: () -> Unit
                 Text(stringResource(R.string.show_qr_code), color = KaspaTeal, fontWeight = FontWeight.Bold)
             }
         }
+        Spacer(Modifier.height(24.dp))
+        // Optional community-funded welcome gift to fund this chatting address (matches iPhone).
+        GiftClaimWizardButton(walletAddress = chattingAddress)
         Spacer(Modifier.height(32.dp))
         Button(
             onClick = onNext,

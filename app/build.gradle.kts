@@ -189,6 +189,10 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.play.services)
 
+    // Play Integrity - device attestation for the one-per-device Kaspa welcome-gift claim
+    // (Android equivalent of iOS's DeviceCheck + App Attest).
+    implementation(libs.play.integrity)
+
     // DataStore (settings/preferences)
     implementation(libs.datastore.preferences)
 

@@ -107,6 +107,17 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideGiftApi(okHttpClient: OkHttpClient): com.kachat.app.services.GiftApi {
+        return Retrofit.Builder()
+            .baseUrl("https://api.kachat.app/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(com.kachat.app.services.GiftApi::class.java)
+    }
+
+    @Provides
+    @Singleton
     fun provideKasiaIndexerApi(okHttpClient: OkHttpClient): KasiaIndexerApi {
         return Retrofit.Builder()
             .baseUrl("https://api.kasia.io/")

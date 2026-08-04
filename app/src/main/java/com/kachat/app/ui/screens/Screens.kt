@@ -2454,6 +2454,8 @@ fun ProfileScreen(
                 }
             }
 
+            GiftClaimProfileSection(walletAddress = address)
+
             SettingsSection(title = stringResource(R.string.kns_profile)) {
                 if (profileAssetId == null || activeProfileDomainName == null) {
                     // No domain yet - nothing to show an avatar/chevron-row for (there's no
