@@ -1,6 +1,7 @@
 package com.kachat.app.services
 
 import android.content.Context
+import android.provider.Settings
 import android.util.Base64
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.IntegrityTokenRequest
@@ -53,7 +54,13 @@ data class GiftClaimRequest(
     val platform: String = "android",
     val integrityToken: String,
     val walletAddress: String,
-    val challenge: String
+    val challenge: String,
+    /**
+     * Stable per-device pseudonym: base64url(sha256(ANDROID_ID)). Folded into the Play Integrity
+     * nonce (see [claimGift]) so the server can trust it came from the genuine app and enforce
+     * one-claim-per-device. Survives reinstalls; resets on factory reset / new user profile.
+     */
+    val deviceId: String
 )
 
 data class GiftClaimResponse(val txId: String? = null, val error: String? = null)
@@ -86,9 +93,17 @@ class GiftManager @Inject constructor(
             // 1. One-time challenge from the server.
             val challenge = giftApi.getChallenge().challenge
 
-            // 2. Play Integrity token, bound to the challenge via the nonce. base64url(sha256) mirrors
-            //    iOS's App Attest clientDataHash = SHA256(challenge); the server recomputes and compares.
-            val nonce = base64UrlNoPadding(sha256(challenge.toByteArray(Charsets.UTF_8)))
+            // 2. Stable per-device id = base64url(sha256(ANDROID_ID)). Hashing keeps the raw
+            //    ANDROID_ID on the device; the server only ever sees the pseudonym.
+            @Suppress("HardwareIds")
+            val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID).orEmpty()
+            val deviceId = base64UrlNoPadding(sha256(androidId.toByteArray(Charsets.UTF_8)))
+
+            // 3. Play Integrity token, bound to BOTH the challenge and the deviceId via the nonce.
+            //    Binding deviceId here makes it tamper-proof: the server recomputes
+            //    sha256("$challenge:$deviceId") and compares it to the nonce inside the signed token,
+            //    so a repackaged app can't swap in a different deviceId to re-claim.
+            val nonce = base64UrlNoPadding(sha256("$challenge:$deviceId".toByteArray(Charsets.UTF_8)))
             val integrityManager = IntegrityManagerFactory.create(context)
             val tokenResponse = integrityManager.requestIntegrityToken(
                 IntegrityTokenRequest.builder()
@@ -98,9 +113,14 @@ class GiftManager @Inject constructor(
             ).await()
             val integrityToken = tokenResponse.token()
 
-            // 3. Submit the claim. The server verifies the token + one-per-device bit and sends KAS.
+            // 4. Submit the claim. The server verifies the token, enforces one-per-device, and sends KAS.
             val response = giftApi.claim(
-                GiftClaimRequest(integrityToken = integrityToken, walletAddress = walletAddress, challenge = challenge)
+                GiftClaimRequest(
+                    integrityToken = integrityToken,
+                    walletAddress = walletAddress,
+                    challenge = challenge,
+                    deviceId = deviceId
+                )
             )
             when {
                 response.isSuccessful -> {
