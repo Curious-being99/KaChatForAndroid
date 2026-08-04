@@ -1084,7 +1084,7 @@ private fun GroupMessageBubble(
                         )
                     }
                     TextLinkify.findUrls(displayContent).firstOrNull()?.let { match ->
-                        LinkPreviewCard(url = match.uri, txId = message.txId, onSelect = onSelect)
+                        LinkPreviewCard(url = match.uri, txId = message.txId, onSelect = onSelect, onDoubleTap = { showQuickReactionBar = true })
                     }
                 }
             }

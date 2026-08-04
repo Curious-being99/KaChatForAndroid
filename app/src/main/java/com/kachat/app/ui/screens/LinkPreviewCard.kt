@@ -70,7 +70,11 @@ fun LinkPreviewCard(
     fallbackText: String? = null,
     /** Enters the chat's message multi-select mode with this message pre-selected - null disables
      *  the "Select" long-press menu option entirely. Mirrors [MessageBubble]'s onSelect. */
-    onSelect: (() -> Unit)? = null
+    onSelect: (() -> Unit)? = null,
+    /** Double-tapping the preview opens the owning message's quick-reaction menu (reactions +
+     *  reply), exactly like double-tapping a normal message bubble. Null disables it. Single tap
+     *  still opens the link. Mirrors iOS's `LinkPreviewCardView.onDoubleTap`. */
+    onDoubleTap: (() -> Unit)? = null
 ) {
     var preview by remember(url) { mutableStateOf<LinkPreviewData?>(null) }
     var hasFinishedLoading by remember(url) { mutableStateOf(false) }
@@ -82,14 +86,14 @@ fun LinkPreviewCard(
     }
 
     if (hasFinishedLoading && preview != null) {
-        LinkPreviewCardContent(data = preview!!, url = url, txId = txId, kaspaExplorer = kaspaExplorer, onSelect = onSelect)
+        LinkPreviewCardContent(data = preview!!, url = url, txId = txId, kaspaExplorer = kaspaExplorer, onSelect = onSelect, onDoubleTap = onDoubleTap)
     } else if (hasFinishedLoading && fallbackText != null) {
-        LinkPreviewFallbackBubble(text = fallbackText, url = url, txId = txId, kaspaExplorer = kaspaExplorer, onSelect = onSelect)
+        LinkPreviewFallbackBubble(text = fallbackText, url = url, txId = txId, kaspaExplorer = kaspaExplorer, onSelect = onSelect, onDoubleTap = onDoubleTap)
     }
 }
 
 @Composable
-private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, kaspaExplorer: KaspaExplorer, onSelect: (() -> Unit)? = null) {
+private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, kaspaExplorer: KaspaExplorer, onSelect: (() -> Unit)? = null, onDoubleTap: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     var showMenu by remember { mutableStateOf(false) }
@@ -109,6 +113,7 @@ private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, k
             .pointerInput(url) {
                 detectTapGestures(
                     onLongPress = { showMenu = true },
+                    onDoubleTap = { onDoubleTap?.invoke() },
                     onTap = { uriHandler.openUri(url) }
                 )
             }
@@ -137,7 +142,7 @@ private fun LinkPreviewFallbackBubble(text: String, url: String, txId: String, k
 }
 
 @Composable
-private fun LinkPreviewCardContent(data: LinkPreviewData, url: String, txId: String, kaspaExplorer: KaspaExplorer, onSelect: (() -> Unit)? = null) {
+private fun LinkPreviewCardContent(data: LinkPreviewData, url: String, txId: String, kaspaExplorer: KaspaExplorer, onSelect: (() -> Unit)? = null, onDoubleTap: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     val isVideoLink = remember(url) {
@@ -158,6 +163,7 @@ private fun LinkPreviewCardContent(data: LinkPreviewData, url: String, txId: Str
             .pointerInput(url) {
                 detectTapGestures(
                     onLongPress = { showMenu = true },
+                    onDoubleTap = { onDoubleTap?.invoke() },
                     onTap = { uriHandler.openUri(url) }
                 )
             }

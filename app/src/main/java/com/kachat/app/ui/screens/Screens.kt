@@ -1531,7 +1531,8 @@ fun MessageBubble(
                         txId = message.id,
                         kaspaExplorer = kaspaExplorer,
                         fallbackText = bodyText,
-                        onSelect = onSelect
+                        onSelect = onSelect,
+                        onDoubleTap = { showQuickReactionBar = true }
                     )
                 } else {
                     var textLayoutResult by remember(bodyText) { mutableStateOf<TextLayoutResult?>(null) }
@@ -1657,7 +1658,7 @@ fun MessageBubble(
         // attaches to that Box) sizes against just the text bubble, not this taller card too -
         // matches iOS's identical placement outside its equivalent `Group`.
         separateLinkPreviewUrl?.let { url ->
-            LinkPreviewCard(url = url, txId = message.id, kaspaExplorer = kaspaExplorer, onSelect = onSelect)
+            LinkPreviewCard(url = url, txId = message.id, kaspaExplorer = kaspaExplorer, onSelect = onSelect, onDoubleTap = { showQuickReactionBar = true })
         }
 
         if (isSent) {
