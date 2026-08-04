@@ -78,7 +78,7 @@ android {
         applicationId = "com.kachat.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
+        versionCode = 19
         versionName = "3.0"
 
         buildConfigField(
