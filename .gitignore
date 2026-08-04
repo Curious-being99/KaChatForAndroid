@@ -18,3 +18,7 @@ keystore.properties
 
 # Local Claude Code session state — not part of the app
 /.claude/
+
+# Self-hosted gift faucet backend — runs only on the operator's machine, holds the hot-wallet
+# private key and Play Integrity secrets. MUST never be committed/published.
+/gift-server/
