@@ -109,7 +109,7 @@ object AppModule {
     @Singleton
     fun provideGiftApi(okHttpClient: OkHttpClient): com.kachat.app.services.GiftApi {
         return Retrofit.Builder()
-            .baseUrl("https://api.kachat.app/")
+            .baseUrl("https://kachatgift.duckdns.org/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -20,7 +20,7 @@ import javax.inject.Singleton
 
 /**
  * State machine for the one-per-device Kaspa "welcome gift" claim - mirrors iOS's
- * `GiftService.GiftClaimState`. The gift is a server-funded faucet (api.kachat.app): the client
+ * `GiftService.GiftClaimState`. The gift is a server-funded faucet (kachatgift.duckdns.org): the client
  * proves the device is genuine + unclaimed, and the server sends KAS on-chain to [claimGift]'s
  * wallet address. The client never signs or sweeps anything; it just receives a txId.
  */
@@ -33,7 +33,7 @@ sealed class GiftClaimState {
     data class Unavailable(val reason: String) : GiftClaimState()
 }
 
-/** Gift faucet REST API (base url https://api.kachat.app/ - see AppModule.provideGiftApi). */
+/** Gift faucet REST API (base url https://kachatgift.duckdns.org/ - see AppModule.provideGiftApi). */
 interface GiftApi {
     @GET("gift/challenge")
     suspend fun getChallenge(): GiftChallengeResponse
