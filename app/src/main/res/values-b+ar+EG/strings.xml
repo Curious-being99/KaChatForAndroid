@@ -26,7 +26,6 @@
     <string name="amount_kas">المبلغ (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">يمكن لأي شخص ينضم إلى نفس اسم القناة رؤية الرسائل ونشرها هناك. لا يوجد مالك أو دعوة.</string>
     <string name="anyone_with_your_seed_phrase_can">يمكن لأي شخص لديه عبارة الاسترداد الخاصة بك الوصول إلى حسابك. لا تشاركها أبدًا مع أي شخص. تأكد من كتابتها فقط. لا تلتقط لقطة شاشة أبدًا ولا تخزنها على جهازك.</string>
-    <string name="available">متاح</string>
     <string name="back">رجوع</string>
     <string name="before_you_swap">قبل المبادلة</string>
     <string name="broadcast_settings">إعدادات البث</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">اختر العملة</string>
     <string name="choose_photo">اختيار صورة</string>
     <string name="choose_which_tabs_appear_in_your">اختر التبويبات التي تظهر في القائمة السفلية.</string>
-    <string name="clear">مسح</string>
     <string name="clear_search">مسح البحث</string>
     <string name="close">إغلاق</string>
     <string name="cold_storage">التخزين البارد</string>
     <string name="confirm">تأكيد</string>
-    <string name="confirm_transfer">تأكيد التحويل</string>
     <string name="connect_to_a_node">الاتصال بعقدة</string>
     <string name="connected_only_to_this_node">متصل بهذه العقدة فقط</string>
     <string name="connection_settings">إعدادات الاتصال</string>
     <string name="connection_status">حالة الاتصال</string>
     <string name="contact_name">اسم جهة الاتصال</string>
     <string name="contact_has_requested_permission_to_communicate">طلبت جهة الاتصال إذن التواصل</string>
-    <string name="contact_list_phase_5">قائمة جهات الاتصال (المرحلة 5)</string>
     <string name="contact_name_2">اسم جهة الاتصال</string>
     <string name="contacts">جهات الاتصال</string>
     <string name="controls_how_much_photos_are_compressed">يتحكم في مقدار ضغط الصور قبل إرسالها. الجودة الأعلى تبدو أوضح لكنها تكلف رسومًا أعلى وتستغرق وقتًا أطول للإرسال؛ الجودة الأقل ترسل بشكل أسرع وأرخص لكنها تبدو أكثر ضغطًا. هذا يؤثر فقط على الصور التي ترسلها، وليس التي تستقبلها.</string>
     <string name="copy">نسخ</string>
     <string name="copy_address">نسخ العنوان</string>
     <string name="copy_private_key_hex">نسخ المفتاح الخاص (Hex)</string>
-    <string name="copy_seed_phrase">نسخ seed phrase</string>
     <string name="copy_kpub">نسخ kpub</string>
     <string name="couldn_t_rename_group">تعذر إعادة تسمية المجموعة</string>
     <string name="couldn_t_read_this_swap_s">تعذرت قراءة مبالغ هذه المبادلة</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">تعديل الحساب</string>
     <string name="enter_a_kaspa_address_kaspa_or">أدخل عنوان Kaspa ‏(kaspa:...)‏ أو اسم نطاق KNS (مثال: alice.kas)</string>
     <string name="enter_kpub">إدخال kpub</string>
-    <string name="enter_your_12_or_24_word">أدخل عبارة الاسترداد المكونة من 12 أو 24 كلمة</string>
     <string name="error">خطأ</string>
     <string name="every_member_will_see_the_new">سيرى كل عضو الاسم الجديد.</string>
     <string name="exchange_id_copied">تم نسخ معرّف التبادل</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">الاحتفاظ لفترة أطول يعني بقاء المزيد من الرسائل مخزنة مؤقتًا على جهازك، مما قد يبطئ التطبيق بمرور الوقت، خاصة للغرف النشطة.</string>
     <string name="make_active_address">جعله العنوان النشط</string>
     <string name="manage_addresses">إدارة العناوين</string>
-    <string name="mark_as_read">وضع علامة كمقروءة</string>
-    <string name="mark_as_unread">وضع علامة كغير مقروءة</string>
     <string name="max">الحد الأقصى</string>
     <string name="members">الأعضاء</string>
     <string name="menu">القائمة</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">رسالة صورة، ملء الشاشة</string>
     <string name="photo_quality_2">جودة الصورة</string>
     <string name="photos">الصور</string>
-    <string name="pick_which_domain_you_want_to">اختر النطاق الذي يمثل جهة الاتصال هذه. يُستخدم أيضًا كاسم لها إذا لم تحدد لقبًا.</string>
-    <string name="please_enter_exactly_12_or_24">يرجى إدخال ١٢ أو ٢٤ كلمة بالضبط</string>
     <string name="polygon_network">شبكة Polygon</string>
     <string name="pool_health">صحة المجموعة</string>
     <string name="popular">شائع</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">إعادة تسمية حساب التخزين البارد</string>
     <string name="rename_group">إعادة تسمية المجموعة</string>
     <string name="reserved_domain_no_registration_fee_only">نطاق محجوز: لا توجد رسوم تسجيل، تُطبق رسوم الشبكة فقط.</string>
-    <string name="reset_to_defaults">إعادة التعيين إلى الافتراضي</string>
     <string name="resign">استسلام</string>
     <string name="resign_this_game">الاستسلام في هذه المباراة؟</string>
     <string name="resolving_kns_domain">جارٍ تحليل نطاق KNS…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">إرسال من التخزين البارد</string>
     <string name="send_photo">إرسال صورة</string>
     <string name="sending">جارٍ الإرسال</string>
-    <string name="sends_kas_out_of_your_identity">يرسل KAS من عنوان هويتك، وهو الذي تموله للدردشة.</string>
     <string name="sends_every_other_spending_address_s">يرسل رصيد كل العناوين الأخرى للإنفاق إلى عنوانك المفضل الحالي. كل عنوان برصيد هو معاملة حقيقية خاصة به، لذا قد يستغرق هذا بعض الوقت.</string>
     <string name="sent">مرسل</string>
     <string name="settings">الإعدادات</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">ابدأ شات جديد بإضافة جهة اتصال</string>
     <string name="status">الحالة</string>
     <string name="still_indexing_it_ll_show_up">لا يزال قيد الفهرسة. سيظهر أعلاه قريبًا.</string>
-    <string name="still_indexing_ownership_will_update_shortly">لا يزال قيد الفهرسة. ستتحدث الملكية قريبًا.</string>
     <string name="swap">مبادلة</string>
     <string name="swap_history">سجل المبادلات</string>
     <string name="swap_started">بدأت المبادلة</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">اضغط على عنوان أدناه للمبادلة منه</string>
     <string name="tap_an_address_below_to_use">اضغط على عنوان أدناه لاستخدامه</string>
     <string name="tap_to_reveal_seed_phrase">اضغط لإظهار seed phrase</string>
-    <string name="this_action_cannot_be_undone_double">لا يمكن التراجع عن هذا الإجراء. تحقق من العنوان أعلاه مرة أخرى قبل التأكيد.</string>
     <string name="this_could_take_a_few_minutes">قد يستغرق هذا بضع دقائق أثناء التأكيد على السلسلة.</string>
     <string name="this_only_removes_it_from_kachat">هذا يزيله فقط من قائمة مراقبة KaChat. لا تأثير له على جهاز KasSigner أو أي أموال يحتفظ بها.</string>
     <string name="this_permanently_deletes_every_message_with">هذا يحذف نهائيًا كل رسالة معهم على هذا الجهاز. لا يمكن التراجع عن هذا؛ مراسلتهم مرة أخرى تبدأ محادثة جديدة تمامًا.</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">إجمالي المستثمر</string>
     <string name="total_p_l">إجمالي الأرباح والخسائر</string>
     <string name="transaction_history">سجل المعاملات</string>
-    <string name="transaction_id">معرّف المعاملة</string>
     <string name="transaction_links_in_message_menus_and">روابط المعاملات في قوائم الرسائل وصفحات سجل المعاملات تفتح في هذا المستكشف.</string>
     <string name="transactions">المعاملات</string>
-    <string name="transfer_domain">نقل النطاق</string>
     <string name="try_again">إعادة المحاولة</string>
     <string name="unhide">إظهار</string>
     <string name="unlink">إلغاء الربط</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">عرض على ChangeNOW</string>
     <string name="waiting_for_camera">في انتظار الكاميرا...</string>
     <string name="waiting_on_opponent">في انتظار الخصم</string>
-    <string name="walk_through_setting_up_your_domain">يرشدك خطوة بخطوة لإعداد نطاقك وبانرك وصورتك الرمزية وتفاصيلك.</string>
     <string name="when_you_message_someone_new_on">عندما تراسل شخصًا جديدًا على KaChat، لن يتلقى إشعارًا وستبقى رسالتك مخفية حتى يرد عليك أو يضيفك أيضًا. هذا يحمي من الرسائل غير المرغوب فيها ويزيد خصوصيتك. إذا كنت تريد إخطاره، اضغط على أيقونة اليد لإرسال طلب تواصل سيكلف 0.2 KAS. (ملاحظة: جميع تطبيقات المراسلة غير KaChat ستتطلب طلب تواصل)</string>
     <string name="wipe_account">مسح الحساب</string>
     <string name="wipe_everything">مسح كل شيء</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">مسح الحساب والرسائل</string>
     <string name="wipe_account_messages_cloud">مسح الحساب والرسائل والسحابة</string>
     <string name="wipe_and_re_sync_incoming_messages">مسح وإعادة مزامنة الرسائل الواردة</string>
-    <string name="withdraw">سحب</string>
-    <string name="withdraw_from_this_address">السحب من هذا العنوان</string>
-    <string name="withdraw_kaspa">سحب كاسبا</string>
-    <string name="withdrawal_sent">تم إرسال السحب</string>
     <string name="you_will_be_shown_a_seed">سيتم عرض عبارة استرداد لك. هذه هي الطريقة الوحيدة لاستعادة حسابك. تأكد من كتابتها فقط. لا تلتقط لقطة شاشة أبدًا ولا تخزنها على جهازك.</string>
     <string name="channel_name">اسم-القناة</string>
     <string name="host_port_or_grpcs_host">host:port أو grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">إنشاء المزيد من العناوين</string>
     <string name="generate_new_spending_address">إنشاء عنوان إنفاق جديد</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">الذهاب إلى المستكشف</string>
     <string name="hide_user">إخفاء المستخدم</string>
     <string name="ip_address_book">دفتر عناوين IP</string>
     <string name="import_csv">استيراد CSV</string>
@@ -415,8 +393,6 @@
     <string name="profile">الملف الشخصي</string>
     <string name="protocol">البروتوكول</string>
     <string name="push_notifications">إشعارات فورية</string>
-    <string name="push_register">تسجيل الدفع</string>
-    <string name="push_registration">تسجيل الإشعارات</string>
     <string name="rest_api_for_transaction_history_and">REST API لسجل المعاملات واستعلامات الرصيد</string>
     <string name="reconnect">إعادة الاتصال</string>
     <string name="redirect">إعادة توجيه</string>
@@ -428,7 +404,6 @@
     <string name="security">الأمان</string>
     <string name="select_mainnet_for_real_transactions_or">اختر mainnet للمعاملات الحقيقية أو testnet للتجربة</string>
     <string name="send_audio_message">إرسال رسالة صوتية</string>
-    <string name="send_from_this_address">إرسال من هذا العنوان</string>
     <string name="send_handshake">إرسال طلب تواصل</string>
     <string name="send_photo_2">إرسال صورة</string>
     <string name="sending_2">جارٍ الإرسال...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">الإجمالي</string>
     <string name="unfinished_inscription">نقش غير مكتمل</string>
-    <string name="used_only_for_push_registration_and">يُستخدم فقط لتسجيل الإشعارات والتحديثات</string>
     <string name="uses_your_device_contacts_to_match">يستخدم جهات اتصال جهازك لمطابقة وإثراء جهات اتصال Kaspa.</string>
     <string name="verified">موثق</string>
     <string name="verifying_new_ownership_on_chain_this">جارٍ التحقق من الملكية الجديدة على السلسلة (قد يستغرق دقيقة)...</string>

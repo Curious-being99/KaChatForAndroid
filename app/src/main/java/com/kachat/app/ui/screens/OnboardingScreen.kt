@@ -596,10 +596,6 @@ fun CreateAccountScreen(viewModel: WalletViewModel, onBack: () -> Unit) {
     }
 }
 
-/** Lowercases, trims, and splits a pasted/typed seed phrase on any whitespace — matches iOS's `updateWordCount` splitting rule exactly. */
-internal fun parseSeedPhraseWords(raw: String): List<String> =
-    raw.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportWalletScreen(viewModel: WalletViewModel, onBack: () -> Unit, onProceed: () -> Unit) {

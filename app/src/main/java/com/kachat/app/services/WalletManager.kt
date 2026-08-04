@@ -470,14 +470,6 @@ class WalletManager @Inject constructor(
     }
 
     /**
-     * Signs a Kaspa transaction payload with the wallet private key.
-     */
-    fun sign(payload: ByteArray): ByteArray {
-        // TODO: secp256k1 signing
-        return ByteArray(0)
-    }
-
-    /**
      * Derives the shared symmetric key (ECDH + HKDF-SHA256) with a contact's
      * x-only secp256k1 public key. See [com.kachat.app.util.KasiaCipher].
      */

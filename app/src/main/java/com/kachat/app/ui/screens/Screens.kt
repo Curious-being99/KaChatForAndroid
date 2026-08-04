@@ -570,17 +570,23 @@ fun ChatThreadScreen(
                             // Fixed downsample for a quick composition-time thumbnail decode — the real
                             // compression (ImagePrep.prepareForChatMessage) happens off the main thread
                             // in the ViewModel when Send is tapped, this is display-only.
-                            val thumbnail = remember(pendingPhotoUri) {
-                                pendingPhotoUri?.let { uri ->
-                                    try {
-                                        thumbnailContext.contentResolver.openInputStream(uri)?.use {
-                                            android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 })
+                            // Decode off the main thread (contentResolver I/O + BitmapFactory) so
+                            // attaching a photo can't hitch composition; matches the incoming-photo
+                            // produceState pattern used elsewhere in this file.
+                            val thumbnailState = produceState<android.graphics.Bitmap?>(initialValue = null, pendingPhotoUri) {
+                                value = pendingPhotoUri?.let { uri ->
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            thumbnailContext.contentResolver.openInputStream(uri)?.use {
+                                                android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 })
+                                            }
+                                        } catch (e: Exception) {
+                                            null
                                         }
-                                    } catch (e: Exception) {
-                                        null
                                     }
                                 }
                             }
+                            val thumbnail = thumbnailState.value
                             if (thumbnail != null) {
                                 Image(
                                     bitmap = thumbnail.asImageBitmap(),
@@ -2263,21 +2269,6 @@ fun ChatActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
 
 /** "0:07" — the composer's live recording timer, capped display-wise the same way the recording itself is capped at 10s. */
 fun formatRecordingElapsed(elapsedMs: Long): String = VoiceMessage.formatDuration(elapsedMs.toInt())
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ContactsScreen(navController: NavController) {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.contacts)) }) }
-    ) { padding ->
-        Box(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(stringResource(R.string.contact_list_phase_5), color = KaspaSubtext)
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -7236,7 +7227,6 @@ fun TopStatusBar(
 fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = hiltViewModel()) {
     val network by viewModel.network.collectAsState()
     val indexerUrl by viewModel.indexerUrl.collectAsState()
-    val pushIndexerUrl by viewModel.pushIndexerUrl.collectAsState()
 
     val activeNodes by viewModel.activeNodes.collectAsState()
     val allNodes by viewModel.allNodes.collectAsState()
@@ -7313,8 +7303,6 @@ fun ConnectionStatusScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = 
                 ConnectionInfoRow(stringResource(R.string.latency), activeNodes.firstOrNull()?.latency ?: "—", statusColor)
                 SettingsDivider()
                 ConnectionInfoRow(stringResource(R.string.indexer), indexerUrl.substringAfter("://").substringBefore("/"))
-                SettingsDivider()
-                ConnectionInfoRow(stringResource(R.string.push_register), pushIndexerUrl.substringAfter("://").substringBefore("/"))
                 SettingsDivider()
                 ConnectionInfoRow(stringResource(R.string.last_sync), lastSyncAt)
             }
@@ -7938,7 +7926,6 @@ private fun AddressBookSection(viewModel: ConnectionViewModel) {
 fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel = hiltViewModel()) {
     val network by viewModel.network.collectAsState()
     val indexerUrl by viewModel.indexerUrl.collectAsState()
-    val pushIndexerUrl by viewModel.pushIndexerUrl.collectAsState()
     val knsApiUrl by viewModel.knsApiUrl.collectAsState()
     val kaspaRestApiUrl by viewModel.kaspaRestApiUrl.collectAsState()
     val scrollState = rememberScrollState()
@@ -7996,10 +7983,6 @@ fun ConnectionSettingsScreen(onBack: () -> Unit, viewModel: ConnectionViewModel 
                 SettingsFooter(stringResource(R.string.message_indexer_service_for_chat_functionality))
             }
 
-            SettingsSection(title = stringResource(R.string.push_registration)) {
-                ConnectionUrlField(label = "Push Indexer URL", value = pushIndexerUrl)
-                SettingsFooter(stringResource(R.string.used_only_for_push_registration_and))
-            }
 
             SettingsSection(title = stringResource(R.string.kaspa_name_service)) {
                 ConnectionUrlField(label = "KNS API URL", value = knsApiUrl)
@@ -8142,12 +8125,20 @@ fun rememberQrBitmapPainter(
                 sizePx,
                 mapOf(EncodeHintType.MARGIN to padding)
             )
-            val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
-            for (x in 0 until matrix.width) {
-                for (y in 0 until matrix.height) {
-                    bitmap.setPixel(x, y, if (matrix.get(x, y)) AndroidColor.BLACK else AndroidColor.WHITE)
+            val w = matrix.width
+            val h = matrix.height
+            // One setPixels() beats width*height individual bounds-checked setPixel() calls
+            // (~262k for a 512px QR) by 1-2 orders of magnitude - this runs on the main thread
+            // inside remember{}, and the animated (KSPT) variant re-encodes every 2.5s.
+            val pixels = IntArray(w * h)
+            for (y in 0 until h) {
+                val row = y * w
+                for (x in 0 until w) {
+                    pixels[row + x] = if (matrix.get(x, y)) AndroidColor.BLACK else AndroidColor.WHITE
                 }
             }
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
             bitmap.asImageBitmap()
         }
     }
@@ -8181,12 +8172,17 @@ fun rememberQrBitmapPainter(
                 sizePx,
                 mapOf(EncodeHintType.MARGIN to padding, EncodeHintType.CHARACTER_SET to "ISO-8859-1")
             )
-            val bmp = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
-            for (x in 0 until matrix.width) {
-                for (y in 0 until matrix.height) {
-                    bmp.setPixel(x, y, if (matrix.get(x, y)) AndroidColor.BLACK else AndroidColor.WHITE)
+            val w = matrix.width
+            val h = matrix.height
+            val pixels = IntArray(w * h)
+            for (y in 0 until h) {
+                val row = y * w
+                for (x in 0 until w) {
+                    pixels[row + x] = if (matrix.get(x, y)) AndroidColor.BLACK else AndroidColor.WHITE
                 }
             }
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            bmp.setPixels(pixels, 0, w, 0, 0, w, h)
             bmp.asImageBitmap()
         }
     }

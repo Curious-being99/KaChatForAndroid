@@ -150,11 +150,6 @@ data class RawInput(
     val sigOpCount: Int = 1
 )
 
-data class RawOutput(
-    val amount: Long,
-    val scriptPublicKey: ScriptPublicKey
-)
-
 data class PostTransactionResponse(
     val transactionId: String
 )

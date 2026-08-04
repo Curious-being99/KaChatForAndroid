@@ -882,8 +882,11 @@ fun GroupListBody(
                                     color = LocalAppColors.current.textPrimary,
                                     fontWeight = FontWeight.Bold
                                 )
+                                // Memoized on the roster JSON so scrolling / unread-count changes
+                                // don't re-parse the whole member list (with a fresh Gson) per row.
+                                val groupMembers = remember(convo.group.membersJson) { parseGroupMembers(convo.group) }
                                 Text(
-                                    text = groupMessagePreviewText(convo.lastMessage, parseGroupMembers(convo.group)) ?: "No messages yet",
+                                    text = groupMessagePreviewText(convo.lastMessage, groupMembers) ?: "No messages yet",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.Gray,
                                     maxLines = 1,
@@ -1229,11 +1232,3 @@ private fun AvatarInitials(text: String, fontSize: TextUnit) {
         fontSize = fontSize
     )
 }
-
-// Placeholder data class — replace with Room entity in Phase 4
-data class ConversationPreview(
-    val contactId: String,
-    val name: String,
-    val lastMessage: String,
-    val timestamp: String
-)

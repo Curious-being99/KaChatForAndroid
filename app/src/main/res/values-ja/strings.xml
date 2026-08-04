@@ -26,7 +26,6 @@
     <string name="amount_kas">金額 (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">同じチャンネル名に参加した人は誰でもメッセージを見て投稿できます。所有者や招待はありません。</string>
     <string name="anyone_with_your_seed_phrase_can">シードフレーズを持っている人は誰でもあなたのアカウントにアクセスできます。誰とも絶対に共有しないでください。必ず書き留めるだけにしてください。スクリーンショットを撮ったり、デバイスに保存したりしないでください。</string>
-    <string name="available">利用可能</string>
     <string name="back">戻る</string>
     <string name="before_you_swap">スワップする前に</string>
     <string name="broadcast_settings">ブロードキャスト設定</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">コインを選択</string>
     <string name="choose_photo">写真を選択</string>
     <string name="choose_which_tabs_appear_in_your">下部メニューに表示するタブを選択してください。</string>
-    <string name="clear">クリア</string>
     <string name="clear_search">検索をクリア</string>
     <string name="close">閉じる</string>
     <string name="cold_storage">コールドストレージ</string>
     <string name="confirm">確認</string>
-    <string name="confirm_transfer">送金を確認</string>
     <string name="connect_to_a_node">ノードに接続</string>
     <string name="connected_only_to_this_node">このノードのみに接続</string>
     <string name="connection_settings">接続設定</string>
     <string name="connection_status">接続状況</string>
     <string name="contact_name">連絡先名</string>
     <string name="contact_has_requested_permission_to_communicate">連絡先が通信許可をリクエストしました</string>
-    <string name="contact_list_phase_5">連絡先リスト (フェーズ5)</string>
     <string name="contact_name_2">連絡先名</string>
     <string name="contacts">連絡先</string>
     <string name="controls_how_much_photos_are_compressed">送信前に写真がどの程度圧縮されるかを制御します。高品質はより鮮明に見えますが、手数料が高くなり送信に時間がかかります。低品質はより速く安価に送信されますが、より圧縮されて見えます。これは送信する写真にのみ影響し、受信する写真には影響しません。</string>
     <string name="copy">コピー</string>
     <string name="copy_address">アドレスをコピー</string>
     <string name="copy_private_key_hex">秘密鍵Hexをコピー</string>
-    <string name="copy_seed_phrase">Seed Phraseをコピー</string>
     <string name="copy_kpub">kpubをコピー</string>
     <string name="couldn_t_rename_group">グループの名前を変更できませんでした</string>
     <string name="couldn_t_read_this_swap_s">このスワップの金額を読み取れませんでした</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">アカウントを編集</string>
     <string name="enter_a_kaspa_address_kaspa_or">Kaspaアドレス（kaspa:...）またはKNSドメイン名（例: alice.kas）を入力</string>
     <string name="enter_kpub">kpubを入力</string>
-    <string name="enter_your_12_or_24_word">12語または24語のシードフレーズを入力してください</string>
     <string name="error">エラー</string>
     <string name="every_member_will_see_the_new">すべてのメンバーが新しい名前を見ることになります。</string>
     <string name="exchange_id_copied">交換IDをコピーしました</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">保持期間が長いほど、デバイスにキャッシュされるメッセージが増えます。これは特にアクティブな部屋では時間の経過とともにアプリを遅くする可能性があります。</string>
     <string name="make_active_address">アクティブなアドレスにする</string>
     <string name="manage_addresses">アドレスを管理</string>
-    <string name="mark_as_read">既読にする</string>
-    <string name="mark_as_unread">未読にする</string>
     <string name="max">最大</string>
     <string name="members">メンバー</string>
     <string name="menu">メニュー</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">写真メッセージ、全画面</string>
     <string name="photo_quality_2">写真の画質</string>
     <string name="photos">写真</string>
-    <string name="pick_which_domain_you_want_to">この連絡先を表すドメインを選択してください。ニックネームを設定していない場合は名前としても使用されます。</string>
-    <string name="please_enter_exactly_12_or_24">正確に12語または24語を入力してください</string>
     <string name="polygon_network">Polygonネットワーク</string>
     <string name="pool_health">プールの状態</string>
     <string name="popular">人気</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">コールドストレージアカウント名を変更</string>
     <string name="rename_group">グループ名を変更</string>
     <string name="reserved_domain_no_registration_fee_only">予約済みドメイン: 登録料なし、ネットワーク手数料のみ適用されます。</string>
-    <string name="reset_to_defaults">デフォルトにリセット</string>
     <string name="resign">投了</string>
     <string name="resign_this_game">この対局を投了しますか?</string>
     <string name="resolving_kns_domain">KNSドメインを解決中…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">コールドストレージから送信</string>
     <string name="send_photo">写真を送信</string>
     <string name="sending">送信中</string>
-    <string name="sends_kas_out_of_your_identity">チャット用に資金を入れているアイデンティティアドレスからKASを送信します。</string>
     <string name="sends_every_other_spending_address_s">他のすべての使用アドレスの残高を現在のお気に入りアドレスに送信します。残高のある各アドレスはそれぞれ独自の実際の取引であるため、少し時間がかかる場合があります。</string>
     <string name="sent">送信済み</string>
     <string name="settings">設定</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">連絡先を追加して新しいチャットを始めましょう</string>
     <string name="status">ステータス</string>
     <string name="still_indexing_it_ll_show_up">まだインデックス作成中です。まもなく上に表示されます。</string>
-    <string name="still_indexing_ownership_will_update_shortly">まだインデックス作成中です。所有権はまもなく更新されます。</string>
     <string name="swap">スワップ</string>
     <string name="swap_history">スワップ履歴</string>
     <string name="swap_started">スワップを開始しました</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">下のアドレスをタップしてそこからスワップします</string>
     <string name="tap_an_address_below_to_use">下のアドレスをタップして使用します</string>
     <string name="tap_to_reveal_seed_phrase">タップしてseed phraseを表示</string>
-    <string name="this_action_cannot_be_undone_double">この操作は元に戻せません。確認する前に上のアドレスを再確認してください。</string>
     <string name="this_could_take_a_few_minutes">チェーン上で確認されるまで数分かかる場合があります。</string>
     <string name="this_only_removes_it_from_kachat">これはKaChatのウォッチリストから削除するだけです。KasSignerデバイスや保有する資金には影響しません。</string>
     <string name="this_permanently_deletes_every_message_with">これはこのデバイス上の彼らとのすべてのメッセージを完全に削除します。これは元に戻せません。再度メッセージを送ると、まったく新しい会話が始まります。</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">総投資額</string>
     <string name="total_p_l">合計損益</string>
     <string name="transaction_history">取引履歴</string>
-    <string name="transaction_id">取引ID</string>
     <string name="transaction_links_in_message_menus_and">メッセージメニューと取引履歴ページの取引リンクは、このエクスプローラーで開きます。</string>
     <string name="transactions">取引</string>
-    <string name="transfer_domain">ドメインを移管</string>
     <string name="try_again">再試行</string>
     <string name="unhide">表示に戻す</string>
     <string name="unlink">リンク解除</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">ChangeNOWで表示</string>
     <string name="waiting_for_camera">カメラを待っています...</string>
     <string name="waiting_on_opponent">相手を待っています</string>
-    <string name="walk_through_setting_up_your_domain">ドメイン、バナー、アバター、詳細の設定を順を追って案内します。</string>
     <string name="when_you_message_someone_new_on">KaChatで新しい相手にメッセージを送ると、相手には通知が届かず、相手が返信するかあなたを追加するまであなたのメッセージは非表示のままです。これによりスパムから保護され、プライバシーが向上します。相手に通知させたい場合は、手のアイコンをタップして通信リクエストを送信してください。費用は0.2 KASです。(注: KaChat以外のすべてのメッセージングアプリは通信リクエストが必要です)</string>
     <string name="wipe_account">アカウントを削除</string>
     <string name="wipe_everything">すべて削除</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">アカウントとメッセージを消去</string>
     <string name="wipe_account_messages_cloud">アカウントとメッセージとクラウドを削除</string>
     <string name="wipe_and_re_sync_incoming_messages">受信メッセージを消去して再同期</string>
-    <string name="withdraw">引き出す</string>
-    <string name="withdraw_from_this_address">このアドレスから引き出す</string>
-    <string name="withdraw_kaspa">Kaspaを引き出す</string>
-    <string name="withdrawal_sent">引き出しを送信しました</string>
     <string name="you_will_be_shown_a_seed">シードフレーズが表示されます。これがアカウントを復元する唯一の方法です。必ず書き留めるだけにしてください。スクリーンショットを撮ったり、デバイスに保存したりしないでください。</string>
     <string name="channel_name">チャンネル名</string>
     <string name="host_port_or_grpcs_host">host:port または grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">アドレスをさらに生成</string>
     <string name="generate_new_spending_address">新しい使用アドレスを生成</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">エクスプローラーへ</string>
     <string name="hide_user">ユーザーを非表示にする</string>
     <string name="ip_address_book">IPアドレス帳</string>
     <string name="import_csv">CSVをインポート</string>
@@ -415,8 +393,6 @@
     <string name="profile">プロフィール</string>
     <string name="protocol">プロトコル</string>
     <string name="push_notifications">プッシュ通知</string>
-    <string name="push_register">プッシュ登録</string>
-    <string name="push_registration">プッシュ登録</string>
     <string name="rest_api_for_transaction_history_and">トランザクション履歴と残高照会用のREST API</string>
     <string name="reconnect">再接続</string>
     <string name="redirect">リダイレクト</string>
@@ -428,7 +404,6 @@
     <string name="security">セキュリティ</string>
     <string name="select_mainnet_for_real_transactions_or">本番のトランザクションにはmainnet、テストにはtestnetを選択</string>
     <string name="send_audio_message">音声メッセージを送信</string>
-    <string name="send_from_this_address">このアドレスから送信</string>
     <string name="send_handshake">通信リクエストを送信</string>
     <string name="send_photo_2">写真を送信</string>
     <string name="sending_2">送信中...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">合計</string>
     <string name="unfinished_inscription">未完了のインスクリプション</string>
-    <string name="used_only_for_push_registration_and">プッシュ登録と更新にのみ使用</string>
     <string name="uses_your_device_contacts_to_match">デバイスの連絡先を使用してKaspa連絡先とマッチングし補完します。</string>
     <string name="verified">検証済み</string>
     <string name="verifying_new_ownership_on_chain_this">チェーン上で新しい所有権を確認中 (1分ほどかかる場合があります)...</string>

@@ -92,7 +92,6 @@ class ConnectionViewModel @Inject constructor(
 
     val network: StateFlow<String> = settings.network.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Mainnet")
     val indexerUrl: StateFlow<String> = settings.indexerUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
-    val pushIndexerUrl: StateFlow<String> = MutableStateFlow("https://indexer.kasia.wtf")
     val knsApiUrl: StateFlow<String> = settings.knsApiUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val kaspaRestApiUrl: StateFlow<String> = settings.kaspaRestUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val trustedNodeAddress: StateFlow<String> = settings.trustedNodeAddress.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
@@ -104,7 +103,6 @@ class ConnectionViewModel @Inject constructor(
 
     fun setNetwork(value: String) { viewModelScope.launch { settings.setNetwork(value) } }
     fun setIndexerUrl(value: String) { viewModelScope.launch { settings.setIndexerUrl(value) } }
-    fun setPushIndexerUrl(value: String) { /* TODO */ }
     fun setKnsApiUrl(value: String) { viewModelScope.launch { settings.setKnsApiUrl(value) } }
     fun setKaspaRestApiUrl(value: String) { viewModelScope.launch { settings.setKaspaRestUrl(value) } }
     fun setTrustedNodeAddress(value: String) { viewModelScope.launch { settings.setTrustedNodeAddress(value) } }

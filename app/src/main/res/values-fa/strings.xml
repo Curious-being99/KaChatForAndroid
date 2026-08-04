@@ -26,7 +26,6 @@
     <string name="amount_kas">مبلغ (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">هر کسی که به همان نام کانال بپیوندد می‌تواند پیام‌ها را آنجا ببیند و ارسال کند. مالک یا دعوتی وجود ندارد.</string>
     <string name="anyone_with_your_seed_phrase_can">هر کسی که عبارت بازیابی شما را داشته باشد می‌تواند به حساب شما دسترسی پیدا کند. هرگز آن را با کسی به اشتراک نگذارید. مطمئن شوید که فقط آن را یادداشت می‌کنید. هرگز از آن اسکرین‌شات نگیرید یا آن را در دستگاه خود ذخیره نکنید.</string>
-    <string name="available">موجود</string>
     <string name="back">بازگشت</string>
     <string name="before_you_swap">قبل از تبدیل</string>
     <string name="broadcast_settings">تنظیمات پخش</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">انتخاب سکه</string>
     <string name="choose_photo">انتخاب عکس</string>
     <string name="choose_which_tabs_appear_in_your">انتخاب کنید کدام تب‌ها در منوی پایینی شما نمایش داده شوند.</string>
-    <string name="clear">پاک کردن</string>
     <string name="clear_search">پاک کردن جستجو</string>
     <string name="close">بستن</string>
     <string name="cold_storage">ذخیره‌سازی سرد</string>
     <string name="confirm">تأیید</string>
-    <string name="confirm_transfer">تأیید انتقال</string>
     <string name="connect_to_a_node">اتصال به یک گره</string>
     <string name="connected_only_to_this_node">فقط به این گره متصل است</string>
     <string name="connection_settings">تنظیمات اتصال</string>
     <string name="connection_status">وضعیت اتصال</string>
     <string name="contact_name">نام مخاطب</string>
     <string name="contact_has_requested_permission_to_communicate">مخاطب درخواست اجازه ارتباط داده است</string>
-    <string name="contact_list_phase_5">لیست مخاطبین (مرحله 5)</string>
     <string name="contact_name_2">نام مخاطب</string>
     <string name="contacts">مخاطبین</string>
     <string name="controls_how_much_photos_are_compressed">میزان فشرده‌سازی عکس‌ها قبل از ارسال را کنترل می‌کند. کیفیت بالاتر واضح‌تر به نظر می‌رسد اما کارمزد بیشتری دارد و ارسال آن طولانی‌تر است؛ کیفیت پایین‌تر سریع‌تر و ارزان‌تر ارسال می‌شود اما فشرده‌تر به نظر می‌رسد. این فقط بر عکس‌هایی که ارسال می‌کنید تأثیر می‌گذارد، نه آن‌هایی که دریافت می‌کنید.</string>
     <string name="copy">کپی</string>
     <string name="copy_address">کپی آدرس</string>
     <string name="copy_private_key_hex">کپی کلید خصوصی (Hex)</string>
-    <string name="copy_seed_phrase">کپی seed phrase</string>
     <string name="copy_kpub">کپی kpub</string>
     <string name="couldn_t_rename_group">تغییر نام گروه ممکن نشد</string>
     <string name="couldn_t_read_this_swap_s">مبالغ این تبادل خوانده نشد</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">ویرایش حساب</string>
     <string name="enter_a_kaspa_address_kaspa_or">یک آدرس Kaspa (kaspa:...) یا نام دامنه KNS (مثلا alice.kas) وارد کنید</string>
     <string name="enter_kpub">وارد کردن kpub</string>
-    <string name="enter_your_12_or_24_word">عبارت بازیابی 12 یا 24 کلمه‌ای خود را وارد کنید</string>
     <string name="error">خطا</string>
     <string name="every_member_will_see_the_new">هر عضو نام جدید را خواهد دید.</string>
     <string name="exchange_id_copied">شناسه تبادل کپی شد</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">نگهداری طولانی‌تر یعنی پیام‌های بیشتری در حافظه پنهان دستگاه شما باقی می‌مانند، که می‌تواند با گذشت زمان برنامه را کند کند، به‌خصوص برای اتاق‌های شلوغ.</string>
     <string name="make_active_address">تبدیل به آدرس فعال</string>
     <string name="manage_addresses">مدیریت آدرس‌ها</string>
-    <string name="mark_as_read">علامت‌گذاری به‌عنوان خوانده‌شده</string>
-    <string name="mark_as_unread">علامت‌گذاری به‌عنوان خوانده‌نشده</string>
     <string name="max">حداکثر</string>
     <string name="members">اعضا</string>
     <string name="menu">منو</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">پیام عکس، تمام صفحه</string>
     <string name="photo_quality_2">کیفیت عکس</string>
     <string name="photos">عکس‌ها</string>
-    <string name="pick_which_domain_you_want_to">انتخاب کنید کدام دامنه این مخاطب را نمایندگی کند. اگر نام مستعاری تنظیم نکرده باشید، به‌عنوان نام او نیز استفاده می‌شود.</string>
-    <string name="please_enter_exactly_12_or_24">لطفا دقیقا ۱۲ یا ۲۴ کلمه وارد کنید</string>
     <string name="polygon_network">شبکه Polygon</string>
     <string name="pool_health">سلامت مجموعه</string>
     <string name="popular">محبوب</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">تغییر نام حساب ذخیره‌سازی سرد</string>
     <string name="rename_group">تغییر نام گروه</string>
     <string name="reserved_domain_no_registration_fee_only">دامنه رزرو شده: بدون هزینه ثبت، فقط کارمزد شبکه اعمال می‌شود.</string>
-    <string name="reset_to_defaults">بازنشانی به پیش‌فرض</string>
     <string name="resign">تسلیم شدن</string>
     <string name="resign_this_game">از این بازی کناره‌گیری شود؟</string>
     <string name="resolving_kns_domain">در حال تحلیل دامنه KNS…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">ارسال از ذخیره‌سازی سرد</string>
     <string name="send_photo">ارسال عکس</string>
     <string name="sending">در حال ارسال</string>
-    <string name="sends_kas_out_of_your_identity">KAS را از آدرس هویت شما، همان که برای گفتگو شارژ می‌کنید، ارسال می‌کند.</string>
     <string name="sends_every_other_spending_address_s">موجودی همه آدرس‌های خرج کردن دیگر را به آدرس مورد علاقه فعلی شما ارسال می‌کند. هر آدرس با موجودی، تراکنش واقعی جداگانه خود را دارد، بنابراین ممکن است چند لحظه طول بکشد.</string>
     <string name="sent">ارسال شد</string>
     <string name="settings">تنظیمات</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">با افزودن یک مخاطب گفتگوی جدیدی شروع کنید</string>
     <string name="status">وضعیت</string>
     <string name="still_indexing_it_ll_show_up">هنوز در حال نمایه‌سازی است. به‌زودی در بالا ظاهر می‌شود.</string>
-    <string name="still_indexing_ownership_will_update_shortly">هنوز در حال نمایه‌سازی است. مالکیت به‌زودی به‌روزرسانی می‌شود.</string>
     <string name="swap">تبدیل</string>
     <string name="swap_history">تاریخچه تبدیل‌ها</string>
     <string name="swap_started">تبدیل شروع شد</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">برای تبدیل از یک آدرس، روی آن در زیر ضربه بزنید</string>
     <string name="tap_an_address_below_to_use">برای استفاده از یک آدرس، روی آن در زیر ضربه بزنید</string>
     <string name="tap_to_reveal_seed_phrase">برای نمایش seed phrase بزنید</string>
-    <string name="this_action_cannot_be_undone_double">این عملیات قابل بازگشت نیست. قبل از تأیید، آدرس بالا را دوباره بررسی کنید.</string>
     <string name="this_could_take_a_few_minutes">این ممکن است چند دقیقه طول بکشد تا در زنجیره تأیید شود.</string>
     <string name="this_only_removes_it_from_kachat">این فقط آن را از فهرست نظارت KaChat حذف می‌کند. هیچ تأثیری بر دستگاه KasSigner یا وجوهی که نگه می‌دارد ندارد.</string>
     <string name="this_permanently_deletes_every_message_with">این هر پیام با آن‌ها را در این دستگاه برای همیشه حذف می‌کند. این قابل بازگشت نیست؛ پیام دادن دوباره به آن‌ها یک گفتگوی کاملاً جدید شروع می‌کند.</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">مجموع سرمایه‌گذاری‌شده</string>
     <string name="total_p_l">سود و زیان کل</string>
     <string name="transaction_history">تاریخچه تراکنش</string>
-    <string name="transaction_id">شناسه تراکنش</string>
     <string name="transaction_links_in_message_menus_and">پیوندهای تراکنش در منوهای پیام و صفحات تاریخچه تراکنش در این کاوشگر باز می‌شوند.</string>
     <string name="transactions">تراکنش‌ها</string>
-    <string name="transfer_domain">انتقال دامنه</string>
     <string name="try_again">تلاش مجدد</string>
     <string name="unhide">لغو پنهان‌سازی</string>
     <string name="unlink">حذف پیوند</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">مشاهده در ChangeNOW</string>
     <string name="waiting_for_camera">در انتظار دوربین...</string>
     <string name="waiting_on_opponent">در انتظار حریف</string>
-    <string name="walk_through_setting_up_your_domain">شما را گام‌به‌گام در راه‌اندازی دامنه، بنر، آواتار و جزئیات خود راهنمایی می‌کند.</string>
     <string name="when_you_message_someone_new_on">وقتی به شخص جدیدی در KaChat پیام می‌دهید، او اعلانی دریافت نمی‌کند و پیام شما پنهان می‌ماند تا زمانی که به شما پاسخ دهد یا شما را نیز اضافه کند. این از هرزنامه محافظت کرده و حریم خصوصی شما را افزایش می‌دهد. اگر می‌خواهید او مطلع شود، روی آیکون دست ضربه بزنید تا درخواست ارتباطی ارسال کنید که 0.2 KAS هزینه دارد. (توجه: تمام برنامه‌های پیام‌رسانی غیر از KaChat به درخواست ارتباط نیاز خواهند داشت)</string>
     <string name="wipe_account">پاک کردن حساب</string>
     <string name="wipe_everything">پاک کردن همه چیز</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">پاک کردن حساب و پیام‌ها</string>
     <string name="wipe_account_messages_cloud">پاک کردن حساب و پیام‌ها و ابر</string>
     <string name="wipe_and_re_sync_incoming_messages">پاک کردن و همگام‌سازی مجدد پیام‌های ورودی</string>
-    <string name="withdraw">برداشت</string>
-    <string name="withdraw_from_this_address">برداشت از این آدرس</string>
-    <string name="withdraw_kaspa">برداشت کاسپا</string>
-    <string name="withdrawal_sent">برداشت ارسال شد</string>
     <string name="you_will_be_shown_a_seed">یک عبارت بازیابی به شما نشان داده خواهد شد. این تنها راه بازیابی حساب شماست. مطمئن شوید که فقط آن را یادداشت می‌کنید. هرگز از آن اسکرین‌شات نگیرید یا آن را در دستگاه خود ذخیره نکنید.</string>
     <string name="channel_name">نام-کانال</string>
     <string name="host_port_or_grpcs_host">host:port یا grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">ایجاد آدرس‌های بیشتر</string>
     <string name="generate_new_spending_address">ایجاد آدرس خرج کردن جدید</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">رفتن به کاوشگر</string>
     <string name="hide_user">پنهان کردن کاربر</string>
     <string name="ip_address_book">دفترچه آدرس IP</string>
     <string name="import_csv">وارد کردن CSV</string>
@@ -415,8 +393,6 @@
     <string name="profile">پروفایل</string>
     <string name="protocol">پروتکل</string>
     <string name="push_notifications">اعلان‌های پوش</string>
-    <string name="push_register">ثبت پوش</string>
-    <string name="push_registration">ثبت اعلان‌ها</string>
     <string name="rest_api_for_transaction_history_and">REST API برای تاریخچه تراکنش‌ها و استعلام موجودی</string>
     <string name="reconnect">اتصال مجدد</string>
     <string name="redirect">تغییر مسیر</string>
@@ -428,7 +404,6 @@
     <string name="security">امنیت</string>
     <string name="select_mainnet_for_real_transactions_or">mainnet را برای تراکنش‌های واقعی یا testnet را برای آزمایش انتخاب کنید</string>
     <string name="send_audio_message">ارسال پیام صوتی</string>
-    <string name="send_from_this_address">ارسال از این آدرس</string>
     <string name="send_handshake">ارسال درخواست ارتباط</string>
     <string name="send_photo_2">ارسال عکس</string>
     <string name="sending_2">در حال ارسال...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">کل</string>
     <string name="unfinished_inscription">کتیبه ناتمام</string>
-    <string name="used_only_for_push_registration_and">فقط برای ثبت اعلان‌ها و به‌روزرسانی‌ها استفاده می‌شود</string>
     <string name="uses_your_device_contacts_to_match">از مخاطبین دستگاه شما برای تطبیق و غنی‌سازی مخاطبین Kaspa استفاده می‌کند.</string>
     <string name="verified">تایید شده</string>
     <string name="verifying_new_ownership_on_chain_this">در حال تأیید مالکیت جدید در زنجیره (ممکن است یک دقیقه طول بکشد)...</string>

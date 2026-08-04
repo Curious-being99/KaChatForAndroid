@@ -99,11 +99,16 @@ import com.kachat.app.viewmodels.ChatViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// Shared, reused across every parseGroupMembers call. Allocating a fresh Gson + TypeToken per call
+// (the old behaviour) was measurable: parseGroupMembers runs inside chat-list item builders and per
+// message bubble, i.e. on hot recomposition paths - see the memoized call sites.
+private val groupMembersGson = com.google.gson.Gson()
+private val groupMembersType = object : com.google.gson.reflect.TypeToken<List<GroupMember>>() {}.type
+
 /** Parses a [com.kachat.app.models.GroupEntity]'s stored roster JSON, or empty on failure - shared by every screen below instead of each re-implementing the same try/catch. */
 fun parseGroupMembers(group: com.kachat.app.models.GroupEntity): List<GroupMember> {
     return try {
-        val type = object : com.google.gson.reflect.TypeToken<List<GroupMember>>() {}.type
-        com.google.gson.Gson().fromJson<List<GroupMember>>(group.membersJson, type) ?: emptyList()
+        groupMembersGson.fromJson<List<GroupMember>>(group.membersJson, groupMembersType) ?: emptyList()
     } catch (e: Exception) {
         emptyList()
     }
@@ -931,21 +936,25 @@ private fun GroupMessageBubble(
     // Prefers the live contact alias (kept current by refreshKnsProfilesForGroupMembers, e.g. a
     // KNS name resolved after the member was added) over the roster's own `displayName`, which is
     // only ever a one-time snapshot taken at add/join time and never updated afterward.
-    val senderName = remember(message.senderAddress, group, liveAlias) {
+    // Parse the roster ONCE per bubble, memoized on the roster JSON (not the whole GroupEntity,
+    // which gets a new instance on every group update e.g. lastActivity - that invalidated all
+    // three lookups on every incoming message). senderName/replySenderName reuse this instead of
+    // each re-parsing.
+    val groupMembersForMentions = remember(group?.membersJson) { group?.let(::parseGroupMembers) ?: emptyList() }
+    val senderName = remember(message.senderAddress, groupMembersForMentions, liveAlias) {
         val address = message.senderAddress ?: return@remember "Unknown"
         if (!liveAlias.isNullOrBlank()) return@remember liveAlias
-        val member = group?.let(::parseGroupMembers)?.firstOrNull { it.address == address }
+        val member = groupMembersForMentions.firstOrNull { it.address == address }
         member?.displayName?.takeIf { it.isNotBlank() } ?: address.takeLast(10)
     }
     val replyContent = remember(message.content) { MessageReply.parseOrNull(message.content) }
-    val groupMembersForMentions = remember(group?.membersJson) { group?.let(::parseGroupMembers) ?: emptyList() }
     val displayContent = remember(replyContent, message.content, groupMembersForMentions) {
         GroupMentionCodec.decodeForDisplay(replyContent?.text ?: message.content, groupMembersForMentions, resolveMentionName)
     }
-    val replySenderName = remember(replyContent, group, myAddress) {
+    val replySenderName = remember(replyContent, groupMembersForMentions, myAddress) {
         val reply = replyContent ?: return@remember null
         if (reply.replyToSender == myAddress) return@remember "You"
-        val member = group?.let(::parseGroupMembers)?.firstOrNull { it.address == reply.replyToSender }
+        val member = groupMembersForMentions.firstOrNull { it.address == reply.replyToSender }
         member?.displayName?.takeIf { it.isNotBlank() } ?: reply.replyToSender.takeLast(10)
     }
     val voiceContent = remember(displayContent) { VoiceMessage.parseOrNull(displayContent) }

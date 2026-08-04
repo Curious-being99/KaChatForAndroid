@@ -388,7 +388,9 @@ private fun PortfolioTransactionsContent(
                     )
                 }
             } else {
-                items(transactions.reversed()) { tx ->
+                // asReversed() is an O(1) view (no per-recomposition list copy like reversed()),
+                // and a stable key lets Compose reuse item state / animate list changes.
+                items(transactions.asReversed(), key = { it.id }) { tx ->
                     TransactionRow(
                         tx = tx,
                         onClick = { editingTransaction = tx },

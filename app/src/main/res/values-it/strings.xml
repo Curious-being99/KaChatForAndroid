@@ -26,7 +26,6 @@
     <string name="amount_kas">Importo (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Chiunque si unisca allo stesso nome di canale puo vedere e pubblicare messaggi qui. Non c\'e proprietario ne invito.</string>
     <string name="anyone_with_your_seed_phrase_can">Chiunque abbia la tua seed phrase puo accedere al tuo account. Non condividerla mai con nessuno. Assicurati di annotarla solo per iscritto. Non fare mai uno screenshot ne conservarla sul tuo dispositivo.</string>
-    <string name="available">Disponibile</string>
     <string name="back">Indietro</string>
     <string name="before_you_swap">Prima di scambiare</string>
     <string name="broadcast_settings">Impostazioni broadcast</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">Scegli Moneta</string>
     <string name="choose_photo">Scegli foto</string>
     <string name="choose_which_tabs_appear_in_your">Scegli quali schede compaiono nel menu in basso.</string>
-    <string name="clear">Cancella</string>
     <string name="clear_search">Cancella ricerca</string>
     <string name="close">Chiudi</string>
     <string name="cold_storage">Cold storage</string>
     <string name="confirm">Conferma</string>
-    <string name="confirm_transfer">Conferma trasferimento</string>
     <string name="connect_to_a_node">Connetti a un nodo</string>
     <string name="connected_only_to_this_node">Connesso solo a questo nodo</string>
     <string name="connection_settings">Impostazioni di connessione</string>
     <string name="connection_status">Stato della connessione</string>
     <string name="contact_name">Nome contatto</string>
     <string name="contact_has_requested_permission_to_communicate">Il contatto ha richiesto il permesso di comunicare</string>
-    <string name="contact_list_phase_5">Elenco contatti (Fase 5)</string>
     <string name="contact_name_2">Nome contatto</string>
     <string name="contacts">Contatti</string>
     <string name="controls_how_much_photos_are_compressed">Controlla quanto vengono compresse le foto prima dell\'invio. Una qualita piu alta appare piu nitida ma costa una commissione maggiore e impiega piu tempo a essere inviata; una qualita piu bassa invia piu velocemente e a costo minore ma appare piu compressa. Questo riguarda solo le foto che invii, non quelle che ricevi.</string>
     <string name="copy">Copia</string>
     <string name="copy_address">Copia indirizzo</string>
     <string name="copy_private_key_hex">Copia chiave privata (Hex)</string>
-    <string name="copy_seed_phrase">Copia seed phrase</string>
     <string name="copy_kpub">Copia kpub</string>
     <string name="couldn_t_rename_group">Impossibile rinominare il gruppo</string>
     <string name="couldn_t_read_this_swap_s">Impossibile leggere gli importi di questo scambio</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">Modifica account</string>
     <string name="enter_a_kaspa_address_kaspa_or">Inserisci un indirizzo Kaspa (kaspa:...) o un nome di dominio KNS (es. alice.kas)</string>
     <string name="enter_kpub">Inserisci kpub</string>
-    <string name="enter_your_12_or_24_word">Inserisci la tua seed phrase di 12 o 24 parole</string>
     <string name="error">Errore</string>
     <string name="every_member_will_see_the_new">Ogni membro vedra il nuovo nome.</string>
     <string name="exchange_id_copied">ID scambio copiato</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">Una conservazione piu lunga significa che piu messaggi restano nella cache del tuo dispositivo, il che puo rallentare l\'app col tempo, specialmente per le sale molto attive.</string>
     <string name="make_active_address">Imposta come indirizzo attivo</string>
     <string name="manage_addresses">Gestisci indirizzi</string>
-    <string name="mark_as_read">Segna come letto</string>
-    <string name="mark_as_unread">Segna come non letto</string>
     <string name="max">Max</string>
     <string name="members">Membri</string>
     <string name="menu">Menu</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">Messaggio foto, schermo intero</string>
     <string name="photo_quality_2">Qualità foto</string>
     <string name="photos">Foto</string>
-    <string name="pick_which_domain_you_want_to">Scegli quale dominio deve rappresentare questo contatto. Viene usato anche come suo nome se non hai impostato un soprannome.</string>
-    <string name="please_enter_exactly_12_or_24">Inserisci esattamente 12 o 24 parole</string>
     <string name="polygon_network">Rete Polygon</string>
     <string name="pool_health">Salute del pool</string>
     <string name="popular">Popolare</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">Rinomina account cold storage</string>
     <string name="rename_group">Rinomina gruppo</string>
     <string name="reserved_domain_no_registration_fee_only">Dominio riservato: nessuna quota di registrazione, si applicano solo le commissioni di rete.</string>
-    <string name="reset_to_defaults">Ripristina predefiniti</string>
     <string name="resign">Abbandona</string>
     <string name="resign_this_game">Abbandonare questa partita?</string>
     <string name="resolving_kns_domain">Risoluzione dominio KNS…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">Invia da cold storage</string>
     <string name="send_photo">Invia foto</string>
     <string name="sending">Invio in corso</string>
-    <string name="sends_kas_out_of_your_identity">Invia KAS dal tuo indirizzo identita, quello che finanzi per chattare.</string>
     <string name="sends_every_other_spending_address_s">Invia il saldo di tutti gli altri indirizzi di spesa al tuo preferito attuale. Ogni indirizzo con un saldo e una transazione reale a se stante, quindi potrebbe richiedere qualche istante.</string>
     <string name="sent">Inviato</string>
     <string name="settings">Impostazioni</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">Avvia una nuova chat aggiungendo un contatto</string>
     <string name="status">Stato</string>
     <string name="still_indexing_it_ll_show_up">Ancora in fase di indicizzazione. Apparira sopra a breve.</string>
-    <string name="still_indexing_ownership_will_update_shortly">Ancora in fase di indicizzazione. La proprieta si aggiornera a breve.</string>
     <string name="swap">Scambia</string>
     <string name="swap_history">Cronologia scambi</string>
     <string name="swap_started">Scambio avviato</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">Tocca un indirizzo qui sotto per scambiare da esso</string>
     <string name="tap_an_address_below_to_use">Tocca un indirizzo qui sotto per usarlo</string>
     <string name="tap_to_reveal_seed_phrase">Tocca per rivelare la seed phrase</string>
-    <string name="this_action_cannot_be_undone_double">Questa azione non puo essere annullata. Ricontrolla l\'indirizzo sopra prima di confermare.</string>
     <string name="this_could_take_a_few_minutes">Potrebbe richiedere alcuni minuti mentre si conferma sulla blockchain.</string>
     <string name="this_only_removes_it_from_kachat">Questo lo rimuove solo dalla lista di controllo di KaChat. Non ha alcun effetto sul dispositivo KasSigner o sui fondi che detiene.</string>
     <string name="this_permanently_deletes_every_message_with">Questo elimina definitivamente ogni messaggio con loro su questo dispositivo. Non puo essere annullato; scrivergli di nuovo avvia una conversazione completamente nuova.</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">Totale investito</string>
     <string name="total_p_l">P&amp;L totale</string>
     <string name="transaction_history">Cronologia transazioni</string>
-    <string name="transaction_id">ID transazione</string>
     <string name="transaction_links_in_message_menus_and">I link alle transazioni nei menu dei messaggi e nelle pagine della cronologia transazioni si aprono in questo explorer.</string>
     <string name="transactions">Transazioni</string>
-    <string name="transfer_domain">Trasferisci dominio</string>
     <string name="try_again">Riprova</string>
     <string name="unhide">Rendi visibile</string>
     <string name="unlink">Scollega</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">Vedi su ChangeNOW</string>
     <string name="waiting_for_camera">In attesa della fotocamera...</string>
     <string name="waiting_on_opponent">In attesa dell\'avversario</string>
-    <string name="walk_through_setting_up_your_domain">Ti guida passo dopo passo nella configurazione di dominio, banner, avatar e dettagli.</string>
     <string name="when_you_message_someone_new_on">Quando scrivi a qualcuno di nuovo su KaChat, non ricevera una notifica e il tuo messaggio restera nascosto finche non ti risponde o ti aggiunge a sua volta. Questo protegge dallo spam e aumenta la tua privacy. Se vuoi che venga notificato, tocca l\'icona della mano per inviare una richiesta di comunicazione che costera 0,2 KAS. (Nota: tutte le app di messaggistica non KaChat richiederanno una richiesta di comunicazione)</string>
     <string name="wipe_account">Cancella account</string>
     <string name="wipe_everything">Cancella tutto</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">Cancella account e messaggi</string>
     <string name="wipe_account_messages_cloud">Cancella account e messaggi e cloud</string>
     <string name="wipe_and_re_sync_incoming_messages">Cancella e ri-sincronizza messaggi in arrivo</string>
-    <string name="withdraw">Preleva</string>
-    <string name="withdraw_from_this_address">Preleva da questo indirizzo</string>
-    <string name="withdraw_kaspa">Preleva Kaspa</string>
-    <string name="withdrawal_sent">Prelievo inviato</string>
     <string name="you_will_be_shown_a_seed">Ti verra mostrata una seed phrase. Questo e l\'unico modo per recuperare il tuo account. Assicurati di annotarla solo per iscritto. Non fare mai uno screenshot ne conservarla sul tuo dispositivo.</string>
     <string name="channel_name">nome-canale</string>
     <string name="host_port_or_grpcs_host">host:porta o grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">Genera altri indirizzi</string>
     <string name="generate_new_spending_address">Genera nuovo indirizzo di spesa</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">Vai all\'explorer</string>
     <string name="hide_user">Nascondi utente</string>
     <string name="ip_address_book">Rubrica IP</string>
     <string name="import_csv">Importa CSV</string>
@@ -415,8 +393,6 @@
     <string name="profile">Profilo</string>
     <string name="protocol">Protocollo</string>
     <string name="push_notifications">Notifiche push</string>
-    <string name="push_register">Registrazione push</string>
-    <string name="push_registration">Registrazione push</string>
     <string name="rest_api_for_transaction_history_and">REST API per cronologia transazioni e consultazione saldo</string>
     <string name="reconnect">Riconnetti</string>
     <string name="redirect">Reindirizza</string>
@@ -428,7 +404,6 @@
     <string name="security">Sicurezza</string>
     <string name="select_mainnet_for_real_transactions_or">Seleziona mainnet per transazioni reali o testnet per i test</string>
     <string name="send_audio_message">Invia messaggio audio</string>
-    <string name="send_from_this_address">Invia da questo indirizzo</string>
     <string name="send_handshake">Invia richiesta di comunicazione</string>
     <string name="send_photo_2">Invia foto</string>
     <string name="sending_2">Invio in corso...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">Totale</string>
     <string name="unfinished_inscription">Iscrizione incompleta</string>
-    <string name="used_only_for_push_registration_and">Usato solo per la registrazione push e gli aggiornamenti</string>
     <string name="uses_your_device_contacts_to_match">Usa i contatti del tuo dispositivo per associare e arricchire i contatti Kaspa.</string>
     <string name="verified">Verificato</string>
     <string name="verifying_new_ownership_on_chain_this">Verifica della nuova proprieta sulla blockchain (puo richiedere un minuto)...</string>

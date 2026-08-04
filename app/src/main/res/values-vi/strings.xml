@@ -26,7 +26,6 @@
     <string name="amount_kas">Số tiền (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Bất kỳ ai tham gia cùng tên kênh đều có thể xem và đăng tin nhắn ở đó. Không có chủ sở hữu hay lời mời.</string>
     <string name="anyone_with_your_seed_phrase_can">Bất kỳ ai có cụm từ khôi phục của bạn đều có thể truy cập tài khoản của bạn. Không bao giờ chia sẻ nó với bất kỳ ai. Đảm bảo bạn chỉ ghi nó ra giấy. Không bao giờ chụp ảnh màn hình hoặc lưu trữ nó trên thiết bị của bạn.</string>
-    <string name="available">Có sẵn</string>
     <string name="back">Quay lại</string>
     <string name="before_you_swap">Trước khi hoán đổi</string>
     <string name="broadcast_settings">Cài đặt phát sóng</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">Chon dong tien</string>
     <string name="choose_photo">Chọn ảnh</string>
     <string name="choose_which_tabs_appear_in_your">Chọn các tab hiển thị trong menu dưới cùng của bạn.</string>
-    <string name="clear">Xóa</string>
     <string name="clear_search">Xóa tìm kiếm</string>
     <string name="close">Đóng</string>
     <string name="cold_storage">Lưu trữ lạnh</string>
     <string name="confirm">Xác nhận</string>
-    <string name="confirm_transfer">Xác nhận chuyển khoản</string>
     <string name="connect_to_a_node">Kết nối với một nút</string>
     <string name="connected_only_to_this_node">Chỉ kết nối với nút này</string>
     <string name="connection_settings">Cài đặt kết nối</string>
     <string name="connection_status">Trạng thái kết nối</string>
     <string name="contact_name">Tên liên hệ</string>
     <string name="contact_has_requested_permission_to_communicate">Liên hệ đã yêu cầu quyền liên lạc</string>
-    <string name="contact_list_phase_5">Danh sách liên hệ (Giai đoạn 5)</string>
     <string name="contact_name_2">Tên liên hệ</string>
     <string name="contacts">Danh bạ</string>
     <string name="controls_how_much_photos_are_compressed">Kiểm soát mức độ nén ảnh trước khi gửi. Chất lượng cao hơn trông rõ hơn nhưng tốn phí cao hơn và gửi lâu hơn; chất lượng thấp hơn gửi nhanh và rẻ hơn nhưng trông nén hơn. Điều này chỉ ảnh hưởng đến ảnh bạn gửi, không phải ảnh bạn nhận.</string>
     <string name="copy">Sao chép</string>
     <string name="copy_address">Sao chép địa chỉ</string>
     <string name="copy_private_key_hex">Sao chép khóa riêng (hex)</string>
-    <string name="copy_seed_phrase">Sao chép seed phrase</string>
     <string name="copy_kpub">Sao chép kpub</string>
     <string name="couldn_t_rename_group">Không thể đổi tên nhóm</string>
     <string name="couldn_t_read_this_swap_s">Không thể đọc số tiền của giao dịch hoán đổi này</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">Chỉnh sửa tài khoản</string>
     <string name="enter_a_kaspa_address_kaspa_or">Nhập địa chỉ Kaspa (kaspa:...) hoặc tên miền KNS (ví dụ: alice.kas)</string>
     <string name="enter_kpub">Nhập kpub</string>
-    <string name="enter_your_12_or_24_word">Nhập cụm từ khôi phục 12 hoặc 24 từ của bạn</string>
     <string name="error">Lỗi</string>
     <string name="every_member_will_see_the_new">Mọi thành viên sẽ thấy tên mới.</string>
     <string name="exchange_id_copied">Đã sao chép ID trao đổi</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">Thời gian lưu giữ lâu hơn nghĩa là nhiều tin nhắn hơn được lưu trong bộ nhớ đệm trên thiết bị của bạn, điều này có thể làm chậm ứng dụng theo thời gian, đặc biệt với các phòng đông đúc.</string>
     <string name="make_active_address">Đặt làm địa chỉ hoạt động</string>
     <string name="manage_addresses">Quản lý địa chỉ</string>
-    <string name="mark_as_read">Đánh dấu là đã đọc</string>
-    <string name="mark_as_unread">Đánh dấu là chưa đọc</string>
     <string name="max">Tối đa</string>
     <string name="members">Thành viên</string>
     <string name="menu">Menu</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">Tin nhắn ảnh, toàn màn hình</string>
     <string name="photo_quality_2">Chất lượng ảnh</string>
     <string name="photos">Ảnh</string>
-    <string name="pick_which_domain_you_want_to">Chọn tên miền nào sẽ đại diện cho liên hệ này. Nó cũng được dùng làm tên của họ nếu bạn chưa đặt biệt danh.</string>
-    <string name="please_enter_exactly_12_or_24">Vui lòng nhập chính xác 12 hoặc 24 từ</string>
     <string name="polygon_network">Mạng Polygon</string>
     <string name="pool_health">Sức khỏe nhóm</string>
     <string name="popular">Phổ biến</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">Đổi tên tài khoản lưu trữ lạnh</string>
     <string name="rename_group">Đổi tên nhóm</string>
     <string name="reserved_domain_no_registration_fee_only">Tên miền đã đăng ký trước: không có phí đăng ký, chỉ áp dụng phí mạng.</string>
-    <string name="reset_to_defaults">Đặt lại mặc định</string>
     <string name="resign">Đầu hàng</string>
     <string name="resign_this_game">Đầu hàng ván này?</string>
     <string name="resolving_kns_domain">Đang phân giải tên miền KNS…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">Gửi từ lưu trữ lạnh</string>
     <string name="send_photo">Gửi ảnh</string>
     <string name="sending">Đang gửi</string>
-    <string name="sends_kas_out_of_your_identity">Gửi KAS từ địa chỉ danh tính của bạn, địa chỉ bạn nạp tiền để trò chuyện.</string>
     <string name="sends_every_other_spending_address_s">Gửi số dư của tất cả các địa chỉ chi tiêu khác đến địa chỉ yêu thích hiện tại của bạn. Mỗi địa chỉ có số dư là một giao dịch thực sự riêng, vì vậy điều này có thể mất một chút thời gian.</string>
     <string name="sent">Đã gửi</string>
     <string name="settings">Cài đặt</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">Bắt đầu cuộc trò chuyện mới bằng cách thêm liên hệ</string>
     <string name="status">Trạng thái</string>
     <string name="still_indexing_it_ll_show_up">Vẫn đang lập chỉ mục. Sẽ xuất hiện ở trên trong giây lát.</string>
-    <string name="still_indexing_ownership_will_update_shortly">Vẫn đang lập chỉ mục. Quyền sở hữu sẽ được cập nhật trong giây lát.</string>
     <string name="swap">Hoán đổi</string>
     <string name="swap_history">Lịch sử hoán đổi</string>
     <string name="swap_started">Hoán đổi đã bắt đầu</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">Chạm vào một địa chỉ bên dưới để hoán đổi từ đó</string>
     <string name="tap_an_address_below_to_use">Chạm vào một địa chỉ bên dưới để sử dụng nó</string>
     <string name="tap_to_reveal_seed_phrase">Nhấn để hiện seed phrase</string>
-    <string name="this_action_cannot_be_undone_double">Hành động này không thể hoàn tác. Kiểm tra lại địa chỉ ở trên trước khi xác nhận.</string>
     <string name="this_could_take_a_few_minutes">Quá trình này có thể mất vài phút trong khi xác nhận trên chuỗi.</string>
     <string name="this_only_removes_it_from_kachat">Điều này chỉ xóa nó khỏi danh sách theo dõi của KaChat. Nó không ảnh hưởng đến thiết bị KasSigner hoặc bất kỳ khoản tiền nào nó nắm giữ.</string>
     <string name="this_permanently_deletes_every_message_with">Điều này xóa vĩnh viễn mọi tin nhắn với họ trên thiết bị này. Không thể hoàn tác; nhắn tin lại cho họ sẽ bắt đầu một cuộc trò chuyện hoàn toàn mới.</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">Tổng đầu tư</string>
     <string name="total_p_l">Tổng lãi/lỗ</string>
     <string name="transaction_history">Lịch sử giao dịch</string>
-    <string name="transaction_id">ID giao dịch</string>
     <string name="transaction_links_in_message_menus_and">Liên kết giao dịch trong menu tin nhắn và các trang lịch sử giao dịch mở trong trình khám phá này.</string>
     <string name="transactions">Giao dịch</string>
-    <string name="transfer_domain">Chuyển tên miền</string>
     <string name="try_again">Thử lại</string>
     <string name="unhide">Bỏ ẩn</string>
     <string name="unlink">Hủy liên kết</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">Xem trên ChangeNOW</string>
     <string name="waiting_for_camera">Đang chờ máy ảnh...</string>
     <string name="waiting_on_opponent">Dang cho doi thu</string>
-    <string name="walk_through_setting_up_your_domain">Hướng dẫn bạn từng bước thiết lập tên miền, ảnh bìa, hình đại diện và chi tiết của bạn.</string>
     <string name="when_you_message_someone_new_on">Khi bạn nhắn tin cho ai đó mới trên KaChat, họ sẽ không nhận được thông báo và tin nhắn của bạn sẽ bị ẩn cho đến khi họ trả lời bạn hoặc cũng thêm bạn. Điều này bảo vệ chống spam và tăng quyền riêng tư của bạn. Nếu bạn muốn họ được thông báo, hãy chạm vào biểu tượng bàn tay để gửi yêu cầu liên lạc, việc này sẽ tốn 0,2 KAS. (Lưu ý: tất cả các ứng dụng nhắn tin không phải KaChat sẽ yêu cầu một yêu cầu liên lạc)</string>
     <string name="wipe_account">Xóa tài khoản</string>
     <string name="wipe_everything">Xóa tất cả</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">Xóa tài khoản &amp; tin nhắn</string>
     <string name="wipe_account_messages_cloud">Xóa tài khoản và tin nhắn và đám mây</string>
     <string name="wipe_and_re_sync_incoming_messages">Xóa và đồng bộ lại tin nhắn đến</string>
-    <string name="withdraw">Rút tiền</string>
-    <string name="withdraw_from_this_address">Rút tiền từ địa chỉ này</string>
-    <string name="withdraw_kaspa">Rút Kaspa</string>
-    <string name="withdrawal_sent">Đã gửi lệnh rút tiền</string>
     <string name="you_will_be_shown_a_seed">Bạn sẽ được hiển thị một cụm từ khôi phục. Đây là cách duy nhất để khôi phục tài khoản của bạn. Đảm bảo bạn chỉ ghi nó ra giấy. Không bao giờ chụp ảnh màn hình hoặc lưu trữ nó trên thiết bị của bạn.</string>
     <string name="channel_name">ten-kenh</string>
     <string name="host_port_or_grpcs_host">host:port hoặc grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">Tạo thêm địa chỉ</string>
     <string name="generate_new_spending_address">Tạo địa chỉ chi tiêu mới</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">Đi đến trình khám phá</string>
     <string name="hide_user">Ẩn người dùng</string>
     <string name="ip_address_book">Sổ địa chỉ IP</string>
     <string name="import_csv">Nhập CSV</string>
@@ -415,8 +393,6 @@
     <string name="profile">Hồ sơ</string>
     <string name="protocol">Giao thức</string>
     <string name="push_notifications">Thông báo đẩy</string>
-    <string name="push_register">Đăng ký push</string>
-    <string name="push_registration">Đăng ký push</string>
     <string name="rest_api_for_transaction_history_and">REST API cho lịch sử giao dịch và tra cứu số dư</string>
     <string name="reconnect">Kết nối lại</string>
     <string name="redirect">Chuyển hướng</string>
@@ -428,7 +404,6 @@
     <string name="security">Bảo mật</string>
     <string name="select_mainnet_for_real_transactions_or">Chọn mainnet cho giao dịch thật hoặc testnet để thử nghiệm</string>
     <string name="send_audio_message">Gửi tin nhắn thoại</string>
-    <string name="send_from_this_address">Gửi từ địa chỉ này</string>
     <string name="send_handshake">Gửi yêu cầu liên lạc</string>
     <string name="send_photo_2">Gửi ảnh</string>
     <string name="sending_2">Đang gửi...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">Tổng</string>
     <string name="unfinished_inscription">Bản khắc chưa hoàn thành</string>
-    <string name="used_only_for_push_registration_and">Chỉ dùng để đăng ký push và cập nhật</string>
     <string name="uses_your_device_contacts_to_match">Sử dụng danh bạ thiết bị để đối chiếu và bổ sung liên hệ Kaspa.</string>
     <string name="verified">Đã xác minh</string>
     <string name="verifying_new_ownership_on_chain_this">Đang xác minh quyền sở hữu mới trên chuỗi (có thể mất một phút)...</string>

@@ -83,7 +83,6 @@ class GroupScanningService @Inject constructor(
 
     private fun startInternal() {
         if (isRunning) return
-        Log.d("GroupScanningService", "startInternal() — subscribing")
         scanJob = scope.launch {
             while (true) {
                 try {
@@ -98,7 +97,6 @@ class GroupScanningService @Inject constructor(
     }
 
     private fun stopInternal() {
-        Log.d("GroupScanningService", "stopInternal() — unsubscribing")
         scanJob?.cancel()
         scanJob = null
         scope.launch {

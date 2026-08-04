@@ -44,7 +44,6 @@
     <string name="amount_kas">Amount (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Anyone who joins the same channel name can see and post messages there. There\'s no owner or invite.</string>
     <string name="anyone_with_your_seed_phrase_can">Anyone with your seed phrase can access your account. Never share it with anyone. Make sure you only write this down. Never take a screenshot or store it on your device.</string>
-    <string name="available">Available</string>
     <string name="back">Back</string>
     <string name="balance">Balance</string>
     <string name="before_you_swap">Before You Swap</string>
@@ -80,13 +79,11 @@
     <string name="choose_coin">Choose Coin</string>
     <string name="choose_photo">Choose Photo</string>
     <string name="choose_which_tabs_appear_in_your">Choose which tabs appear in your bottom menu.</string>
-    <string name="clear">Clear</string>
     <string name="clear_search">Clear search</string>
     <string name="close">Close</string>
     <string name="cold_storage">Cold Storage</string>
     <string name="confirm">Confirm</string>
     <string name="confirm_selection">Confirm Selection</string>
-    <string name="confirm_transfer">Confirm Transfer</string>
     <string name="connect_to_a_node">Connect to a Node</string>
     <string name="consolidating_this_address">Consolidating This Address</string>
     <string name="compound_single_round_note">Merges all of this address\'s UTXOs into a single one, so future sends need fewer inputs.</string>
@@ -96,14 +93,12 @@
     <string name="connection_status">Connection Status</string>
     <string name="contact_name">Contact Name</string>
     <string name="contact_has_requested_permission_to_communicate">Contact has requested permission to communicate</string>
-    <string name="contact_list_phase_5">Contact list (Phase 5)</string>
     <string name="contact_name_2">Contact name</string>
     <string name="contacts">Contacts</string>
     <string name="controls_how_much_photos_are_compressed">Controls how much photos are compressed before sending. Higher quality looks clearer but costs a larger fee and takes longer to send; lower quality sends faster and cheaper but looks more compressed. This only affects photos you send, not ones you receive.</string>
     <string name="copy">Copy</string>
     <string name="copy_address">Copy Address</string>
     <string name="copy_private_key_hex">Copy Private Key Hex</string>
-    <string name="copy_seed_phrase">Copy Seed Phrase</string>
     <string name="copy_kpub">Copy kpub</string>
     <string name="couldn_t_rename_group">Couldn\'t Rename Group</string>
     <string name="couldn_t_read_this_swap_s">Couldn\'t read this swap\'s amounts</string>
@@ -132,7 +127,6 @@
     <string name="edit_account">Edit account</string>
     <string name="enter_a_kaspa_address_kaspa_or">Enter a Kaspa address (kaspa:...) or KNS domain name (e.g., alice.kas)</string>
     <string name="enter_kpub">Enter kpub</string>
-    <string name="enter_your_12_or_24_word">Enter your 12 or 24 word seed phrase</string>
     <string name="error">Error</string>
     <string name="export">Export</string>
     <string name="every_member_will_see_the_new">Every member will see the new name.</string>
@@ -197,8 +191,6 @@
     <string name="make_active_address">Make Active Address</string>
     <string name="manage_addresses">Manage Addresses</string>
     <string name="manage_address">Manage Address</string>
-    <string name="mark_as_read">Mark as Read</string>
-    <string name="mark_as_unread">Mark as Unread</string>
     <string name="max">Max</string>
     <string name="members">Members</string>
     <string name="menu">Menu</string>
@@ -255,8 +247,6 @@
     <string name="photo_message_full_screen">Photo message, full screen</string>
     <string name="photo_quality_2">Photo quality</string>
     <string name="photos">Photos</string>
-    <string name="pick_which_domain_you_want_to">Pick which domain you want to represent this contact. It\'s also used as their name if you haven\'t set a nickname.</string>
-    <string name="please_enter_exactly_12_or_24">Please enter exactly 12 or 24 words</string>
     <string name="polygon_network">Polygon network</string>
     <string name="pool_health">Pool Health</string>
     <string name="popular">Popular</string>
@@ -285,7 +275,6 @@
     <string name="rename_group">Rename Group</string>
     <string name="rename_utxo">Rename UTXO</string>
     <string name="reserved_domain_no_registration_fee_only">Reserved domain: no registration fee, only network fees apply.</string>
-    <string name="reset_to_defaults">Reset to Defaults</string>
     <string name="resign">Resign</string>
     <string name="resign_this_game">Resign this game?</string>
     <string name="resolving_kns_domain">Resolving KNS domain…</string>
@@ -320,7 +309,6 @@
     <string name="send_from_cold_storage">Send from Cold Storage</string>
     <string name="send_photo">Send photo</string>
     <string name="sending">Sending</string>
-    <string name="sends_kas_out_of_your_identity">Sends KAS out of your identity address, the one you fund for chatting.</string>
     <string name="sends_every_other_spending_address_s">Sends every other spending address\'s balance to your currently starred one. Each address with a balance is its own real transaction, so this may take a few moments.</string>
     <string name="sent">Sent</string>
     <string name="settings">Settings</string>
@@ -336,7 +324,6 @@
     <string name="start_a_new_chat_by_adding">Start a new chat by adding a contact</string>
     <string name="status">Status</string>
     <string name="still_indexing_it_ll_show_up">Still indexing. It\'ll show up above shortly.</string>
-    <string name="still_indexing_ownership_will_update_shortly">Still indexing. Ownership will update shortly.</string>
     <string name="swap">Swap</string>
     <string name="swap_history">Swap History</string>
     <string name="swap_started">Swap started</string>
@@ -344,7 +331,6 @@
     <string name="tap_an_address_below_to_swap">Tap an address below to swap from it</string>
     <string name="tap_an_address_below_to_use">Tap an address below to use it</string>
     <string name="tap_to_reveal_seed_phrase">Tap to reveal seed phrase</string>
-    <string name="this_action_cannot_be_undone_double">This action cannot be undone. Double-check the address above before confirming.</string>
     <string name="this_could_take_a_few_minutes">This could take a few minutes while it confirms on-chain.</string>
     <string name="this_only_removes_it_from_kachat">This only removes it from KaChat\'s watch list. It has no effect on the KasSigner device or any funds it holds.</string>
     <string name="this_permanently_deletes_every_message_with">This permanently deletes every message with them on this device. This cannot be undone; messaging them again starts a brand new conversation.</string>
@@ -358,10 +344,8 @@
     <string name="total_invested">Total Invested</string>
     <string name="total_p_l">Total P&amp;L</string>
     <string name="transaction_history">Transaction History</string>
-    <string name="transaction_id">Transaction ID</string>
     <string name="transaction_links_in_message_menus_and">Transaction links in message menus and transaction history pages open in this explorer.</string>
     <string name="transactions">Transactions</string>
-    <string name="transfer_domain">Transfer domain</string>
     <string name="try_again">Try Again</string>
     <string name="unhide">Unhide</string>
     <string name="unlink">Unlink</string>
@@ -375,7 +359,6 @@
     <string name="view_on_changenow">View on ChangeNOW</string>
     <string name="waiting_for_camera">Waiting for camera...</string>
     <string name="waiting_on_opponent">Waiting on opponent</string>
-    <string name="walk_through_setting_up_your_domain">Walk through setting up your domain, banner, avatar, and details step by step.</string>
     <string name="when_you_message_someone_new_on">This message will not be seen by the recipient until they also try to chat with you, or you can send a handshake to ping them. Handshakes send 0.2 KAS, which is returned if they accept your request.</string>
     <string name="wipe_account">Wipe Account</string>
     <string name="wipe_everything">Wipe Everything</string>
@@ -383,10 +366,6 @@
     <string name="wipe_account_messages">Wipe account &amp; messages</string>
     <string name="wipe_account_messages_cloud">Wipe account &amp; messages &amp; Cloud</string>
     <string name="wipe_and_re_sync_incoming_messages">Wipe and re-sync incoming messages</string>
-    <string name="withdraw">Withdraw</string>
-    <string name="withdraw_from_this_address">Withdraw From This Address</string>
-    <string name="withdraw_kaspa">Withdraw Kaspa</string>
-    <string name="withdrawal_sent">Withdrawal sent</string>
     <string name="you_will_be_shown_a_seed">You will be shown a seed phrase. This is the only way to recover your account. Make sure you only write this down. Never take a screenshot or store it on your device.</string>
     <string name="channel_name">channel-name</string>
     <string name="host_port_or_grpcs_host">host:port or grpcs://host</string>
@@ -436,7 +415,6 @@
     <string name="generate_more_addresses">Generate More Addresses</string>
     <string name="generate_new_spending_address">Generate New Spending Address</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">Go to Explorer</string>
     <string name="hide_user">Hide User</string>
     <string name="ip_address_book">IP Address Book</string>
     <string name="import_csv">Import CSV</string>
@@ -462,8 +440,6 @@
     <string name="profile">Profile</string>
     <string name="protocol">Protocol</string>
     <string name="push_notifications">Push Notifications</string>
-    <string name="push_register">Push Register</string>
-    <string name="push_registration">Push Registration</string>
     <string name="rest_api_for_transaction_history_and">REST API for transaction history and balance lookups</string>
     <string name="reconnect">Reconnect</string>
     <string name="redirect">Redirect</string>
@@ -475,7 +451,6 @@
     <string name="security">Security</string>
     <string name="select_mainnet_for_real_transactions_or">Select mainnet for real transactions or testnet for testing</string>
     <string name="send_audio_message">Send Audio Message</string>
-    <string name="send_from_this_address">Send From This Address</string>
     <string name="send_handshake">Send Handshake</string>
     <string name="send_photo_2">Send Photo</string>
     <string name="sending_2">Sending...</string>
@@ -495,7 +470,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">Total</string>
     <string name="unfinished_inscription">Unfinished Inscription</string>
-    <string name="used_only_for_push_registration_and">Used only for push registration and updates</string>
     <string name="uses_your_device_contacts_to_match">Uses your device contacts to match and enrich Kaspa contacts.</string>
     <string name="verified">Verified</string>
     <string name="verifying_new_ownership_on_chain_this">Verifying new ownership on-chain (this can take a minute)...</string>

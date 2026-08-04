@@ -127,7 +127,6 @@ class BroadcastScanningService @Inject constructor(
 
     @Synchronized
     private fun onAlwaysListenChannelsChanged(names: Set<String>) {
-        Log.d("BroadcastScanningService", "always-listen channels changed: $names")
         alwaysListenChannelNames = names
         val wanted = names.isNotEmpty()
         if (wanted != alwaysListenWasWanted) {
@@ -144,14 +143,12 @@ class BroadcastScanningService @Inject constructor(
      * stops once nothing else — including any always-listen channel — still wants it.
      */
     fun startLiveViewing(channelName: String): AutoCloseable {
-        Log.d("BroadcastScanningService", "startLiveViewing($channelName)")
         acquire()
         addLiveViewedChannel(channelName)
         var released = false
         return AutoCloseable {
             if (!released) {
                 released = true
-                Log.d("BroadcastScanningService", "stopLiveViewing($channelName)")
                 removeLiveViewedChannel(channelName)
                 release()
             }
@@ -161,13 +158,11 @@ class BroadcastScanningService @Inject constructor(
     @Synchronized
     private fun addLiveViewedChannel(channelName: String) {
         liveViewedChannelNames = liveViewedChannelNames + channelName
-        Log.d("BroadcastScanningService", "liveViewedChannelNames now: $liveViewedChannelNames")
     }
 
     @Synchronized
     private fun removeLiveViewedChannel(channelName: String) {
         liveViewedChannelNames = liveViewedChannelNames - channelName
-        Log.d("BroadcastScanningService", "liveViewedChannelNames now: $liveViewedChannelNames")
     }
 
     @Synchronized
@@ -178,20 +173,17 @@ class BroadcastScanningService @Inject constructor(
     @Synchronized
     private fun acquire() {
         wantCount++
-        Log.d("BroadcastScanningService", "acquire() wantCount=$wantCount")
         if (wantCount == 1) startInternal()
     }
 
     @Synchronized
     private fun release() {
         wantCount = (wantCount - 1).coerceAtLeast(0)
-        Log.d("BroadcastScanningService", "release() wantCount=$wantCount")
         if (wantCount == 0) stopInternal()
     }
 
     private fun startInternal() {
         if (isRunning) return
-        Log.d("BroadcastScanningService", "startInternal() — subscribing")
         scanJob = scope.launch {
             while (true) {
                 try {
@@ -211,7 +203,6 @@ class BroadcastScanningService @Inject constructor(
 
     /** Must genuinely halt network/battery usage, not just stop writing to the DB — sends NOTIFY_STOP before cancelling the collector. */
     private fun stopInternal() {
-        Log.d("BroadcastScanningService", "stopInternal() — unsubscribing")
         scanJob?.cancel()
         scanJob = null
         scope.launch {
@@ -233,7 +224,6 @@ class BroadcastScanningService @Inject constructor(
             if (!MessageProtocol.isKaChatPayload(payloadBytes)) continue
             val parsed = MessageProtocol.parseBcastPayload(payloadBytes) ?: continue
             if (!isChannelWanted(parsed.channel)) continue
-            Log.d("BroadcastScanningService", "caching message for wanted channel '${parsed.channel}' (alwaysListen=$alwaysListenChannelNames, liveViewed=$liveViewedChannelNames)")
 
             // A broadcast is a self-stash transaction — its own output's scriptPublicKey
             // directly encodes the sender's address, no separate lookup needed.

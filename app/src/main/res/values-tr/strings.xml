@@ -26,7 +26,6 @@
     <string name="amount_kas">Tutar (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">Ayni kanal adina katilan herkes orada mesajlari gorebilir ve gonderebilir. Sahibi veya davetiyesi yoktur.</string>
     <string name="anyone_with_your_seed_phrase_can">Kurtarma ifadenize sahip olan herkes hesabiniza erisebilir. Asla kimseyle paylasmayin. Yalnizca yazili olarak not aldiginizdan emin olun. Asla ekran goruntusu almayin veya cihazinizda saklamayin.</string>
-    <string name="available">Musait</string>
     <string name="back">Geri</string>
     <string name="before_you_swap">Takas Yapmadan Once</string>
     <string name="broadcast_settings">Yayin Ayarlari</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">Coin Sec</string>
     <string name="choose_photo">Fotograf Sec</string>
     <string name="choose_which_tabs_appear_in_your">Alt menunuzde hangi sekmelerin gorunecegini secin.</string>
-    <string name="clear">Temizle</string>
     <string name="clear_search">Aramayi temizle</string>
     <string name="close">Kapat</string>
     <string name="cold_storage">Soguk Depolama</string>
     <string name="confirm">Onayla</string>
-    <string name="confirm_transfer">Transferi onayla</string>
     <string name="connect_to_a_node">Bir Duguma Baglan</string>
     <string name="connected_only_to_this_node">Yalnizca bu duguma bagli</string>
     <string name="connection_settings">Bağlantı Ayarları</string>
     <string name="connection_status">Bağlantı Durumu</string>
     <string name="contact_name">Kisi Adi</string>
     <string name="contact_has_requested_permission_to_communicate">Kişi iletişim izni istedi</string>
-    <string name="contact_list_phase_5">Kisi listesi (Asama 5)</string>
     <string name="contact_name_2">Kisi adi</string>
     <string name="contacts">Kişiler</string>
     <string name="controls_how_much_photos_are_compressed">Fotograflarin gonderilmeden once ne kadar sikistirilacagini kontrol eder. Daha yuksek kalite daha net gorunur ancak daha yuksek ucret gerektirir ve gonderimi uzun surer; daha dusuk kalite daha hizli ve ucuz gonderilir ama daha sikistirilmis gorunur. Bu yalnizca gonderdiginiz fotograflari etkiler, aldiklarinizi degil.</string>
     <string name="copy">Kopyala</string>
     <string name="copy_address">Adresi Kopyala</string>
     <string name="copy_private_key_hex">Özel Anahtar Hex Kopyala</string>
-    <string name="copy_seed_phrase">Seed Phrase Kopyala</string>
     <string name="copy_kpub">kpub Kopyala</string>
     <string name="couldn_t_rename_group">Grup Yeniden Adlandirilamadi</string>
     <string name="couldn_t_read_this_swap_s">Bu takasin tutarlari okunamadi</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">Hesabi duzenle</string>
     <string name="enter_a_kaspa_address_kaspa_or">Bir Kaspa adresi (kaspa:...) veya KNS alan adı girin (ör. alice.kas)</string>
     <string name="enter_kpub">kpub Gir</string>
-    <string name="enter_your_12_or_24_word">12 veya 24 kelimelik kurtarma ifadenizi girin</string>
     <string name="error">Hata</string>
     <string name="every_member_will_see_the_new">Her uye yeni ismi gorecek.</string>
     <string name="exchange_id_copied">Takas Kimligi kopyalandi</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">Daha uzun saklama, cihazinizda daha fazla mesajin onbellekte kalmasi anlamina gelir, bu da ozellikle hareketli odalarda uygulamayi zamanla yavaslatabilir.</string>
     <string name="make_active_address">Aktif Adres Yap</string>
     <string name="manage_addresses">Adresleri Yonet</string>
-    <string name="mark_as_read">Okundu Olarak Isaretle</string>
-    <string name="mark_as_unread">Okunmadi Olarak Isaretle</string>
     <string name="max">Maks</string>
     <string name="members">Uyeler</string>
     <string name="menu">Menu</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">Fotograf mesaji, tam ekran</string>
     <string name="photo_quality_2">Fotoğraf kalitesi</string>
     <string name="photos">Fotograflar</string>
-    <string name="pick_which_domain_you_want_to">Bu kisiyi hangi alan adinin temsil edecegini secin. Bir takma ad belirlemediyseniz isim olarak da kullanilir.</string>
-    <string name="please_enter_exactly_12_or_24">Lütfen tam olarak 12 veya 24 kelime girin</string>
     <string name="polygon_network">Polygon agi</string>
     <string name="pool_health">Havuz Sağlığı</string>
     <string name="popular">Populer</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">Soguk Depolama Hesabini Yeniden Adlandir</string>
     <string name="rename_group">Grubu Yeniden Adlandir</string>
     <string name="reserved_domain_no_registration_fee_only">Ayrilmis alan adi: kayit ucreti yok, yalnizca ag ucretleri gecerlidir.</string>
-    <string name="reset_to_defaults">Varsayılanlara Sıfırla</string>
     <string name="resign">Pes Et</string>
     <string name="resign_this_game">Bu oyundan cekilinsin mi?</string>
     <string name="resolving_kns_domain">KNS alan adi cozumleniyor…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">Soguk Depolamadan Gonder</string>
     <string name="send_photo">Fotograf gonder</string>
     <string name="sending">Gonderiliyor</string>
-    <string name="sends_kas_out_of_your_identity">Sohbet icin fonladiginiz kimlik adresinizden KAS gonderir.</string>
     <string name="sends_every_other_spending_address_s">Diger tum harcama adreslerinin bakiyesini su anki favori adresinize gonderir. Bakiyesi olan her adres kendi gercek islemidir, bu yuzden biraz zaman alabilir.</string>
     <string name="sent">Gönderilmiş</string>
     <string name="settings">Ayarlar</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">Bir kişi ekleyerek yeni bir sohbet başlat</string>
     <string name="status">Durum</string>
     <string name="still_indexing_it_ll_show_up">Hala dizinleniyor. Kisa surede yukarida gorunecek.</string>
-    <string name="still_indexing_ownership_will_update_shortly">Hala dizinleniyor. Sahiplik kisa surede guncellenecek.</string>
     <string name="swap">Takas</string>
     <string name="swap_history">Takas Gecmisi</string>
     <string name="swap_started">Takas basladi</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">Bir adresten takas yapmak icin asagida bir adrese dokunun</string>
     <string name="tap_an_address_below_to_use">Kullanmak icin asagida bir adrese dokunun</string>
     <string name="tap_to_reveal_seed_phrase">Seed phrase\'i görmek için dokun</string>
-    <string name="this_action_cannot_be_undone_double">Bu islem geri alinamaz. Onaylamadan once yukaridaki adresi tekrar kontrol edin.</string>
     <string name="this_could_take_a_few_minutes">Zincir uzerinde onaylanirken birkac dakika surebilir.</string>
     <string name="this_only_removes_it_from_kachat">Bu, yalnizca KaChat\'in izleme listesinden kaldirir. KasSigner cihazi veya tuttugu fonlar uzerinde hicbir etkisi yoktur.</string>
     <string name="this_permanently_deletes_every_message_with">Bu, bu cihazda onlarla olan her mesaji kalici olarak siler. Bu geri alinamaz; onlara tekrar mesaj yazmak tamamen yeni bir konusma baslatir.</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">Toplam Yatirim</string>
     <string name="total_p_l">Toplam K/Z</string>
     <string name="transaction_history">Islem Gecmisi</string>
-    <string name="transaction_id">Islem Kimligi</string>
     <string name="transaction_links_in_message_menus_and">Mesaj menulerindeki ve islem gecmisi sayfalarindaki islem baglantilari bu kesif motorunda acilir.</string>
     <string name="transactions">Islemler</string>
-    <string name="transfer_domain">Alan adini transfer et</string>
     <string name="try_again">Tekrar Dene</string>
     <string name="unhide">Gizlemeyi Kaldir</string>
     <string name="unlink">Bağlantıyı Kaldır</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">ChangeNOW\'da goruntule</string>
     <string name="waiting_for_camera">Kamera bekleniyor...</string>
     <string name="waiting_on_opponent">Rakip bekleniyor</string>
-    <string name="walk_through_setting_up_your_domain">Alan adinizi, banner\'inizi, avatarinizi ve detaylarinizi adim adim kurmanizda yol gosterir.</string>
     <string name="when_you_message_someone_new_on">KaChat\'te yeni biriyle mesajlastiginizda, o kisi bildirim almaz ve mesajiniz o size yanit verene veya o da sizi eklemedigi surece gizli kalir. Bu, spam\'e karsi korur ve gizliliginizi artirir. Bildirim almasini istiyorsaniz, 0,2 KAS\'a mal olacak bir iletisim istegi gondermek icin el simgesine dokunun. (Not: KaChat disindaki tum mesajlasma uygulamalari iletisim istegi gerektirecektir)</string>
     <string name="wipe_account">Hesabi Sil</string>
     <string name="wipe_everything">Her Seyi Sil</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">Hesabı ve mesajları sil</string>
     <string name="wipe_account_messages_cloud">Hesabi ve mesajlari ve Bulutu sil</string>
     <string name="wipe_and_re_sync_incoming_messages">Gelen mesajları sil ve yeniden senkronize et</string>
-    <string name="withdraw">Cek</string>
-    <string name="withdraw_from_this_address">Bu Adresten Cek</string>
-    <string name="withdraw_kaspa">Kaspa Cek</string>
-    <string name="withdrawal_sent">Cekim gonderildi</string>
     <string name="you_will_be_shown_a_seed">Size bir kurtarma ifadesi gosterilecek. Hesabinizi kurtarmanin tek yolu budur. Yalnizca yazili olarak not aldiginizdan emin olun. Asla ekran goruntusu almayin veya cihazinizda saklamayin.</string>
     <string name="channel_name">kanal-adi</string>
     <string name="host_port_or_grpcs_host">host:port veya grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">Daha Fazla Adres Olustur</string>
     <string name="generate_new_spending_address">Yeni Harcama Adresi Olustur</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">Kesif Motoruna Git</string>
     <string name="hide_user">Kullaniciyi Gizle</string>
     <string name="ip_address_book">IP Adres Defteri</string>
     <string name="import_csv">CSV Ice Aktar</string>
@@ -415,8 +393,6 @@
     <string name="profile">Profil</string>
     <string name="protocol">Protokol</string>
     <string name="push_notifications">Anlık bildirimler</string>
-    <string name="push_register">Push Kaydi</string>
-    <string name="push_registration">Push Kaydı</string>
     <string name="rest_api_for_transaction_history_and">İşlem geçmişi ve bakiye sorgulaması için REST API</string>
     <string name="reconnect">Yeniden Bağlan</string>
     <string name="redirect">Yonlendir</string>
@@ -428,7 +404,6 @@
     <string name="security">Guvenlik</string>
     <string name="select_mainnet_for_real_transactions_or">Gerçek işlemler için mainnet veya test için testnet seçin</string>
     <string name="send_audio_message">Sesli Mesaj Gonder</string>
-    <string name="send_from_this_address">Bu Adresten Gonder</string>
     <string name="send_handshake">Iletisim Istegi Gonder</string>
     <string name="send_photo_2">Fotograf Gonder</string>
     <string name="sending_2">Gonderiliyor...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">Toplam</string>
     <string name="unfinished_inscription">Tamamlanmamis Yazit</string>
-    <string name="used_only_for_push_registration_and">Yalnızca push kaydı ve güncellemeler için kullanılır</string>
     <string name="uses_your_device_contacts_to_match">Kaspa kişilerini eşleştirmek ve zenginleştirmek için cihaz kişilerinizi kullanır.</string>
     <string name="verified">Doğrulanmış</string>
     <string name="verifying_new_ownership_on_chain_this">Yeni sahiplik zincir uzerinde dogrulaniyor (bir dakika surebilir)...</string>

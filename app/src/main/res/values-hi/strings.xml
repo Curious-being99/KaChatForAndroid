@@ -26,7 +26,6 @@
     <string name="amount_kas">राशि (KAS)</string>
     <string name="anyone_who_joins_the_same_channel">जो कोई भी उसी चैनल नाम से जुड़ता है वह वहां संदेश देख और पोस्ट कर सकता है। कोई मालिक या आमंत्रण नहीं है।</string>
     <string name="anyone_with_your_seed_phrase_can">जिसके पास भी आपकी सीड फ्रेज़ है वह आपके खाते तक पहुंच सकता है। इसे कभी किसी के साथ साझा न करें। सुनिश्चित करें कि आप इसे केवल लिख लें। कभी स्क्रीनशॉट न लें और इसे अपने डिवाइस पर संग्रहीत न करें।</string>
-    <string name="available">उपलब्ध</string>
     <string name="back">वापस</string>
     <string name="before_you_swap">स्वैप करने से पहले</string>
     <string name="broadcast_settings">ब्रॉडकास्ट सेटिंग्स</string>
@@ -57,26 +56,22 @@
     <string name="choose_coin">सिक्का चुनें</string>
     <string name="choose_photo">फ़ोटो चुनें</string>
     <string name="choose_which_tabs_appear_in_your">चुनें कि आपके निचले मेनू में कौन से टैब दिखाई देते हैं।</string>
-    <string name="clear">साफ़ करें</string>
     <string name="clear_search">खोज साफ़ करें</string>
     <string name="close">बंद करें</string>
     <string name="cold_storage">कोल्ड स्टोरेज</string>
     <string name="confirm">पुष्टि करें</string>
-    <string name="confirm_transfer">स्थानांतरण की पुष्टि करें</string>
     <string name="connect_to_a_node">एक नोड से कनेक्ट करें</string>
     <string name="connected_only_to_this_node">केवल इस नोड से जुड़ा हुआ</string>
     <string name="connection_settings">कनेक्शन सेटिंग्स</string>
     <string name="connection_status">कनेक्शन स्थिति</string>
     <string name="contact_name">संपर्क नाम</string>
     <string name="contact_has_requested_permission_to_communicate">संपर्क ने संवाद करने की अनुमति मांगी है</string>
-    <string name="contact_list_phase_5">संपर्क सूची (चरण 5)</string>
     <string name="contact_name_2">संपर्क नाम</string>
     <string name="contacts">संपर्क</string>
     <string name="controls_how_much_photos_are_compressed">भेजने से पहले फ़ोटो कितनी संपीड़ित होती हैं इसे नियंत्रित करता है। उच्च गुणवत्ता अधिक स्पष्ट दिखती है लेकिन अधिक शुल्क लगती है और भेजने में अधिक समय लगता है; कम गुणवत्ता तेज़ और सस्ती भेजी जाती है लेकिन अधिक संपीड़ित दिखती है। यह केवल उन फ़ोटो को प्रभावित करता है जो आप भेजते हैं, जो आप प्राप्त करते हैं उन्हें नहीं।</string>
     <string name="copy">कॉपी करें</string>
     <string name="copy_address">पता कॉपी करें</string>
     <string name="copy_private_key_hex">प्राइवेट की Hex कॉपी करें</string>
-    <string name="copy_seed_phrase">Seed Phrase कॉपी करें</string>
     <string name="copy_kpub">kpub कॉपी करें</string>
     <string name="couldn_t_rename_group">समूह का नाम नहीं बदला जा सका</string>
     <string name="couldn_t_read_this_swap_s">इस स्वैप की राशियां पढ़ी नहीं जा सकीं</string>
@@ -104,7 +99,6 @@
     <string name="edit_account">खाता संपादित करें</string>
     <string name="enter_a_kaspa_address_kaspa_or">Kaspa पता (kaspa:...) या KNS डोमेन नाम दर्ज करें (जैसे, alice.kas)</string>
     <string name="enter_kpub">kpub दर्ज करें</string>
-    <string name="enter_your_12_or_24_word">अपनी 12 या 24 शब्दों वाली सीड फ्रेज़ दर्ज करें</string>
     <string name="error">त्रुटि</string>
     <string name="every_member_will_see_the_new">हर सदस्य नया नाम देखेगा।</string>
     <string name="exchange_id_copied">एक्सचेंज आईडी कॉपी हुई</string>
@@ -166,8 +160,6 @@
     <string name="longer_retention_means_more_messages_stay">लंबी अवधि की रिटेंशन का मतलब है कि आपके डिवाइस पर अधिक संदेश कैश में रहते हैं, जो समय के साथ ऐप को धीमा कर सकता है, खासकर व्यस्त कमरों के लिए।</string>
     <string name="make_active_address">सक्रिय पता बनाएं</string>
     <string name="manage_addresses">पते प्रबंधित करें</string>
-    <string name="mark_as_read">पढ़ा हुआ चिह्नित करें</string>
-    <string name="mark_as_unread">अपठित चिह्नित करें</string>
     <string name="max">अधिकतम</string>
     <string name="members">सदस्य</string>
     <string name="menu">मेनू</string>
@@ -216,8 +208,6 @@
     <string name="photo_message_full_screen">फ़ोटो संदेश, पूर्ण स्क्रीन</string>
     <string name="photo_quality_2">फ़ोटो गुणवत्ता</string>
     <string name="photos">फ़ोटो</string>
-    <string name="pick_which_domain_you_want_to">चुनें कि कौन सा डोमेन इस संपर्क का प्रतिनिधित्व करेगा। यदि आपने कोई उपनाम सेट नहीं किया है तो इसे उनके नाम के रूप में भी उपयोग किया जाता है।</string>
-    <string name="please_enter_exactly_12_or_24">कृपया ठीक 12 या 24 शब्द दर्ज करें</string>
     <string name="polygon_network">Polygon नेटवर्क</string>
     <string name="pool_health">पूल स्वास्थ्य</string>
     <string name="popular">लोकप्रिय</string>
@@ -243,7 +233,6 @@
     <string name="rename_cold_storage_account">कोल्ड स्टोरेज खाते का नाम बदलें</string>
     <string name="rename_group">समूह का नाम बदलें</string>
     <string name="reserved_domain_no_registration_fee_only">आरक्षित डोमेन: कोई पंजीकरण शुल्क नहीं, केवल नेटवर्क शुल्क लागू होते हैं।</string>
-    <string name="reset_to_defaults">डिफ़ॉल्ट पर रीसेट करें</string>
     <string name="resign">हार मानें</string>
     <string name="resign_this_game">क्या इस खेल में हार माननी है?</string>
     <string name="resolving_kns_domain">KNS डोमेन हल किया जा रहा है…</string>
@@ -276,7 +265,6 @@
     <string name="send_from_cold_storage">कोल्ड स्टोरेज से भेजें</string>
     <string name="send_photo">फ़ोटो भेजें</string>
     <string name="sending">भेजा जा रहा है</string>
-    <string name="sends_kas_out_of_your_identity">आपके पहचान पते से KAS भेजता है, वह जिसे आप चैट के लिए फंड करते हैं।</string>
     <string name="sends_every_other_spending_address_s">अन्य सभी खर्च पतों का शेष आपके वर्तमान पसंदीदा पते पर भेजता है। शेष वाला हर पता अपना खुद का वास्तविक लेन-देन है, इसलिए इसमें कुछ समय लग सकता है।</string>
     <string name="sent">भेजा</string>
     <string name="settings">सेटिंग्स</string>
@@ -292,7 +280,6 @@
     <string name="start_a_new_chat_by_adding">नया चैट शुरू करने के लिए एक संपर्क जोड़ें</string>
     <string name="status">स्थिति</string>
     <string name="still_indexing_it_ll_show_up">अभी भी इंडेक्स हो रहा है। यह जल्द ही ऊपर दिखाई देगा।</string>
-    <string name="still_indexing_ownership_will_update_shortly">अभी भी इंडेक्स हो रहा है। स्वामित्व जल्द ही अपडेट होगा।</string>
     <string name="swap">स्वैप</string>
     <string name="swap_history">स्वैप इतिहास</string>
     <string name="swap_started">स्वैप शुरू हुआ</string>
@@ -300,7 +287,6 @@
     <string name="tap_an_address_below_to_swap">नीचे किसी पते से स्वैप करने के लिए उस पर टैप करें</string>
     <string name="tap_an_address_below_to_use">नीचे किसी पते का उपयोग करने के लिए उस पर टैप करें</string>
     <string name="tap_to_reveal_seed_phrase">Seed phrase प्रकट करने के लिए टैप करें</string>
-    <string name="this_action_cannot_be_undone_double">इस कार्रवाई को पूर्ववत नहीं किया जा सकता। पुष्टि करने से पहले ऊपर दिए गए पते को फिर से जांचें।</string>
     <string name="this_could_take_a_few_minutes">चेन पर कन्फर्म होने में कुछ मिनट लग सकते हैं।</string>
     <string name="this_only_removes_it_from_kachat">यह इसे केवल KaChat की वॉच सूची से हटाता है। इसका KasSigner डिवाइस या उसके पास मौजूद किसी भी फंड पर कोई प्रभाव नहीं पड़ता।</string>
     <string name="this_permanently_deletes_every_message_with">यह इस डिवाइस पर उनके साथ हर संदेश को स्थायी रूप से हटा देता है। इसे पूर्ववत नहीं किया जा सकता; उन्हें फिर से संदेश भेजना एक बिल्कुल नई बातचीत शुरू करता है।</string>
@@ -314,10 +300,8 @@
     <string name="total_invested">कुल निवेश</string>
     <string name="total_p_l">कुल लाभ/हानि</string>
     <string name="transaction_history">लेन-देन इतिहास</string>
-    <string name="transaction_id">लेन-देन आईडी</string>
     <string name="transaction_links_in_message_menus_and">संदेश मेनू और लेन-देन इतिहास पृष्ठों में लेन-देन लिंक इस एक्सप्लोरर में खुलते हैं।</string>
     <string name="transactions">लेन-देन</string>
-    <string name="transfer_domain">डोमेन स्थानांतरित करें</string>
     <string name="try_again">फिर कोशिश करें</string>
     <string name="unhide">अनहाइड करें</string>
     <string name="unlink">अनलिंक करें</string>
@@ -328,7 +312,6 @@
     <string name="view_on_changenow">ChangeNOW पर देखें</string>
     <string name="waiting_for_camera">कैमरे की प्रतीक्षा हो रही है...</string>
     <string name="waiting_on_opponent">प्रतिद्वंद्वी की प्रतीक्षा है</string>
-    <string name="walk_through_setting_up_your_domain">आपके डोमेन, बैनर, अवतार और विवरण को सेट करने में चरण-दर-चरण मार्गदर्शन करता है।</string>
     <string name="when_you_message_someone_new_on">जब आप KaChat पर किसी नए व्यक्ति को संदेश भेजते हैं, तो उसे कोई सूचना नहीं मिलेगी और आपका संदेश तब तक छिपा रहेगा जब तक वह आपको जवाब नहीं देता या आपको भी नहीं जोड़ता। यह स्पैम से बचाता है और आपकी गोपनीयता बढ़ाता है। अगर आप चाहते हैं कि उसे सूचित किया जाए, तो संचार अनुरोध भेजने के लिए हाथ के आइकन पर टैप करें, जिसकी कीमत 0.2 KAS होगी। (नोट: सभी गैर-KaChat मैसेजिंग ऐप्स को संचार अनुरोध की आवश्यकता होगी)</string>
     <string name="wipe_account">खाता मिटाएं</string>
     <string name="wipe_everything">सब कुछ मिटाएं</string>
@@ -336,10 +319,6 @@
     <string name="wipe_account_messages">खाता और संदेश मिटाएं</string>
     <string name="wipe_account_messages_cloud">खाता और संदेश और क्लाउड मिटाएं</string>
     <string name="wipe_and_re_sync_incoming_messages">आने वाले संदेश मिटाएं और पुनः सिंक करें</string>
-    <string name="withdraw">निकालें</string>
-    <string name="withdraw_from_this_address">इस पते से निकालें</string>
-    <string name="withdraw_kaspa">कास्पा निकालें</string>
-    <string name="withdrawal_sent">निकासी भेजी गई</string>
     <string name="you_will_be_shown_a_seed">आपको एक सीड फ्रेज़ दिखाई जाएगी। आपके खाते को पुनर्प्राप्त करने का यह एकमात्र तरीका है। सुनिश्चित करें कि आप इसे केवल लिख लें। कभी स्क्रीनशॉट न लें और इसे अपने डिवाइस पर संग्रहीत न करें।</string>
     <string name="channel_name">चैनल-नाम</string>
     <string name="host_port_or_grpcs_host">host:port या grpcs://host</string>
@@ -392,7 +371,6 @@
     <string name="generate_more_addresses">अधिक पते जनरेट करें</string>
     <string name="generate_new_spending_address">नया खर्च पता जनरेट करें</string>
     <string name="github">GitHub</string>
-    <string name="go_to_explorer">एक्सप्लोरर पर जाएं</string>
     <string name="hide_user">उपयोगकर्ता छिपाएं</string>
     <string name="ip_address_book">IP पता पुस्तिका</string>
     <string name="import_csv">CSV आयात करें</string>
@@ -415,8 +393,6 @@
     <string name="profile">प्रोफ़ाइल</string>
     <string name="protocol">प्रोटोकॉल</string>
     <string name="push_notifications">पुश सूचनाएं</string>
-    <string name="push_register">पुश पंजीकरण</string>
-    <string name="push_registration">पुश पंजीकरण</string>
     <string name="rest_api_for_transaction_history_and">ट्रांज़ैक्शन इतिहास और बैलेंस लुकअप के लिए REST API</string>
     <string name="reconnect">पुनः कनेक्ट करें</string>
     <string name="redirect">रीडायरेक्ट</string>
@@ -428,7 +404,6 @@
     <string name="security">सुरक्षा</string>
     <string name="select_mainnet_for_real_transactions_or">वास्तविक ट्रांज़ैक्शन के लिए mainnet या परीक्षण के लिए testnet चुनें</string>
     <string name="send_audio_message">वॉइस मैसेज भेजें</string>
-    <string name="send_from_this_address">इस पते से भेजें</string>
     <string name="send_handshake">संचार अनुरोध भेजें</string>
     <string name="send_photo_2">फ़ोटो भेजें</string>
     <string name="sending_2">भेजा जा रहा है...</string>
@@ -447,7 +422,6 @@
     <string name="telegram">Telegram</string>
     <string name="total">कुल</string>
     <string name="unfinished_inscription">अधूरा इंस्क्रिप्शन</string>
-    <string name="used_only_for_push_registration_and">केवल पुश पंजीकरण और अपडेट के लिए उपयोग किया जाता है</string>
     <string name="uses_your_device_contacts_to_match">Kaspa संपर्कों को मिलान और समृद्ध करने के लिए आपके डिवाइस संपर्कों का उपयोग करता है।</string>
     <string name="verified">सत्यापित</string>
     <string name="verifying_new_ownership_on_chain_this">चेन पर नया स्वामित्व सत्यापित हो रहा है (इसमें एक मिनट लग सकता है)...</string>
