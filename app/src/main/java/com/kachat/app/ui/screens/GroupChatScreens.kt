@@ -178,8 +178,12 @@ fun GroupChatThreadScreen(
     val groupReactions by chatViewModel.getGroupReactions(groupId).collectAsState(initial = emptyList())
     val groupReactionsByTxId = remember(groupReactions) { groupReactions.groupBy { it.targetTxId } }
     val groupReplyingTo by chatViewModel.groupReplyingTo.collectAsState()
-    val contactAvatarsByAddress by chatViewModel.contactAvatarsByAddress.collectAsState()
-    val contactAliasesByAddress by chatViewModel.contactAliasesByAddress.collectAsState()
+    // Merged contact+KNS maps: group members are usually not saved contacts, so their avatar/KNS
+    // name come from the address-keyed KNS cache, not just contact rows (see the VM's
+    // groupMemberAvatarsByAddress/groupMemberNamesByAddress). This is what makes group chats show
+    // avatars + KNS names instead of raw addresses.
+    val contactAvatarsByAddress by chatViewModel.groupMemberAvatarsByAddress.collectAsState()
+    val contactAliasesByAddress by chatViewModel.groupMemberNamesByAddress.collectAsState()
     val pendingPhotoUri by chatViewModel.groupPendingPhotoUri.collectAsState()
     val voiceRecordingState by chatViewModel.groupVoiceRecordingState.collectAsState()
     val showFeeEstimate by settingsViewModel.showFeeEstimate.collectAsState()
@@ -1306,8 +1310,10 @@ fun GroupChatInfoScreen(
 ) {
     val groups by chatViewModel.groups.collectAsState()
     val group = groups.firstOrNull { it.groupId == groupId }
-    val contactAvatarsByAddress by chatViewModel.contactAvatarsByAddress.collectAsState()
-    val contactAliasesByAddress by chatViewModel.contactAliasesByAddress.collectAsState()
+    // Merged contact+KNS maps so the roster shows avatars + KNS names for non-contact members too
+    // (see the group thread screen / VM's groupMemberAvatarsByAddress/groupMemberNamesByAddress).
+    val contactAvatarsByAddress by chatViewModel.groupMemberAvatarsByAddress.collectAsState()
+    val contactAliasesByAddress by chatViewModel.groupMemberNamesByAddress.collectAsState()
     val groupMentionsOnly by chatViewModel.groupMentionsOnly.collectAsState()
     val members = remember(group?.membersJson) {
         group?.let(::parseGroupMembers) ?: emptyList()

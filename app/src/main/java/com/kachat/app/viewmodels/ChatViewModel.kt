@@ -1169,6 +1169,42 @@ class ChatViewModel @Inject constructor(
     val groupMemberPrimaryKnsByAddress: StateFlow<Map<String, String?>> = _groupMemberPrimaryKnsByAddress.asStateFlow()
 
     /**
+     * address -> avatar URL for GROUP members. Group members are usually NOT saved contacts, so
+     * their avatar lives only in the address-keyed [knsProfiles] cache (fetched for every member by
+     * [refreshKnsProfilesForGroupMembers]), not in the contact-derived [contactAvatarsByAddress].
+     * Merge the two - contact-cached avatar wins, the KNS profile avatar fills in the rest - so
+     * group chats show avatars for every member like 1:1 does, instead of blank placeholders.
+     */
+    val groupMemberAvatarsByAddress: StateFlow<Map<String, String?>> =
+        combine(contactAvatarsByAddress, knsProfiles) { contacts, kns ->
+            val merged = contacts.toMutableMap()
+            for ((addr, state) in kns) {
+                val url = state.profile?.avatarUrl
+                if (!url.isNullOrBlank() && merged[addr].isNullOrBlank()) merged[addr] = url
+            }
+            merged
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /**
+     * address -> display name for GROUP members, resolved with the same priority as 1:1:
+     * manual/contact alias first, then the member's KNS primary name (explicit primary, else the
+     * active KNS domain resolved into [knsProfiles]). So a non-contact member shows their KNS name
+     * instead of a raw address. A blank result falls through to the roster displayName / shortened
+     * address at the call site.
+     */
+    val groupMemberNamesByAddress: StateFlow<Map<String, String>> =
+        combine(contactAliasesByAddress, groupMemberPrimaryKnsByAddress, knsProfiles) { aliases, primaryKns, kns ->
+            val merged = aliases.toMutableMap()
+            for (addr in (primaryKns.keys + kns.keys)) {
+                if (!merged[addr].isNullOrBlank()) continue
+                val name = primaryKns[addr]?.takeIf { it.isNotBlank() }
+                    ?: kns[addr]?.selectedDomain?.takeIf { it.isNotBlank() }
+                if (name != null) merged[addr] = name
+            }
+            merged
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /**
      * Fetches this address's owned KNS domains + the active one's profile (avatar/bio/socials).
      * Works for any address, not just a saved 1:1 contact — a broadcast sender viewed via "User
      * Info" may never have a [ContactEntity] row at all, and their KNS profile should still show.
