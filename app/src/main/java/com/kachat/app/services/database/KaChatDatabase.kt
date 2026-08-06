@@ -58,6 +58,24 @@ abstract class KaChatDatabase : RoomDatabase() {
 
     companion object {
         /**
+         * True if [table] already has a column named [column]. Used to make the additive
+         * `ALTER TABLE ... ADD COLUMN` migrations idempotent: some open-testing devices received a
+         * column before its schema version was bumped (Room recreated their DB via
+         * fallbackToDestructiveMigration with the column already present, but stamped at the old
+         * version), so replaying the migration would otherwise throw "duplicate column name" and
+         * crash — a failing *registered* migration is not caught by fallbackToDestructiveMigration.
+         */
+        private fun columnExists(db: SupportSQLiteDatabase, table: String, column: String): Boolean =
+            db.query("PRAGMA table_info(`$table`)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                if (nameIndex < 0) return false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == column) return true
+                }
+                false
+            }
+
+        /**
          * v15 -> v16: drops `contacts.isArchived` (replaced by full delete + [DeletedContactEntity]
          * tombstones) and adds the new `deleted_contacts` table. v15 is the schema the last public
          * release ("2.0 The Broadcast Update") actually shipped with — without this, anyone
@@ -146,7 +164,14 @@ abstract class KaChatDatabase : RoomDatabase() {
          */
         val MIGRATION_18_19 = object : Migration(18, 19) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `contacts` ADD COLUMN `photoAutoDisplayOverride` TEXT DEFAULT NULL")
+                // Idempotent: an earlier open-testing build shipped this column before the version
+                // was bumped, so some devices already have it at stored version 18. A plain
+                // ALTER ... ADD COLUMN would then throw "duplicate column name", and because this
+                // migration is registered (just failing), fallbackToDestructiveMigration can't
+                // rescue it — it crashes on first DB access. See columnExists below.
+                if (!columnExists(db, "contacts", "photoAutoDisplayOverride")) {
+                    db.execSQL("ALTER TABLE `contacts` ADD COLUMN `photoAutoDisplayOverride` TEXT DEFAULT NULL")
+                }
             }
         }
 
@@ -165,7 +190,12 @@ abstract class KaChatDatabase : RoomDatabase() {
          */
         val MIGRATION_19_20 = object : Migration(19, 20) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `deleted_contacts` ADD COLUMN `deletedAtTxIds` TEXT NOT NULL DEFAULT ''")
+                // Idempotent — see MIGRATION_18_19. This is the one confirmed crashing in the
+                // field: devices with a stored-version-19 DB that already has deletedAtTxIds hit
+                // "duplicate column name" here on update.
+                if (!columnExists(db, "deleted_contacts", "deletedAtTxIds")) {
+                    db.execSQL("ALTER TABLE `deleted_contacts` ADD COLUMN `deletedAtTxIds` TEXT NOT NULL DEFAULT ''")
+                }
             }
         }
 
@@ -177,7 +207,10 @@ abstract class KaChatDatabase : RoomDatabase() {
          */
         val MIGRATION_20_21 = object : Migration(20, 21) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `contacts` ADD COLUMN `notificationOverride` TEXT DEFAULT NULL")
+                // Idempotent — see MIGRATION_18_19.
+                if (!columnExists(db, "contacts", "notificationOverride")) {
+                    db.execSQL("ALTER TABLE `contacts` ADD COLUMN `notificationOverride` TEXT DEFAULT NULL")
+                }
             }
         }
 
