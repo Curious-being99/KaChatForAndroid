@@ -15,9 +15,26 @@ object ImagePrep {
     private const val MAX_DIMENSION = 1400
 
     fun prepareForUpload(context: Context, uri: Uri): ByteArray {
-        val original = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-            ?: throw IllegalStateException("Could not read image")
+        val resolver = context.contentResolver
 
+        // Downsample during decode rather than decoding at full resolution first — a modern 12MP+
+        // camera photo decoded straight to ARGB_8888 can be 40-50MB and OOM before any scaling
+        // happens (same reasoning as prepareForChatMessage below). Read just the bounds, pick an
+        // inSampleSize that lands at or just above MAX_DIMENSION, then decode that.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        (resolver.openInputStream(uri) ?: throw IllegalStateException("Could not read image"))
+            .use { BitmapFactory.decodeStream(it, null, bounds) }
+
+        var sampleSize = 1
+        while (bounds.outWidth / (sampleSize * 2) >= MAX_DIMENSION || bounds.outHeight / (sampleSize * 2) >= MAX_DIMENSION) {
+            sampleSize *= 2
+        }
+
+        val original = resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+        } ?: throw IllegalStateException("Could not read image")
+
+        // inSampleSize only halves, so the result can still overshoot — clamp exactly to 1400px.
         val scale = MAX_DIMENSION.toFloat() / maxOf(original.width, original.height)
         val resized = if (scale < 1f) {
             Bitmap.createScaledBitmap(

@@ -9,7 +9,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -130,8 +129,14 @@ fun KaChatTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // Edge-to-edge is enabled in MainActivity via enableEdgeToEdge(): the system bars are
+            // transparent and content draws behind them, so the app's own background shows through.
+            // Setting window.statusBarColor/navigationBarColor is deprecated (a no-op under
+            // edge-to-edge on Android 15+/API 35) and is what Play's pre-launch report flags, so we
+            // only drive the system-bar icon contrast here.
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
