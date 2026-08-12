@@ -39,7 +39,9 @@ Requires JDK 17 and the Android SDK (compileSdk 35). The resulting APK is at
 `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Self-Hosted Cloud (Nextcloud) Setup
-
+  <details>
+  <summary>Read</summary>
+     
 KaChat can preview and stream **Nextcloud public share links** (photos and videos) directly
 inside a chat, and can use Nextcloud as a private destination for chat-history backup. Hosting
 your own Nextcloud gives you a personal media/backup server that you fully control — no third
@@ -448,6 +450,7 @@ docker compose down         # stop everything (data is kept in Docker volumes)
 docker compose up -d        # start again
 docker compose pull && docker compose up -d --build   # update to newest images
 ```
+<details>
 
 ## Support
 
